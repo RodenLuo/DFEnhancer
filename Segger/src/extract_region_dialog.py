@@ -7,10 +7,10 @@
 # to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 # copies of the Software, and to permit persons to whom the Software is
 # furnished to do so, subject to the following conditions:
-# 
+#
 # The above copyright notice and this permission notice shall be included in
 # all copies or substantial portions of the Software.
-# 
+#
 # THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 # IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 # FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -22,7 +22,7 @@
 import chimera
 import os
 import os.path
-import Tkinter
+import tkinter
 from CGLtk import Hybrid
 import VolumeData
 import _multiscale
@@ -35,9 +35,9 @@ import VolumeViewer
 from sys import stderr
 from time import clock
 
-from axes import prAxes
-import regions
-import graph
+from .axes import prAxes
+from . import regions
+from . import graph
 from Segger import dev_menus, timing, seggerVersion
 
 OML = chimera.openModels.list
@@ -45,11 +45,11 @@ OML = chimera.openModels.list
 REG_OPACITY = 0.45
 
 
-from segment_dialog import current_segmentation, segmentation_map
+from .segment_dialog import current_segmentation, segmentation_map
 
 
 def umsg ( txt ) :
-    print txt
+    print(txt)
     status ( txt )
 
 def status ( txt ) :
@@ -62,12 +62,12 @@ class Extract_Region_Dialog ( chimera.baseDialog.ModelessDialog ):
 
     title = "Extract Densities (Segger v" + seggerVersion + ")"
     name = "extract region"
-    
+
     if dev_menus :
         buttons = ('EQ', 'Extract', "Close")
     else :
         buttons = ('Extract', "Close")
-    
+
     help = 'https://cryoem.slac.stanford.edu/ncmi/resources/software/segger'
 
     def fillInUI(self, parent):
@@ -82,11 +82,11 @@ class Extract_Region_Dialog ( chimera.baseDialog.ModelessDialog ):
 
         row = 0
 
-        menubar = Tkinter.Menu(parent, type = 'menubar', tearoff = False)
+        menubar = tkinter.Menu(parent, type = 'menubar', tearoff = False)
         tw.config(menu = menubar)
 
 
-        f = Tkinter.Frame(parent)
+        f = tkinter.Frame(parent)
         f.grid(column=0, row=row, sticky='ew')
 
         #l = Tkinter.Label(f, text='  ')
@@ -94,17 +94,17 @@ class Extract_Region_Dialog ( chimera.baseDialog.ModelessDialog ):
         #row += 1
 
 
-        ff = Tkinter.Frame(f)
+        ff = tkinter.Frame(f)
         ff.grid(column=0, row=row, sticky='w')
 
-        l = Tkinter.Label(ff, text='  Extract densities from map:')
+        l = tkinter.Label(ff, text='  Extract densities from map:')
         l.grid(column=0, row=0, sticky='w')
 
-        self.dmap = Tkinter.StringVar(parent)
+        self.dmap = tkinter.StringVar(parent)
 
-        self.mb  = Tkinter.Menubutton ( ff, textvariable=self.dmap, relief=Tkinter.RAISED )
+        self.mb  = tkinter.Menubutton ( ff, textvariable=self.dmap, relief=tkinter.RAISED )
         self.mb.grid (column=1, row=0, sticky='we', padx=5)
-        self.mb.menu  =  Tkinter.Menu ( self.mb, tearoff=0, postcommand=self.MapMenu )
+        self.mb.menu  =  tkinter.Menu ( self.mb, tearoff=0, postcommand=self.MapMenu )
         self.mb["menu"]  =  self.mb.menu
 
 
@@ -117,7 +117,7 @@ class Extract_Region_Dialog ( chimera.baseDialog.ModelessDialog ):
             # print "Current segmentation map: ", self.cur_dmap.name
             self.dmap.set ( self.cur_dmap.name )
             st = self.cur_dmap.data.step
-            
+
             st1 = "%g" % self.cur_dmap.data.step[0]
             st2 = "%g" % self.cur_dmap.data.step[1]
             st3 = "%g" % self.cur_dmap.data.step[2]
@@ -125,7 +125,7 @@ class Extract_Region_Dialog ( chimera.baseDialog.ModelessDialog ):
             d1 = "%g" % self.cur_dmap.data.size[0]
             d2 = "%g" % self.cur_dmap.data.size[1]
             d3 = "%g" % self.cur_dmap.data.size[2]
-        
+
             s1, s2, s3 = self.cur_dmap.data.step[0], self.cur_dmap.data.step[1], self.cur_dmap.data.step[2]
             bwidth = "%.0f" % (numpy.sqrt(s1*s1 + s2*s2 + s3*s3)*5.0)
 
@@ -136,60 +136,60 @@ class Extract_Region_Dialog ( chimera.baseDialog.ModelessDialog ):
 
 
         row += 1
-        l = Tkinter.Label(f, text='  Dimensions of new map:')
+        l = tkinter.Label(f, text='  Dimensions of new map:')
         l.grid(column=0, row=row, sticky='w')
 
 
         row += 1
-        ff = Tkinter.Frame(f)
+        ff = tkinter.Frame(f)
         ff.grid(column=0, row=row, sticky='w')
-        
-        l = Tkinter.Label(ff, text=' ', width=5)
+
+        l = tkinter.Label(ff, text=' ', width=5)
         l.grid(column=0, row=0, sticky='w')
 
-        self.newMapDimOption = Tkinter.StringVar()
+        self.newMapDimOption = tkinter.StringVar()
         self.newMapDimOption.set ( 'box' )
 
-        l = Tkinter.Radiobutton(ff, text="Same as map from which densities are extracted: ", variable=self.newMapDimOption, value = 'same')
+        l = tkinter.Radiobutton(ff, text="Same as map from which densities are extracted: ", variable=self.newMapDimOption, value = 'same')
         l.grid (column=1, row=0, sticky='w')
 
-        self.oMapDim1 = Tkinter.StringVar(ff, d1)
-        e = Tkinter.Entry(ff, width=5, textvariable=self.oMapDim1, state="disabled")
+        self.oMapDim1 = tkinter.StringVar(ff, d1)
+        e = tkinter.Entry(ff, width=5, textvariable=self.oMapDim1, state="disabled")
         e.grid(column=2, row=0, sticky='w', padx=5)
 
-        self.oMapDim2 = Tkinter.StringVar(ff, d2)
-        e = Tkinter.Entry(ff, width=5, textvariable=self.oMapDim2, state="disabled")
+        self.oMapDim2 = tkinter.StringVar(ff, d2)
+        e = tkinter.Entry(ff, width=5, textvariable=self.oMapDim2, state="disabled")
         e.grid(column=3, row=0, sticky='w', padx=5)
 
-        self.oMapDim3 = Tkinter.StringVar(ff, d3)
-        e = Tkinter.Entry(ff, width=5, textvariable=self.oMapDim3, state="disabled")
+        self.oMapDim3 = tkinter.StringVar(ff, d3)
+        e = tkinter.Entry(ff, width=5, textvariable=self.oMapDim3, state="disabled")
         e.grid(column=4, row=0, sticky='w', padx=5)
 
 
         row += 1
-        ff = Tkinter.Frame(f)
+        ff = tkinter.Frame(f)
         ff.grid(column=0, row=row, sticky='w')
-        l = Tkinter.Label(ff, text=' ', width=5)
+        l = tkinter.Label(ff, text=' ', width=5)
         l.grid(column=0, row=0, sticky='w')
 
-        c = Tkinter.Radiobutton(ff, text="Cube around region, with border of", variable=self.newMapDimOption, value = 'cube')
+        c = tkinter.Radiobutton(ff, text="Cube around region, with border of", variable=self.newMapDimOption, value = 'cube')
         c.grid (column=1, row=0, sticky='w')
 
-        self.borderWidth = Tkinter.StringVar(ff, st1)
+        self.borderWidth = tkinter.StringVar(ff, st1)
         self.borderWidth.set ( "8" )
-        e = Tkinter.Entry(ff, width=5, textvariable=self.borderWidth)
+        e = tkinter.Entry(ff, width=5, textvariable=self.borderWidth)
         e.grid(column=2, row=0, sticky='w', padx=5)
 
-        c = Tkinter.Label(ff, text='voxels')
+        c = tkinter.Label(ff, text='voxels')
         c.grid (column=3, row=0, sticky='w')
 
-        c = Tkinter.Radiobutton(ff, text="Box around region, with border of", variable=self.newMapDimOption, value = 'box')
+        c = tkinter.Radiobutton(ff, text="Box around region, with border of", variable=self.newMapDimOption, value = 'box')
         c.grid (column=1, row=1, sticky='w')
 
-        e = Tkinter.Entry(ff, width=5, textvariable=self.borderWidth)
+        e = tkinter.Entry(ff, width=5, textvariable=self.borderWidth)
         e.grid(column=2, row=1, sticky='w', padx=5)
 
-        c = Tkinter.Label(ff, text='voxels')
+        c = tkinter.Label(ff, text='voxels')
         c.grid (column=3, row=1, sticky='w')
 
 
@@ -200,56 +200,56 @@ class Extract_Region_Dialog ( chimera.baseDialog.ModelessDialog ):
 
         if 0 :
             row += 1
-            l = Tkinter.Label(f, text='  Voxel size in new map:')
+            l = tkinter.Label(f, text='  Voxel size in new map:')
             l.grid(column=0, row=row, sticky='w')
-    
-    
+
+
             row += 1
-            ff = Tkinter.Frame(f)
+            ff = tkinter.Frame(f)
             ff.grid(column=0, row=row, sticky='w')
-    
-            self.newGridStep = Tkinter.StringVar()
+
+            self.newGridStep = tkinter.StringVar()
             self.newGridStep.set ( 'same' )
-    
-            l = Tkinter.Label(ff, text=' ', width=5)
+
+            l = tkinter.Label(ff, text=' ', width=5)
             l.grid(column=0, row=0, sticky='w')
-    
-            c = Tkinter.Radiobutton(ff, text="Same as map from which densities are extracted: ", variable=self.newGridStep, value = 'same')
+
+            c = tkinter.Radiobutton(ff, text="Same as map from which densities are extracted: ", variable=self.newGridStep, value = 'same')
             c.grid (column=1, row=0, sticky='w')
-    
-            self.oMapStep1 = Tkinter.StringVar(ff, st1)
-            e = Tkinter.Entry(ff, width=5, textvariable=self.oMapStep1, state="disabled")
+
+            self.oMapStep1 = tkinter.StringVar(ff, st1)
+            e = tkinter.Entry(ff, width=5, textvariable=self.oMapStep1, state="disabled")
             e.grid(column=2, row=0, sticky='w', padx=5)
-    
-            self.oMapStep2 = Tkinter.StringVar(ff, st2)
-            e = Tkinter.Entry(ff, width=5, textvariable=self.oMapStep2, state="disabled")
+
+            self.oMapStep2 = tkinter.StringVar(ff, st2)
+            e = tkinter.Entry(ff, width=5, textvariable=self.oMapStep2, state="disabled")
             e.grid(column=3, row=0, sticky='w', padx=5)
-    
-            self.oMapStep3 = Tkinter.StringVar(ff, st3)
-            e = Tkinter.Entry(ff, width=5, textvariable=self.oMapStep3, state="disabled")
+
+            self.oMapStep3 = tkinter.StringVar(ff, st3)
+            e = tkinter.Entry(ff, width=5, textvariable=self.oMapStep3, state="disabled")
             e.grid(column=4, row=0, sticky='w', padx=5)
-    
-    
+
+
             row += 1
-            ff = Tkinter.Frame(f)
+            ff = tkinter.Frame(f)
             ff.grid(column=0, row=row, sticky='w')
-    
-            l = Tkinter.Label(ff, text=' ', width=5)
+
+            l = tkinter.Label(ff, text=' ', width=5)
             l.grid(column=0, row=0, sticky='w')
-    
-            c = Tkinter.Radiobutton(ff, text="Custom: ", variable=self.newGridStep, value = 'custom')
+
+            c = tkinter.Radiobutton(ff, text="Custom: ", variable=self.newGridStep, value = 'custom')
             c.grid (column=1, row=0, sticky='w')
-    
-            self.newMapStep1 = Tkinter.StringVar(ff, ".5")
-            e = Tkinter.Entry(ff, width=5, textvariable=self.newMapStep1)
+
+            self.newMapStep1 = tkinter.StringVar(ff, ".5")
+            e = tkinter.Entry(ff, width=5, textvariable=self.newMapStep1)
             e.grid(column=2, row=0, sticky='w', padx=5)
-    
-            self.newMapStep2 = Tkinter.StringVar(ff, ".5")
-            e = Tkinter.Entry(ff, width=5, textvariable=self.newMapStep2)
+
+            self.newMapStep2 = tkinter.StringVar(ff, ".5")
+            e = tkinter.Entry(ff, width=5, textvariable=self.newMapStep2)
             e.grid(column=3, row=0, sticky='w', padx=5)
-    
-            self.newMapStep3 = Tkinter.StringVar(ff, ".5")
-            e = Tkinter.Entry(ff, width=5, textvariable=self.newMapStep3)
+
+            self.newMapStep3 = tkinter.StringVar(ff, ".5")
+            e = tkinter.Entry(ff, width=5, textvariable=self.newMapStep3)
             e.grid(column=4, row=0, sticky='w', padx=5)
 
 
@@ -259,42 +259,42 @@ class Extract_Region_Dialog ( chimera.baseDialog.ModelessDialog ):
 
 
         row += 1
-        l = Tkinter.Label(f, text='  Which densities to extract:')
+        l = tkinter.Label(f, text='  Which densities to extract:')
         l.grid(column=0, row=row, sticky='w')
 
-        self.whichDensities = Tkinter.StringVar()
+        self.whichDensities = tkinter.StringVar()
         self.whichDensities.set ( 'inside' )
 
         row += 1
-        ff = Tkinter.Frame(f)
+        ff = tkinter.Frame(f)
         ff.grid(column=0, row=row, sticky='w')
-        l = Tkinter.Label(ff, text=' ', width=5)
+        l = tkinter.Label(ff, text=' ', width=5)
         l.grid(column=0, row=0, sticky='w')
 
-        c = Tkinter.Radiobutton(ff, text="Only densities inside the selected region(s)", variable=self.whichDensities, value = 'inside')
+        c = tkinter.Radiobutton(ff, text="Only densities inside the selected region(s)", variable=self.whichDensities, value = 'inside')
         c.grid (column=1, row=0, sticky='w')
 
-        c = Tkinter.Radiobutton(ff, text="All densities inside the bounds of the new map", variable=self.whichDensities, value = 'all')
+        c = tkinter.Radiobutton(ff, text="All densities inside the bounds of the new map", variable=self.whichDensities, value = 'all')
         c.grid (column=1, row=1, sticky='w')
 
 
         row += 1
-        l = Tkinter.Label(f, text='  What maps to create:')
+        l = tkinter.Label(f, text='  What maps to create:')
         l.grid(column=0, row=row, sticky='w')
 
-        self.whatMaps = Tkinter.StringVar()
+        self.whatMaps = tkinter.StringVar()
         self.whatMaps.set ( 'combined' )
 
         row += 1
-        ff = Tkinter.Frame(f)
+        ff = tkinter.Frame(f)
         ff.grid(column=0, row=row, sticky='w')
-        l = Tkinter.Label(ff, text=' ', width=5)
+        l = tkinter.Label(ff, text=' ', width=5)
         l.grid(column=0, row=0, sticky='w')
 
-        c = Tkinter.Radiobutton(ff, text="A map spanning all selected regions", variable=self.whatMaps, value = 'combined')
+        c = tkinter.Radiobutton(ff, text="A map spanning all selected regions", variable=self.whatMaps, value = 'combined')
         c.grid (column=1, row=0, sticky='w')
 
-        c = Tkinter.Radiobutton(ff, text="A map for each selected region", variable=self.whatMaps, value = 'each')
+        c = tkinter.Radiobutton(ff, text="A map for each selected region", variable=self.whatMaps, value = 'each')
         c.grid (column=1, row=1, sticky='w')
 
 
@@ -304,133 +304,133 @@ class Extract_Region_Dialog ( chimera.baseDialog.ModelessDialog ):
 
 
         row += 1
-        ff = Tkinter.Frame(f)
+        ff = tkinter.Frame(f)
         ff.grid(column=0, row=row, sticky='w')
-        l = Tkinter.Label(ff, text=' ', width=1)
+        l = tkinter.Label(ff, text=' ', width=1)
         l.grid(column=0, row=0, sticky='w')
 
         c = Hybrid.Checkbutton(ff, 'Mask with selected atoms of radius', False )
         c.button.grid (column=1, row=0, sticky='w')
         self.maskWithSel = c.variable
 
-        self.maskWithSelDist = Tkinter.StringVar(ff, 2.0)
-        e = Tkinter.Entry(ff, width=5, textvariable=self.maskWithSelDist)
+        self.maskWithSelDist = tkinter.StringVar(ff, 2.0)
+        e = tkinter.Entry(ff, width=5, textvariable=self.maskWithSelDist)
         e.grid(column=2, row=0, sticky='w', padx=5)
 
-        l = Tkinter.Label(ff, text='Angstroms')
+        l = tkinter.Label(ff, text='Angstroms')
         l.grid(column=3, row=0, sticky='w')
 
 
 
         row += 1
-        ff = Tkinter.Frame(f)
+        ff = tkinter.Frame(f)
         ff.grid(column=0, row=row, sticky='w')
-        l = Tkinter.Label(ff, text=' ', width=1)
+        l = tkinter.Label(ff, text=' ', width=1)
         l.grid(column=0, row=0, sticky='w')
 
         c = Hybrid.Checkbutton(ff, 'Add fall-off densities outside region boundary with witdth ~', False )
         c.button.grid (column=1, row=0, sticky='w')
         self.addDropOff = c.variable
 
-        self.dropOffWidth = Tkinter.StringVar(ff, bwidth)
-        e = Tkinter.Entry(ff, width=5, textvariable=self.dropOffWidth)
+        self.dropOffWidth = tkinter.StringVar(ff, bwidth)
+        e = tkinter.Entry(ff, width=5, textvariable=self.dropOffWidth)
         e.grid(column=2, row=0, sticky='w', padx=5)
 
-        l = Tkinter.Label(ff, text='Angstroms')
+        l = tkinter.Label(ff, text='Angstroms')
         l.grid(column=3, row=0, sticky='w')
 
 
 
         row += 1
-        ff = Tkinter.Frame(f)
+        ff = tkinter.Frame(f)
         ff.grid(column=0, row=row, sticky='w')
-        l = Tkinter.Label(ff, text=' ', width=1)
+        l = tkinter.Label(ff, text=' ', width=1)
         l.grid(column=0, row=0, sticky='w')
 
         c = Hybrid.Checkbutton(ff, 'Low-pass result with gaussian filter width: ', False )
         c.button.grid (column=1, row=0, sticky='w')
         self.gaussLP = c.variable
 
-        self.gaussLPWidth = Tkinter.StringVar(ff, "1.0")
-        e = Tkinter.Entry(ff, width=5, textvariable=self.gaussLPWidth)
+        self.gaussLPWidth = tkinter.StringVar(ff, "1.0")
+        e = tkinter.Entry(ff, width=5, textvariable=self.gaussLPWidth)
         e.grid(column=2, row=0, sticky='w', padx=5)
 
         #l = Tkinter.Label(ff, text='Angstroms')
         #l.grid(column=3, row=0, sticky='w')
 
-        
+
         if 1 :
 
             row += 1
-            ff = Tkinter.Frame(f)
+            ff = tkinter.Frame(f)
 
             ff.grid(column=0, row=row, sticky='w')
 
-            l = Tkinter.Label(ff, text=' ', width=1)
+            l = tkinter.Label(ff, text=' ', width=1)
             l.grid(column=0, row=0, sticky='w')
-    
+
             c = Hybrid.Checkbutton(ff, 'Smooth mask - gaussian width: ', False )
             c.button.grid (column=1, row=0, sticky='w')
             self.smoothMask = c.variable
-    
-            self.smoothMaskWidth = Tkinter.StringVar(ff, "10")
-            e = Tkinter.Entry(ff, width=5, textvariable=self.smoothMaskWidth)
+
+            self.smoothMaskWidth = tkinter.StringVar(ff, "10")
+            e = tkinter.Entry(ff, width=5, textvariable=self.smoothMaskWidth)
             e.grid(column=2, row=0, sticky='w', padx=5)
-        
-            l = Tkinter.Label(ff, text='Angstroms')
+
+            l = tkinter.Label(ff, text='Angstroms')
             l.grid(column=3, row=0, sticky='w')
-        
+
 
         if dev_menus :
             row += 1
-            ff = Tkinter.Frame(f)
+            ff = tkinter.Frame(f)
             ff.grid(column=0, row=row, sticky='w')
-            l = Tkinter.Label(ff, text=' ', width=1)
+            l = tkinter.Label(ff, text=' ', width=1)
             l.grid(column=0, row=0, sticky='w')
-    
+
             c = Hybrid.Checkbutton(ff, 'Add noise with mean: ', False )
             c.button.grid (column=1, row=0, sticky='w')
             self.addNoise = c.variable
-    
-            self.noiseMean = Tkinter.StringVar(ff, "0.0")
-            e = Tkinter.Entry(ff, width=5, textvariable=self.noiseMean)
+
+            self.noiseMean = tkinter.StringVar(ff, "0.0")
+            e = tkinter.Entry(ff, width=5, textvariable=self.noiseMean)
             e.grid(column=2, row=0, sticky='w', padx=5)
-    
-            l = Tkinter.Label(ff, text=', st.dev.:')
+
+            l = tkinter.Label(ff, text=', st.dev.:')
             l.grid(column=3, row=0, sticky='w')
-    
-            self.noiseStDev = Tkinter.StringVar(ff, "1.0")
-            e = Tkinter.Entry(ff, width=5, textvariable=self.noiseStDev)
+
+            self.noiseStDev = tkinter.StringVar(ff, "1.0")
+            e = tkinter.Entry(ff, width=5, textvariable=self.noiseStDev)
             e.grid(column=4, row=0, sticky='w', padx=5)
 
 
         if 1 :
             row += 1
-            ff = Tkinter.Frame(f)
+            ff = tkinter.Frame(f)
             ff.grid(column=0, row=row, sticky='w')
-            l = Tkinter.Label(ff, text=' ', width=1)
+            l = tkinter.Label(ff, text=' ', width=1)
             l.grid(column=0, row=0, sticky='w')
-    
+
             c = Hybrid.Checkbutton(ff, 'Resample result on grid of another map: ', False )
             c.button.grid (column=1, row=0, sticky='w')
             self.resample = c.variable
-    
-            self.resampleMap = Tkinter.StringVar(parent)
+
+            self.resampleMap = tkinter.StringVar(parent)
             #self.resampleMap.set ( "Not selected" )
-    
-            self.mbr  = Tkinter.Menubutton ( ff, textvariable=self.resampleMap, relief=Tkinter.RAISED )
+
+            self.mbr  = tkinter.Menubutton ( ff, textvariable=self.resampleMap, relief=tkinter.RAISED )
             self.mbr.grid (column=2, row=0, sticky='we', padx=5)
-            self.mbr.menu  =  Tkinter.Menu ( self.mbr, tearoff=0, postcommand=self.ResampleMapMenu )
+            self.mbr.menu  =  tkinter.Menu ( self.mbr, tearoff=0, postcommand=self.ResampleMapMenu )
             self.mbr["menu"]  =  self.mbr.menu
 
 
         if 1 :
             row += 1
-            ff = Tkinter.Frame(f)
+            ff = tkinter.Frame(f)
             ff.grid(column=0, row=row, sticky='w')
-            l = Tkinter.Label(ff, text=' ', width=1)
+            l = tkinter.Label(ff, text=' ', width=1)
             l.grid(column=0, row=0, sticky='w')
-    
+
             c = Hybrid.Checkbutton(ff, 'Make 0/1 mask', False )
             c.button.grid (column=1, row=0, sticky='w')
             self.makeMask = c.variable
@@ -439,44 +439,44 @@ class Extract_Region_Dialog ( chimera.baseDialog.ModelessDialog ):
 
         if 1 :
             row += 1
-            ff = Tkinter.Frame(f)
+            ff = tkinter.Frame(f)
             ff.grid(column=0, row=row, sticky='w')
-            l = Tkinter.Label(ff, text=' ', width=1)
+            l = tkinter.Label(ff, text=' ', width=1)
             l.grid(column=0, row=0, sticky='w')
-    
+
             c = Hybrid.Checkbutton(ff, 'Save map(s) with name: ', False )
             c.button.grid (column=1, row=0, sticky='w')
             self.saveMaps = c.variable
-    
+
             if self.cur_dmap == None :
                 base = ""
             else :
                 base = os.path.splitext(self.cur_dmap.name)[0] + "_%s.mrc"
-            self.saveMapsBaseName = Tkinter.StringVar(ff, base)
-            e = Tkinter.Entry(ff, width=30, textvariable=self.saveMapsBaseName)
+            self.saveMapsBaseName = tkinter.StringVar(ff, base)
+            e = tkinter.Entry(ff, width=30, textvariable=self.saveMapsBaseName)
             e.grid(column=2, row=0, sticky='w', padx=5)
 
 
             row += 1
-            ff = Tkinter.Frame(f)
+            ff = tkinter.Frame(f)
             ff.grid(column=0, row=row, sticky='w')
 
-            l = Tkinter.Label(ff, text='(%s in name -> region id, %d -> incrementing numbers starting with 1)', width=60, padx=20)
+            l = tkinter.Label(ff, text='(%s in name -> region id, %d -> incrementing numbers starting with 1)', width=60, padx=20)
             l.grid(column=0, row=0, sticky='w')
-    
 
 
 
-        
+
+
         row += 1
-        dummyFrame = Tkinter.Frame(parent, relief='groove', borderwidth=1)
-        Tkinter.Frame(dummyFrame).pack()
+        dummyFrame = tkinter.Frame(parent, relief='groove', borderwidth=1)
+        tkinter.Frame(dummyFrame).pack()
         dummyFrame.grid(row=row,column=0,columnspan=7, pady=7, sticky='we')
 
         row = row + 1
 
         global msg
-        msg = Tkinter.Label(parent, width = 60, anchor = 'w', justify = 'left', fg="red")
+        msg = tkinter.Label(parent, width = 60, anchor = 'w', justify = 'left', fg="red")
         msg.grid(column=0, row=row, sticky='ew')
         self.msg = msg
         row += 1
@@ -510,7 +510,7 @@ class Extract_Region_Dialog ( chimera.baseDialog.ModelessDialog ):
 
 
     def ResampleMapSelected ( self, dmap ) :
-        print "selected resample map: ", dmap.name
+        print("selected resample map: ", dmap.name)
         self.resampleMapMod = dmap
 
 
@@ -532,7 +532,7 @@ class Extract_Region_Dialog ( chimera.baseDialog.ModelessDialog ):
             self.oMapDim1.set ( "" )
             self.oMapDim2.set ( "" )
             self.oMapDim3.set ( "" )
-        
+
             #self.oMapStep1.set ( "" )
             #self.oMapStep2.set ( "" )
             #self.oMapStep3.set ( "" )
@@ -563,11 +563,11 @@ class Extract_Region_Dialog ( chimera.baseDialog.ModelessDialog ):
         umsg ( "Extracting densities from " + fromMap.name + " based on selected regions in " + segMap.name )
 
         if segMap == fromMap :
-            print "Same map!"
+            print("Same map!")
 
         else:
-            print "Different maps!"
-            
+            print("Different maps!")
+
 
         self.rri = 0
 
@@ -575,28 +575,28 @@ class Extract_Region_Dialog ( chimera.baseDialog.ModelessDialog ):
         regs = segMod.selected_regions()
         if len(regs)==0 :
             umsg ( "no selected regions found" ); return
-            
+
         if self.whatMaps.get() == "combined" :
             self.Extract2 ( fromMap, segMap, segMod, regs )
-        
+
         else :
             for reg in regs :
                 self.Extract2 ( fromMap, segMap, segMod, [reg] )
-        
-        print "done"
-        
 
-    
+        print("done")
+
+
+
 
     def Extract2 ( self, fromMap, segMap, segMod, regs ) :
 
         reg_str = ""
-        for r in regs : 
+        for r in regs :
             try :
                 reg_str = reg_str + "%s" % r.chain_id
             except :
                 reg_str = reg_str + "_r%d" % r.rid
-        print reg_str
+        print(reg_str)
 
         mdata = None
         ndata = None
@@ -605,27 +605,27 @@ class Extract_Region_Dialog ( chimera.baseDialog.ModelessDialog ):
 
         if self.newMapDimOption.get() == "same" :
 
-            print " - same dimensions as original map"
+            print(" - same dimensions as original map")
 
             if hasattr(self, 'smoothMask') and self.smoothMask.get () :
-                print " - taking inner densities for soft mask"
+                print(" - taking inner densities for soft mask")
                 ndata_in = self.dataMaskedWithSelectedRegions ( segMod, segMap, fromMap, regs )
                 if ndata_in == None : return
 
             if self.whichDensities.get() == "inside" :
-                print " - want inner densities only"
+                print(" - want inner densities only")
                 ndata = self.dataMaskedWithSelectedRegions ( segMod, segMap, fromMap, regs )
                 if ndata == None : return
 
             else :
-                print " - want all densities"
+                print(" - want all densities")
                 # nothing to do, since they want the same-dimension map, with all the densities
                 ndata = fromMap.data
 
 
         elif self.newMapDimOption.get() == "cube" or self.newMapDimOption.get() == "box" :
 
-            print " - shrinking to region bounds "
+            print(" - shrinking to region bounds ")
 
             #dims = self.boundsOfSelectedRegions ( segMod, fromMap )
             #if dims == None : return
@@ -666,7 +666,7 @@ class Extract_Region_Dialog ( chimera.baseDialog.ModelessDialog ):
                 n1, n2, n3 = n, n, n
 
 
-            print " - bounds of selected regions: %d %d %d --> %d %d %d --> %d %d %d" % ( li,lj,lk, hi,hj,hk, n1,n2,n3 )
+            print(" - bounds of selected regions: %d %d %d --> %d %d %d --> %d %d %d" % ( li,lj,lk, hi,hj,hk, n1,n2,n3 ))
 
 
             nmat = numpy.zeros ( (n1,n2,n3), numpy.float32 )
@@ -674,10 +674,10 @@ class Extract_Region_Dialog ( chimera.baseDialog.ModelessDialog ):
             #dmat = dmap.full_matrix()
 
             dmat = fromMap.full_matrix()
-            print "map grid dim: ", numpy.shape ( dmat )
-            print "masked grid dim: ", numpy.shape ( regsm )
-            print "new map grid dim: ", numpy.shape ( nmat )
-            
+            print("map grid dim: ", numpy.shape ( dmat ))
+            print("masked grid dim: ", numpy.shape ( regsm ))
+            print("new map grid dim: ", numpy.shape ( nmat ))
+
             if hasattr(self, 'smoothMask') and self.smoothMask.get () :
                 # copy the densities from insize the regions only
                 for ii in range ( len(nze[0]) ) :
@@ -705,14 +705,14 @@ class Extract_Region_Dialog ( chimera.baseDialog.ModelessDialog ):
                             except :
                                 #print "iout (%d,%d,%d) (%d,%d,%d)" % (k, j, i, k-lk,j-lj,i-li)
                                 pass
-    
+
             O = fromMap.data.origin
-            print "origin:", O
+            print("origin:", O)
             nO = ( O[0] + float(lk) * fromMap.data.step[0],
                    O[1] + float(lj) * fromMap.data.step[1],
                    O[2] + float(li) * fromMap.data.step[2] )
-            
-            print "new origin:", nO
+
+            print("new origin:", nO)
 
             ndata = VolumeData.Array_Grid_Data ( nmat, nO, fromMap.data.step, fromMap.data.cell_angles )
             ndata_in = VolumeData.Array_Grid_Data ( nmat_in, nO, fromMap.data.step, fromMap.data.cell_angles )
@@ -726,7 +726,7 @@ class Extract_Region_Dialog ( chimera.baseDialog.ModelessDialog ):
             st2 = float ( self.newMapStep2.get() )
             st3 = float ( self.newMapStep3.get() )
 
-            print " - new step: %d %d %d", st1, st2, st3
+            print(" - new step: %d %d %d", st1, st2, st3)
 
             # make a temp map from which the density values will be interpolated
 
@@ -738,7 +738,7 @@ class Extract_Region_Dialog ( chimera.baseDialog.ModelessDialog ):
             n2 = int ( numpy.ceil ( ndata.size[1] * ( ndata.step[1] / st2 ) ) )
             n3 = int ( numpy.ceil ( ndata.size[2] * ( ndata.step[2] / st3 ) ) )
 
-            print " - new dimensions: %d %d %d" % (n1, n2, n3)
+            print(" - new dimensions: %d %d %d" % (n1, n2, n3))
 
             # make a new matrix with the desired voxel size
             nmat = numpy.zeros ( (n3,n2,n1), numpy.float32 )
@@ -788,7 +788,7 @@ class Extract_Region_Dialog ( chimera.baseDialog.ModelessDialog ):
 
         if self.addDropOff.get () :
 
-            print "\n---adding dropoff---\n"
+            print("\n---adding dropoff---\n")
 
             if  ( 0 ) :
                 # use gaussian
@@ -811,7 +811,7 @@ class Extract_Region_Dialog ( chimera.baseDialog.ModelessDialog ):
                 diag_l = numpy.sqrt ( s[0]*s[0] + s[1]*s[1] + s[2]*s[2] ) # A/pixel
                 desired_width = float ( self.dropOffWidth.get() ) # A
                 num_it = desired_width / diag_l # how many iterations will reach the desired width
-                print " - diagonal width: %.3f, desired width: %.3f, # iterations: %.3f" % (diag_l, desired_width, num_it)
+                print(" - diagonal width: %.3f, desired width: %.3f, # iterations: %.3f" % (diag_l, desired_width, num_it))
 
                 numit = int ( numpy.ceil ( num_it ) )
                 gvm = nvm.copy();
@@ -825,26 +825,26 @@ class Extract_Region_Dialog ( chimera.baseDialog.ModelessDialog ):
                     gvm = 1.0/6.0 * ( nv_1 + nv_2 + nv_3 + nv_4 + nv_5 + nv_6 )
                     gvm = f_mask * gvm + nvm
                     umsg ("Adding drop-off - iteration %d" % i)
-                    
+
                 if 0 :
 
-                  # equilibrate while keep everything outside that has been reached so far (the fall-off width) 0
-                  o_mask = numpy.where ( gvm > 0, numpy.ones_like(gvm), numpy.zeros_like(gvm) )
-                  f_mask = f_mask * o_mask
-  
-                  for i in range (1000) :
-                      nv_1 = numpy.roll(gvm, 1, axis=0)
-                      nv_2 = numpy.roll(gvm, -1, axis=0)
-                      nv_3 = numpy.roll(gvm, 1, axis=1)
-                      nv_4 = numpy.roll(gvm, -1, axis=1)
-                      nv_5 = numpy.roll(gvm, 1, axis=2)
-                      nv_6 = numpy.roll(gvm, -1, axis=2)
-                      gvm2 = f_mask * (1.0/6.0 * ( nv_1 + nv_2 + nv_3 + nv_4 + nv_5 + nv_6 )) + nvm
-                      if numpy.sum ( numpy.abs(gvm2 - gvm) ) < 1e-3 :
-                          print " - stopped equilibration after %d iterations" % i
-                          gvm = gvm2
-                          break
-                      gvm = gvm2
+                    # equilibrate while keep everything outside that has been reached so far (the fall-off width) 0
+                    o_mask = numpy.where ( gvm > 0, numpy.ones_like(gvm), numpy.zeros_like(gvm) )
+                    f_mask = f_mask * o_mask
+
+                    for i in range (1000) :
+                        nv_1 = numpy.roll(gvm, 1, axis=0)
+                        nv_2 = numpy.roll(gvm, -1, axis=0)
+                        nv_3 = numpy.roll(gvm, 1, axis=1)
+                        nv_4 = numpy.roll(gvm, -1, axis=1)
+                        nv_5 = numpy.roll(gvm, 1, axis=2)
+                        nv_6 = numpy.roll(gvm, -1, axis=2)
+                        gvm2 = f_mask * (1.0/6.0 * ( nv_1 + nv_2 + nv_3 + nv_4 + nv_5 + nv_6 )) + nvm
+                        if numpy.sum ( numpy.abs(gvm2 - gvm) ) < 1e-3 :
+                            print(" - stopped equilibration after %d iterations" % i)
+                            gvm = gvm2
+                            break
+                        gvm = gvm2
 
                 ngvm = f_mask * gvm + nvm
 
@@ -875,28 +875,28 @@ class Extract_Region_Dialog ( chimera.baseDialog.ModelessDialog ):
 
         if self.maskWithSel.get() :
             atomRad = float ( self.maskWithSelDist.get() )
-            
-            selats = chimera.selection.currentAtoms()
-            print "%d selected atoms" % len(selats)
 
-            print " - mask with sel width %.3f, %d selected atoms" % ( atomRad, len(selats) )
-            
+            selats = chimera.selection.currentAtoms()
+            print("%d selected atoms" % len(selats))
+
+            print(" - mask with sel width %.3f, %d selected atoms" % ( atomRad, len(selats) ))
+
             if len ( selats ) == 0 :
                 umsg ( "No selected atoms found - unselect the option or select some atoms :)" )
                 return
 
             import _multiscale
             points = _multiscale.get_atom_coordinates ( selats, transformed = True )
-            
+
             dmap = nv
 
             import _contour
             _contour.affine_transform_vertices ( points, Matrix.xform_matrix( dmap.openState.xform.inverse() ) )
-    
+
             #s = dmap.data.step[0]
             #s2 = numpy.sqrt ( s*s + s*s + s*s )
             mdata = VolumeData.zone_masked_grid_data ( dmap.data, points, atomRad )
-    
+
             gdata = VolumeData.Array_Grid_Data ( mdata.full_matrix(), dmap.data.origin, dmap.data.step, dmap.data.cell_angles, name = "atom masked" )
             nv = VolumeViewer.volume.volume_from_grid_data ( gdata )
             #nvg.name = dmap.name + "___"
@@ -908,8 +908,8 @@ class Extract_Region_Dialog ( chimera.baseDialog.ModelessDialog ):
 
         if self.gaussLP.get() :
             lpw = float ( self.gaussLPWidth.get() )
-            print " - gauss lp width:", lpw
-            
+            print(" - gauss lp width:", lpw)
+
             from VolumeFilter import gaussian
             gvol = gaussian.gaussian_convolve (nv, lpw )
             gvm = gvol.full_matrix()
@@ -921,7 +921,7 @@ class Extract_Region_Dialog ( chimera.baseDialog.ModelessDialog ):
 
         if hasattr(self, 'smoothMask') and self.smoothMask.get () :
             smw = float ( self.smoothMaskWidth.get() )
-            print " smooth mask width: ", smw
+            print(" smooth mask width: ", smw)
 
             mm = ndata_in.full_matrix()
             maskM = numpy.where ( mm > 0, numpy.ones_like(mm), numpy.zeros_like(mm) )
@@ -949,7 +949,7 @@ class Extract_Region_Dialog ( chimera.baseDialog.ModelessDialog ):
                     smMaskM = 1.0/6.0 * ( nv_1 + nv_2 + nv_3 + nv_4 + nv_5 + nv_6 )
                     smMaskM = outM * smMaskM + maskM
             else :
-                print " - smoothing mask with Gaussian blur..."
+                print(" - smoothing mask with Gaussian blur...")
 
                 maskData0 = VolumeData.Array_Grid_Data ( smMaskM, ndata_in.origin, ndata_in.step, ndata_in.cell_angles )
                 try : maskMap0 = VolumeViewer.volume.add_data_set ( maskData0, None )
@@ -960,13 +960,13 @@ class Extract_Region_Dialog ( chimera.baseDialog.ModelessDialog ):
 
                 smMaskM = maskMapG.full_matrix().copy()
                 #smMaskM = outM * smMaskM + maskM
-                
+
                 maskMap0.close() #.name = "mask map 0"
                 maskMapG.close() #.name = "mask map G%.0f" % smw
 
 
             if 0 :
-                print "saving smooth mask"
+                print("saving smooth mask")
                 mdata = VolumeData.Array_Grid_Data ( smMaskM, ndata_in.origin, ndata_in.step, ndata_in.cell_angles )
                 try : mv = VolumeViewer.volume.add_data_set ( mdata, None )
                 except : mv = VolumeViewer.volume.volume_from_grid_data ( mdata )
@@ -974,7 +974,7 @@ class Extract_Region_Dialog ( chimera.baseDialog.ModelessDialog ):
 
             denMat = nv.data.full_matrix ()
             if 0 :
-                print "making noise"
+                print("making noise")
                 from numpy.random import standard_normal as srand
                 mean = float ( self.noiseMean.get() )
                 stdev = float ( self.noiseStDev.get() )
@@ -982,14 +982,14 @@ class Extract_Region_Dialog ( chimera.baseDialog.ModelessDialog ):
                 denMat = srand ( (s[2],s[1],s[0]) ) * stdev - (numpy.ones_like(nvm) * mean)
 
             if 0 :
-                print "MAKING MASK ALL 1s"
+                print("MAKING MASK ALL 1s")
                 smMaskM = numpy.where ( smMaskM > 0, numpy.ones_like(smMaskM), numpy.zeros_like(smMaskM) )
 
             nmat = denMat * smMaskM;
             smdata = VolumeData.Array_Grid_Data ( nmat, ndata_in.origin, ndata_in.step, ndata_in.cell_angles )
             try : smv = VolumeViewer.volume.add_data_set ( smdata, None )
             except : smv = VolumeViewer.volume.volume_from_grid_data ( smdata )
-            
+
             nv.close ()
             nv = smv
 
@@ -1002,7 +1002,7 @@ class Extract_Region_Dialog ( chimera.baseDialog.ModelessDialog ):
             mean = float ( self.noiseMean.get() )
             stdev = float ( self.noiseStDev.get() )
 
-            print "\n---adding noise mean:",mean, " stdev:", stdev, "---\n"
+            print("\n---adding noise mean:",mean, " stdev:", stdev, "---\n")
 
             nvm = nv.full_matrix()
             #f_mask = numpy.where ( nvm > 0, numpy.zeros_like(nvm), numpy.ones_like(nvm) )
@@ -1026,7 +1026,7 @@ class Extract_Region_Dialog ( chimera.baseDialog.ModelessDialog ):
 
 
         if self.resample.get () :
-            print "Resampling to", self.resampleMapMod.name
+            print("Resampling to", self.resampleMapMod.name)
             nvr = place_map_resample ( nv, self.resampleMapMod )
             nv.close ()
             nv = nvr
@@ -1034,7 +1034,7 @@ class Extract_Region_Dialog ( chimera.baseDialog.ModelessDialog ):
 
 
         if self.makeMask.get () :
-            print "making mask..."
+            print("making mask...")
             nvm = nv.full_matrix()
 
             M = numpy.where ( nvm > 0, numpy.ones_like(nvm), numpy.zeros_like(nvm) )
@@ -1052,7 +1052,7 @@ class Extract_Region_Dialog ( chimera.baseDialog.ModelessDialog ):
             nv.name = self.saveMapsBaseName.get() % reg_str
         elif "%d" in self.saveMapsBaseName.get() :
             rri = 0
-            try : 
+            try :
                 rri = self.rri + 1
             except :
                 rri = 1
@@ -1070,11 +1070,11 @@ class Extract_Region_Dialog ( chimera.baseDialog.ModelessDialog ):
         nv = nvg
 
         umsg ( "Done - created " + nvg.name )
-        
+
         if self.saveMaps.get() :
             mdir, mfile = os.path.split(fromMap.data.path)
             dpath = mdir + "/" + nv.name
-            print "Saving extracted map to", dpath
+            print("Saving extracted map to", dpath)
             nv.write_file ( dpath, "mrc" )
 
 
@@ -1082,20 +1082,20 @@ class Extract_Region_Dialog ( chimera.baseDialog.ModelessDialog ):
 
     def EQ0 ( self ) :
 
-        print " - equalize 0 "
+        print(" - equalize 0 ")
 
         dmap = self.cur_dmap
         if dmap == None :
             umsg ( "Please select a map to extract densities from" )
             return
 
-        print " - map: ", dmap.name
+        print(" - map: ", dmap.name)
 
 
         mat = dmap.data.full_matrix()
         data = dmap.data
 
-        print " - smoothing..."
+        print(" - smoothing...")
         from VolumeFilter import gaussian
         gvol = gaussian.gaussian_convolve (dmap, 40.0 )
         matg = gvol.full_matrix()
@@ -1107,14 +1107,14 @@ class Extract_Region_Dialog ( chimera.baseDialog.ModelessDialog ):
         data2 = VolumeData.Array_Grid_Data ( mat2, data.origin, data.step, data.cell_angles )
         try : dmap2 = VolumeViewer.volume.add_data_set ( data2, None )
         except : dmap2 = VolumeViewer.volume.volume_from_grid_data ( data2 )
-        
+
         dmap2.openState.xform = dmap.openState.xform
         dmap2.name = dmap.name + "__EQ"
 
 
     def EQ ( self ) :
 
-        print " - equalize "
+        print(" - equalize ")
 
         fromMap = self.cur_dmap
         if fromMap == None :
@@ -1138,14 +1138,14 @@ class Extract_Region_Dialog ( chimera.baseDialog.ModelessDialog ):
         regs = segMod.selected_regions()
         if len(regs)==0 :
             umsg ( "no selected regions found" ); return
-        
-        print " %d regions" % len(regs)
-        
+
+        print(" %d regions" % len(regs))
+
 
         sumMat = None
-        
 
-        print "Collecting stats |%d regions|" % len(regs)        
+
+        print("Collecting stats |%d regions|" % len(regs))
         maxD = 0.0
         minD = 10e7
         for ri, reg in enumerate ( regs ) :
@@ -1160,27 +1160,27 @@ class Extract_Region_Dialog ( chimera.baseDialog.ModelessDialog ):
                 maxD = smax
             if smin < minD :
                 minD = smin
-            
-            print " %d" % (ri+1),
 
-        print ""
-        print "Max: ", maxD
-        print "Min: ", minD
-        
+            print(" %d" % (ri+1), end=' ')
 
-        print "Equalizing and adding regions maps... |%d|" % len(regs)        
+        print("")
+        print("Max: ", maxD)
+        print("Min: ", minD)
+
+
+        print("Equalizing and adding regions maps... |%d|" % len(regs))
         for ri, reg in enumerate (regs) :
-        
+
             rdata = self.dataMaskedWithSelectedRegions ( segMod, segMap, fromMap, [reg] )
-            
+
             rmat = rdata.full_matrix ()
-            
+
             weights = rmat.ravel()
             smin = numpy.min (weights)
             sdev = numpy.std (weights)
             savg = numpy.average(weights)
-            smax = numpy.max (weights)            
-            
+            smax = numpy.max (weights)
+
             rmat = rmat - ( numpy.ones_like(rmat) * smin )
 
             #df_mat = numpy.where ( df_mat > thr, df_mat, numpy.zeros_like(df_mat) )
@@ -1202,12 +1202,12 @@ class Extract_Region_Dialog ( chimera.baseDialog.ModelessDialog ):
                 sumMat = rmat
             else :
                 sumMat = sumMat + rmat
-            
 
-            print " %d" % (ri+1),
+
+            print(" %d" % (ri+1), end=' ')
             #print " - r %d - (%.6f,%.6f) |%.6f| +/- %.6f" % ( reg.rid, smin, smax, savg, sdev )
 
-        print ""
+        print("")
 
         gvm = sumMat.copy();
         for i in range ( 5 ) :
@@ -1234,13 +1234,13 @@ class Extract_Region_Dialog ( chimera.baseDialog.ModelessDialog ):
             df_v.name = self.saveMapsBaseName.get() % 0
         else :
             df_v.name = self.saveMapsBaseName.get()
-        
+
         umsg ( "Done - created " + df_v.name )
-        
+
         if self.saveMaps.get() :
             mdir, mfile = os.path.split(fromMap.data.path)
             dpath = mdir + "/" + df_v.name
-            print "Saving extracted map to", dpath
+            print("Saving extracted map to", dpath)
             df_v.write_file ( dpath, "mrc" )
 
 
@@ -1262,7 +1262,7 @@ class Extract_Region_Dialog ( chimera.baseDialog.ModelessDialog ):
 
         return ndata
 
-          
+
 
     def MaskAnotherMapWRegions ( self ) :
 
@@ -1324,7 +1324,7 @@ class Extract_Region_Dialog ( chimera.baseDialog.ModelessDialog ):
 
         for rri, reg in enumerate ( regs ) :
 
-            print " ---- Region %d/%d ---- " % (rri+1, len(regs))
+            print(" ---- Region %d/%d ---- " % (rri+1, len(regs)))
 
             points = reg.points().astype ( numpy.float32 )
 
@@ -1361,16 +1361,16 @@ class Extract_Region_Dialog ( chimera.baseDialog.ModelessDialog ):
             li = ci - n2; lj = cj - n2; lk = ck - n2
             hi = ci + n2; hj = cj + n2; hk = ck + n2
 
-            print "Bounds - %d %d %d --> %d %d %d --> %d %d %d (%d)" % ( li, lj, lk, hi, hj, hk, n1, n2, n3, n )
+            print("Bounds - %d %d %d --> %d %d %d --> %d %d %d (%d)" % ( li, lj, lk, hi, hj, hk, n1, n2, n3, n ))
 
             umsg ( "Saving %d regions to mrc file..." % len(regs) )
 
             nmat = numpy.zeros ( (n,n,n), numpy.float32 )
             #dmat = dmap.full_matrix()
 
-            print "map grid dim: ", numpy.shape ( dmap.full_matrix() )
-            print "masked grid dim: ", numpy.shape ( regsm )
-            print "new map grid dim: ", numpy.shape ( nmat )
+            print("map grid dim: ", numpy.shape ( dmap.full_matrix() ))
+            print("masked grid dim: ", numpy.shape ( regsm ))
+            print("new map grid dim: ", numpy.shape ( nmat ))
 
 
             #regs_name = ""
@@ -1380,18 +1380,18 @@ class Extract_Region_Dialog ( chimera.baseDialog.ModelessDialog ):
                 nmat[i-li,j-lj,k-lk] = mapVal
 
             O = dmap.data.origin
-            print "origin:", O
+            print("origin:", O)
             if 1 :
                 nO = ( O[0] + float(lk) * dmap.data.step[0],
                        O[1] + float(lj) * dmap.data.step[1],
                        O[2] + float(li) * dmap.data.step[2] )
-                print "new origin:", nO
+                print("new origin:", nO)
             else :
                 nO = ( -float(n2) * dmap.data.step[0],
                        -float(n2) * dmap.data.step[1],
                        -float(n2) * dmap.data.step[2] )
-                print "new origin:", nO
-            
+                print("new origin:", nO)
+
 
             ndata = VolumeData.Array_Grid_Data ( nmat, nO, dmap.data.step, dmap.data.cell_angles )
             try : nv = VolumeViewer.volume.add_data_set ( ndata, None )
@@ -1448,7 +1448,7 @@ class Extract_Region_Dialog ( chimera.baseDialog.ModelessDialog ):
             #li = li - bound; lj = lj - bound; lk = lk - bound
             #hi = hi + bound; hj = hj + bound; hk = hk + bound
 
-            print "Bounds - %d %d %d --> %d %d %d --> %d %d %d, %d" % ( li, lj, lk, hi, hj, hk, n1,n2,n3, n )
+            print("Bounds - %d %d %d --> %d %d %d --> %d %d %d, %d" % ( li, lj, lk, hi, hj, hk, n1,n2,n3, n ))
 
             umsg ( "Saving %d regions to mrc file..." % len(regs) )
 
@@ -1466,17 +1466,17 @@ class Extract_Region_Dialog ( chimera.baseDialog.ModelessDialog ):
                             pass
 
             O = dmap.data.origin
-            print "origin:", O
+            print("origin:", O)
             nO = O
             if 1 :
                 nO = ( O[0] + float(li) * dmap.data.step[0],
                        O[1] + float(lj) * dmap.data.step[1],
                        O[2] + float(lk) * dmap.data.step[2] )
-            else :            
+            else :
                 nO = ( -float(n2) * dmap.data.step[0],
                        -float(n2) * dmap.data.step[1],
                        -float(n2) * dmap.data.step[2] )
-                print "new origin:", nO
+                print("new origin:", nO)
 
             ndata = VolumeData.Array_Grid_Data ( nmat, nO, dmap.data.step, dmap.data.cell_angles )
             try : nv = VolumeViewer.volume.add_data_set ( ndata, None )
@@ -1489,44 +1489,44 @@ class Extract_Region_Dialog ( chimera.baseDialog.ModelessDialog ):
 
             path = os.path.splitext (dmap.data.path) [0] + suff
             nv.write_file ( path, "mrc" )
-        
+
 
 
 
 def show_extract_region_dialog ( closeOld = True ):
 
-	from chimera import dialogs
-	
-	d = dialogs.find ( "extract region", create=False )
-	if d :
-		if closeOld :
-			d.toplevel_widget.update_idletasks ()
-			d.Close()
-			d.toplevel_widget.update_idletasks ()
-		else :
-			# is there a way to bring it to front?
-			return d
-	
-	dialogs.register (Extract_Region_Dialog.name, Extract_Region_Dialog, replace = True)
-	
-	d = dialogs.find ( "extract region", create=True )
-	d.toplevel_widget.update_idletasks ()
-	d.enter()
-	
-	return d
+    from chimera import dialogs
+
+    d = dialogs.find ( "extract region", create=False )
+    if d :
+        if closeOld :
+            d.toplevel_widget.update_idletasks ()
+            d.Close()
+            d.toplevel_widget.update_idletasks ()
+        else :
+            # is there a way to bring it to front?
+            return d
+
+    dialogs.register (Extract_Region_Dialog.name, Extract_Region_Dialog, replace = True)
+
+    d = dialogs.find ( "extract region", create=True )
+    d.toplevel_widget.update_idletasks ()
+    d.enter()
+
+    return d
 
 
 def dialog ():
 
-	from chimera import dialogs
-	return dialogs.find ( "extract region", create=False )
-	
-	
+    from chimera import dialogs
+    return dialogs.find ( "extract region", create=False )
+
+
 
 def MapSS ( dmap, d ) :
 
     ndata = dmap.data
-    
+
     st1 = ndata.step[0] / d
     st2 = ndata.step[1] / d
     st3 = ndata.step[2] / d
@@ -1535,7 +1535,7 @@ def MapSS ( dmap, d ) :
     n2 = int ( numpy.ceil ( ndata.size[1] * ( ndata.step[1] / st2 ) ) )
     n3 = int ( numpy.ceil ( ndata.size[2] * ( ndata.step[2] / st3 ) ) )
 
-    print " - new dimensions: %d %d %d" % (n1, n2, n3)
+    print(" - new dimensions: %d %d %d" % (n1, n2, n3))
 
     # make a new matrix with the desired voxel size
     nmat = numpy.zeros ( (n3,n2,n1), numpy.float32 )
@@ -1564,7 +1564,7 @@ def place_map_resample_R ( fmap, dmap, useThr = True ) :
     # get bounds of points above threshold
     fpoints = VolumeData.grid_indices (fmap.data.size, numpy.single)  # i,j,k indices
     _contour.affine_transform_vertices ( fpoints, fmap.data.ijk_to_xyz_transform )
-    
+
     bound = 0
 
     if useThr :
@@ -1575,7 +1575,7 @@ def place_map_resample_R ( fmap, dmap, useThr = True ) :
         fpoints = numpy.compress(ge, fpoints, 0)
         fpoint_weights = numpy.compress(ge, fpoint_weights)
         nz = numpy.nonzero( fpoint_weights )[0]
-        print " - %d above %f in %s" % (len(nz), threshold, fmap.name)
+        print(" - %d above %f in %s" % (len(nz), threshold, fmap.name))
         #print "points: ", fpoints
         #print "weights: ", fpoint_weights
         bound = 2
@@ -1592,7 +1592,7 @@ def place_map_resample_R ( fmap, dmap, useThr = True ) :
     n2 = hj - lj + 1
     n3 = hk - lk + 1
 
-    print " - bounds - %d %d %d --> %d %d %d --> %d %d %d" % ( li, lj, lk, hi, hj, hk, n1,n2,n3 )
+    print(" - bounds - %d %d %d --> %d %d %d --> %d %d %d" % ( li, lj, lk, hi, hj, hk, n1,n2,n3 ))
 
     #nmat = numpy.zeros ( (n1,n2,n3), numpy.float32 )
     #dmat = dmap.full_matrix()
@@ -1602,18 +1602,18 @@ def place_map_resample_R ( fmap, dmap, useThr = True ) :
     nn3 = int ( round (dmap.data.step[2] * float(n3) / fmap.data.step[2]) )
 
     O = dmap.data.origin
-    print " - %s origin:" % dmap.name, O
+    print(" - %s origin:" % dmap.name, O)
     nO = ( O[0] + float(li) * dmap.data.step[0],
            O[1] + float(lj) * dmap.data.step[1],
            O[2] + float(lk) * dmap.data.step[2] )
-    
-    print " - new map origin:", nO
+
+    print(" - new map origin:", nO)
 
     nmat = numpy.zeros ( (nn1,nn2,nn3), numpy.float32 )
     ndata = VolumeData.Array_Grid_Data ( nmat, nO, fmap.data.step, dmap.data.cell_angles )
 
-    print " - fmap grid dim: ", numpy.shape ( fmap.full_matrix() )
-    print " - new map grid dim: ", numpy.shape ( nmat )
+    print(" - fmap grid dim: ", numpy.shape ( fmap.full_matrix() ))
+    print(" - new map grid dim: ", numpy.shape ( nmat ))
 
     npoints = VolumeData.grid_indices ( (nn1, nn2, nn3), numpy.single)  # i,j,k indices
     _contour.affine_transform_vertices ( npoints, ndata.ijk_to_xyz_transform )
@@ -1659,13 +1659,10 @@ def place_map_resample ( densitiesFromMap, toGridOfMap, mask = False ) :
         f_mat = fmap.data.full_matrix()
         f_mask = numpy.where ( f_mat > fmap.surface_levels[0], numpy.ones_like(f_mat), numpy.zeros_like(f_mat) )
         df_mat = df_mat * f_mask
-    
-    
+
+
     ndata = VolumeData.Array_Grid_Data ( df_mat, fmap.data.origin, fmap.data.step, fmap.data.cell_angles )
     try : nv = VolumeViewer.volume.add_data_set ( ndata, None )
     except : nv = VolumeViewer.volume.volume_from_grid_data ( ndata )
 
     return nv
-
-
-

@@ -38,7 +38,7 @@ def SubdivideQuadRec ( pts, qt, numit ) :
 def SubdivideQuad ( pts, q ) :
     # 4 pts -
     if ( len(q) != 4 ) :
-        print "SubdivideQuad needs a 4-tuple, got", q
+        print("SubdivideQuad needs a 4-tuple, got", q)
         return pts
 
     #print "Points:\n", pts
@@ -182,7 +182,7 @@ def SphereMesh (r, div, color, patchpts, pos = Vector(0,0,0)) :
     at = 1
     l = int ( numpy.ceil (float(div)*3.0/2.0) )
     if div < 10 : l = div*2
-    print "SphereMesh:", div, 'x', l
+    print("SphereMesh:", div, 'x', l)
     lat = 0
 
     for phi_i in range(div) :
@@ -252,7 +252,7 @@ def SphereMesh (r, div, color, patchpts, pos = Vector(0,0,0)) :
             else :
                 vcolors = vcolors + ( (color), )
 
-        print len ( vcolors ), len ( v )
+        print(len ( vcolors ), len ( v ))
 
         sph.set_vertex_colors( vcolors )
 
@@ -315,13 +315,13 @@ def CylinderMesh (r1, r2, Length, div, color) :
     v = numpy.concatenate ( [v, pt1] )
 
     if 0 and r1 > .01 :
-        print "capping 1"
+        print("capping 1")
         vi = vi + ( (at, 0, at-2), )
         for i in range ( (at-2)/2 ) :
             vi = vi + ( (at, (i+1)*2, (i+0)*2), )
 
     if 0 and r2 > .01 :
-        print "capping 2"
+        print("capping 2")
         vi = vi + ( (at+1, at-1, 1), )
         for i in range ( (at-2)/2 ) :
             vi = vi + ( (at+1, (i+0)*2+1, (i+1)*2+1), )
@@ -358,8 +358,8 @@ def ReadMesh (patchpts = None, pos=Vector(0,0,0)) :
     fp.close()
 
     v = numpy.array( aV, 'f' )
-    print "COM:", com/float(numv)
-    print "Rad:", rad.length
+    print("COM:", com/float(numv))
+    print("Rad:", rad.length)
     scale = 1.0/rad.length
 
     xf = chimera.Xform.rotation ( Vector(0,0,1), 180 )
@@ -413,7 +413,7 @@ def ReadMesh (patchpts = None, pos=Vector(0,0,0)) :
             else :
                 vcolors = vcolors + ( (color), )
 
-        print len ( vcolors ), len ( v )
+        print(len ( vcolors ), len ( v ))
 
         sph.set_vertex_colors( vcolors )
 
@@ -440,7 +440,7 @@ def ReadMesh2 (fname, m) :
     numV = int ( numV )
     numT = int ( numT )
 
-    print "%d verts, %d tris" % (numV, numT)
+    print("%d verts, %d tris" % (numV, numT))
 
     verts = numpy.ones ( [numV, 3] )
     tris = numpy.ones ( [numT, 3], numpy.int )
@@ -477,7 +477,7 @@ def MeshFromVertsTris (verts, tris, color=None, m=None) :
     rad = Vector (0,0,0)
     numv = 0
 
-    print " - mesh from %d verts, %d tris" % (len(verts), len(tris))
+    print(" - mesh from %d verts, %d tris" % (len(verts), len(tris)))
 
     if color == None :
         color = (0.6039, 0.8431, 0.898, 1.0)
@@ -510,9 +510,9 @@ def MakeColors ( n ) :
     for i in range (n) :
         l = int ( numpy.floor ( at ) )
         u = int ( numpy.ceil ( at ) )
-        print "color %d (%f) [%d-%d]" % (i, at, l, u),
+        print("color %d (%f) [%d-%d]" % (i, at, l, u), end=' ')
         clr = clrs[l] * (at-l) + clrs[u] * (u-at)
-        print " %f %f %f" % (clr[0], clr[1], clr[2])
+        print(" %f %f %f" % (clr[0], clr[1], clr[2]))
         colors.append ( clr )
         at = at + d
 
@@ -545,7 +545,7 @@ def AddDiffRandColor ( clist, on_black = True, tol = .5 ) :
         if not tooclose: break
 
     clist.append ( numpy.array ( [R,G,B] ) )
-    print " - New rand color: %.3f %.3f %.3f"%(R,G,B)
+    print(" - New rand color: %.3f %.3f %.3f"%(R,G,B))
 
     return clist
 
@@ -560,7 +560,7 @@ def MakeDiffRandColors ( n ) :
 
 def rrange ( n ) :
 
-    i = range ( n )
+    i = list(range( n))
     for n in i :
         ri = int ( numpy.round ( random.random() * n ) )
         # print "swapping %d with %d" % (n, ri)
@@ -663,6 +663,6 @@ def Measure ( mol ) :
     for at in mol.atoms :
         B.add ( at.coord() )
 
-    print "B-box: (%.2f %.2f %.2f) - (%.2f %.2f %.2f), center (%.2f %.2f %.2f), dim (%.2f %.2f %.2f)" % (
+    print("B-box: (%.2f %.2f %.2f) - (%.2f %.2f %.2f), center (%.2f %.2f %.2f), dim (%.2f %.2f %.2f)" % (
         B.llf.x, B.llf[1], B.llf[2], B.urb[0], B.urb[1], B.urb[2],
-        B.center[0], B.center[1], B.center[2], B.dim[0], B.dim[1], B.dim[2] )
+        B.center[0], B.center[1], B.center[2], B.dim[0], B.dim[1], B.dim[2] ))

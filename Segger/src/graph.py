@@ -1,7 +1,7 @@
 
 def create_graph ( smod, links ) :
 
-    print "\nCreating graph for %s - %s" % (smod.name, links)
+    print("\nCreating graph for %s - %s" % (smod.name, links))
 
     if hasattr(smod, 'adj_graph') and smod.adj_graph :
         smod.adj_graph.close()
@@ -31,7 +31,7 @@ def create_graph ( smod, links ) :
     link_color = ( .5, .5, .5, 1 )
     link_radius = 0.5 * marker_radius
 
-    from regions import group_contacts
+    from .regions import group_contacts
     cons = group_contacts(smod.region_contacts())
 
     Ns, min_N, max_N = [], None, None
@@ -40,8 +40,8 @@ def create_graph ( smod, links ) :
 
     # first run through contacts to list contacts and properties
     if links == "avgd" or links == "maxd" or links == "N" :
-        for r1 in cons.keys() :
-            for r2 in cons[r1].keys() :
+        for r1 in list(cons.keys()) :
+            for r2 in list(cons[r1].keys()) :
                 if r2 > r1 :
 
                     con = cons[r1][r2]
@@ -71,15 +71,15 @@ def create_graph ( smod, links ) :
         #min_avgd, max_avgd = min(avgds), max(avgds)
 
         #print "Avg densities: %.5f -> %.5f" % (min_avgd, max_avgd)
-        print "N: %.1f -> %.1f" % (min_N, max_N)
+        print("N: %.1f -> %.1f" % (min_N, max_N))
         #print "Maximum densities %.5f -> %.5f" % (min_maxd, max_maxd)
 
 
     min_rad = marker_radius * 0.1
     max_rad = marker_radius * 0.75 - min_rad
 
-    for r1 in cons.keys() :
-        for r2 in cons[r1].keys() :
+    for r1 in list(cons.keys()) :
+        for r2 in list(cons[r1].keys()) :
             if r2 > r1 :
 
                 con = cons[r1][r2]
@@ -245,7 +245,7 @@ def group_by_skeleton ( smod ) :
             csize[c] = max(csize[c], len(rg))
         else:
             csize[c] = len(rg)
-    from regions import random_color
+    from .regions import random_color
     for i, c in enumerate(colors):
         if len(rgroups[i]) < csize[c]:
             colors[i] = random_color()
@@ -262,7 +262,7 @@ def group_by_skeleton ( smod ) :
 def remove_parents(regions, smod):
 
     while True:
-        from regions import TopParentRegions
+        from .regions import TopParentRegions
         parents = TopParentRegions ( [r for r in regions if r.preg] )
         if parents:
             smod.ungroup_regions ( parents )
@@ -288,7 +288,7 @@ def most_common_region_color(regions):
             ct[c] += 1
         else:
             ct[c] = 1
-    count, color = max([(count, c) for c, count in ct.items()])
+    count, color = max([(count, c) for c, count in list(ct.items())])
     return color
 
 def connected_markers(mset):
@@ -304,7 +304,7 @@ def connected_markers(mset):
             cm1.update(cm2)
             for m in cm2:
                 cm[m] = cm1
-    msets = dict([(id(ms), ms) for ms in cm.values()]).values()
+    msets = list(dict([(id(ms), ms) for ms in list(cm.values())]).values())
 
     # Add lone markers.
     for m in mset.markers():

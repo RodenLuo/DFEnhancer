@@ -37,13 +37,13 @@ def make_orthoslice_images(
             task.updateStatus('region %d (%d of %d)' % (r.rid,ri+1,len(rlist)))
 
         # Trace center-line.
-        mset = trace_spine(r, trace_spacing, trace_tip_length) 
+        mset = trace_spine(r, trace_spacing, trace_tip_length)
 
         # Unbend volume.
         p = atom_path([m.atom for m in mset.markers()])
         dmax, dmin = measure_diameter(r, mset)
         if dmax is None:
-            print 'Region %d has no diameter' % r.rid
+            print('Region %d has no diameter' % r.rid)
             mset.close()
             continue
         xsize = ysize = unbend_size*dmax
@@ -56,11 +56,11 @@ def make_orthoslice_images(
         etrim = (xy_trim*ubv.data.size[0],xy_trim*ubv.data.size[1],0)
         etrim = [int(ceil(t)) for t in etrim]
         rowcol = rows_and_columns(ubv.data.size, pstep, etrim, panel_aspect)
-        tparams = zip(axes,pstep,etrim,rowcol,orders)
+        tparams = list(zip(axes,pstep,etrim,rowcol,orders))
         tv = [tile_planes(ubv, axis, step, trim, rows, cols, order, open=False)
               for axis,step,trim,(rows,cols),order in tparams]
         if [v for v in tv if v is None]:
-            print 'Region %d has no sections for some axes' % r.rid
+            print('Region %d has no sections for some axes' % r.rid)
             mset.close()
             openModels.close([v for v in tv if v] + [ubv])
             continue
@@ -197,7 +197,7 @@ def montage_image(images, pad = 0):
         mi.paste(im, (x,y))
         x += im.size[0] + pad
     return mi
-    
+
 # ------------------------------------------------------------------------------
 #
 def test():

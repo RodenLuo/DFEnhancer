@@ -2,34 +2,35 @@ import os.path
 import numpy
 #from regions import Segmentation, Region, Contact
 from sys import stderr
+import importlib
 
 
 
 def ReadRegionsFile ( regions_file_path, dmap, smod = None) :
 
-    print "Reading regions ---"
+    print("Reading regions ---")
 
     try :
         e = numpy.fromfile ( regions_file_path, numpy.double )
     except :
-        print "could not read:", regions_file_path
+        print("could not read:", regions_file_path)
         return None
 
-    print " - read ", len(e)
+    print(" - read ", len(e))
 
-    import regions
-    reload (regions)
+    from . import regions
+    importlib.reload (regions)
 
     if smod == None :
         regions_file = os.path.basename ( regions_file_path )
         smod = regions.Segmentation(regions_file, dmap)
     else :
-        print " - found", smod.name
+        print(" - found", smod.name)
         smod.remove_all_regions()
 
     smod.path = os.path.dirname ( regions_file_path ) + os.path.sep
     smod.adj_graph = None
-    print " - " + smod.path + smod.name
+    print(" - " + smod.path + smod.name)
 
     regions, groups, at = ParseRegions ( e, smod )
 
@@ -43,32 +44,32 @@ def ReadRegionsFile ( regions_file_path, dmap, smod = None) :
 
 
 def ParseRegions ( e, smod ) :
-    
+
     nregions = int ( e[0] )
-    print " - reading %d regions..." % nregions
+    print(" - reading %d regions..." % nregions)
     at = 1
 
     regs = {}
     all_regions = {}            # Includes groups.
 
-    import regions
-    reload (regions)
+    from . import regions
+    importlib.reload (regions)
 
     for i in range ( nregions ) :
 
         try : nvoxels = int ( e[at] )
         except :
-            print " - reached end of file before reading all regions"
+            print(" - reached end of file before reading all regions")
             break
 
         at += 1
         rvs = e [ at : at + (nvoxels*3) ]
         at += nvoxels*3
-        
-        print "Region %d - %d voxels" % (i, nvoxels)
+
+        print("Region %d - %d voxels" % (i, nvoxels))
 
         rpoints = numpy.reshape ( rvs, (nvoxels, 3) ).astype ( numpy.int32 )
-        
+
         #print rpoints
 
         nparents = int ( e[at] )
@@ -106,20 +107,20 @@ def ParseRegions ( e, smod ) :
 
 
     # Regions table only includes top level groups.
-    groups = [ reg for reg in all_regions.values() if reg.preg is None ]
+    groups = [ reg for reg in list(all_regions.values()) if reg.preg is None ]
 
     return all_regions, groups, at
 
 
 
 def ParseContacts ( e, at, regs ):
-    
-    import regions
-    reload (regions)
+
+    from . import regions
+    importlib.reload (regions)
 
     try : ncon = int ( e[at] )
     except :
-        print " - reached end of file before reading contacts"
+        print(" - reached end of file before reading contacts")
         ncon = 0
 
     at += 1
@@ -127,8 +128,8 @@ def ParseContacts ( e, at, regs ):
 
     if ncon > 0 :
 
-        print " - reading %d contacts..." % ( ncon )
-    
+        print(" - reading %d contacts..." % ( ncon ))
+
         am = e [ at : at + (ncon*4) ]
         cm = numpy.reshape ( am, (ncon, 4) )
 
@@ -140,11 +141,11 @@ def ParseContacts ( e, at, regs ):
             o.D = c[3]
 
             try : r1 = regs[rid1]
-            except : print "File error: contact region id", rid1; continue
+            except : print("File error: contact region id", rid1); continue
             try : r2 = regs[rid2]
-            except : print "File error: contact region id", rid2; continue
+            except : print("File error: contact region id", rid2); continue
 
-            if r1 == r2 : print "File error: self contact id", rid1
+            if r1 == r2 : print("File error: self contact id", rid1)
 
             if not r1 in rcons : rcons[r1] = {}
             if not r2 in rcons : rcons[r2] = {}
@@ -152,7 +153,7 @@ def ParseContacts ( e, at, regs ):
             rcons[r1][r2] = o
             rcons[r2][r1] = o
 
-    print ""
+    print("")
 
     return rcons
 
@@ -187,16 +188,16 @@ def WriteRegionsFile ( smod, fname = None ) :
 
     num_cons = 0
     rcons = smod.region_contacts()
-    for r1, cr1 in rcons.iteritems () :
-        for r2, o in cr1.iteritems () :
+    for r1, cr1 in rcons.items () :
+        for r2, o in cr1.items () :
             if r1.rid < r2.rid :
                 num_cons = num_cons + 1
 
     tot_e_size = tot_e_size + 1 + 4 * (num_cons)
 
 
-    print "Writing %d regions, %d grouped" % ( tot_write_regions[0], len(smod.regions) )
-    if fname : print " - to", fname
+    print("Writing %d regions, %d grouped" % ( tot_write_regions[0], len(smod.regions) ))
+    if fname : print(" - to", fname)
 
     e = numpy.zeros ( [tot_e_size], numpy.float32 )
 
@@ -207,14 +208,14 @@ def WriteRegionsFile ( smod, fname = None ) :
     for region in rlist :
         e_at = AddRegion ( smod, region, e, e_at )
 
-    print " - writing %d contacts" % ( num_cons )
+    print(" - writing %d contacts" % ( num_cons ))
 
     e[e_at] = float ( num_cons )
     e_at = e_at + 1
 
     #consa = []
-    for r1, cr1 in rcons.iteritems () :
-        for r2, o in cr1.iteritems () :
+    for r1, cr1 in rcons.items () :
+        for r2, o in cr1.items () :
             if r1.rid < r2.rid :
                 #consa = consa + [r1.rid, r2.rid, o.N, o.D]
                 e[e_at+0] = float ( r1.rid )
@@ -227,7 +228,7 @@ def WriteRegionsFile ( smod, fname = None ) :
     #e = numpy.concatenate ( [ e, numpy.array ( consa, numpy.float32 ) ] )
 
     e.tofile ( fname )
-    print "Wrote %s" % os.path.basename(fname)
+    print("Wrote %s" % os.path.basename(fname))
 
 
 def AddRegion ( smod, region, e, e_at ) :
@@ -265,7 +266,7 @@ def AddRegion ( smod, region, e, e_at ) :
 
 def RegionSize ( region, tot_write_regions ) :
 
-    if len(region.cregs) == 0 :            
+    if len(region.cregs) == 0 :
 
         rp = region
         nparents = 0
@@ -301,10 +302,10 @@ def renumberRegions(smod):
         next_id = len(newrid) + 1
         newrid[r] = next_id
 
-    for r, rid in newrid.items():
+    for r, rid in list(newrid.items()):
         r.rid = rid
 
-    smod.id_to_region = dict([(r.id,r) for r in smod.id_to_region.values()])
+    smod.id_to_region = dict([(r.id,r) for r in list(smod.id_to_region.values())])
 
     return rlist
 

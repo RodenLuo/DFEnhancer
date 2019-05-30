@@ -55,53 +55,53 @@ def segment_command(cmdname, args):
 #
 def copy_groups(from_seg, to_seg):
 
-  # Find transform from to_seg mask indices to from_seg mask indices.
-  from Matrix import multiply_matrices, invert_matrix, xform_matrix
-  tf = multiply_matrices(invert_matrix(from_seg.point_transform()),
-                         invert_matrix(xform_matrix(from_seg.openState.xform)),
-                         xform_matrix(to_seg.openState.xform),
-                         to_seg.point_transform())
+    # Find transform from to_seg mask indices to from_seg mask indices.
+    from Matrix import multiply_matrices, invert_matrix, xform_matrix
+    tf = multiply_matrices(invert_matrix(from_seg.point_transform()),
+                           invert_matrix(xform_matrix(from_seg.openState.xform)),
+                           xform_matrix(to_seg.openState.xform),
+                           to_seg.point_transform())
 
-  # Find from_seg regions containing to_seg region maximum points.
-  fmask = from_seg.mask
-  rlist = list(to_seg.regions)
-  ijk = [r.max_point for r in rlist]
-  from _interpolate import interpolate_volume_data
-  rnums, outside = interpolate_volume_data(ijk, tf, fmask, 'nearest')
+    # Find from_seg regions containing to_seg region maximum points.
+    fmask = from_seg.mask
+    rlist = list(to_seg.regions)
+    ijk = [r.max_point for r in rlist]
+    from _interpolate import interpolate_volume_data
+    rnums, outside = interpolate_volume_data(ijk, tf, fmask, 'nearest')
 
-  # Find to_seg regions that have max_point in same from_seg region.
-  fr2tr = {}
-  id2r = from_seg.id_to_region
-  for tr, frnum in zip(rlist, rnums):
-    if frnum > 0:
-      fr = id2r[frnum].top_parent()
-      if fr in fr2tr:
-        fr2tr[fr].append(tr)
-      else:
-        fr2tr[fr] = [tr]
-  groups = [g for g in fr2tr.values() if len(g) > 1]
+    # Find to_seg regions that have max_point in same from_seg region.
+    fr2tr = {}
+    id2r = from_seg.id_to_region
+    for tr, frnum in zip(rlist, rnums):
+        if frnum > 0:
+            fr = id2r[frnum].top_parent()
+            if fr in fr2tr:
+                fr2tr[fr].append(tr)
+            else:
+                fr2tr[fr] = [tr]
+    groups = [g for g in list(fr2tr.values()) if len(g) > 1]
 
-  # Form groups.
-  for g in groups:
-    r = to_seg.join_regions(g)
-    for gr in g:
-        gr.set_color(r.color)
+    # Form groups.
+    for g in groups:
+        r = to_seg.join_regions(g)
+        for gr in g:
+            gr.set_color(r.color)
 
-  print 'Made %d groups for %s matching %s' % (len(groups), to_seg.name, from_seg.name)
-  
+    print('Made %d groups for %s matching %s' % (len(groups), to_seg.name, from_seg.name))
+
 
 # -----------------------------------------------------------------------------
 #
 def unbin_mask(segmentation, volume):
 
-    from regions import bin_size, Segmentation
+    from .regions import bin_size, Segmentation
 
     ssize = segmentation.grid_size()
     vsize = volume.data.size
     bsize = bin_size(ssize, vsize)
     if bsize is None:
         from Commands import CommandError
-        raise CommandError, 'Map size %d,%d,%d is not compatible with segmentation size %d,%d,%d' % (tuple(ssize) + tuple(vsize))
+        raise CommandError('Map size %d,%d,%d is not compatible with segmentation size %d,%d,%d' % (tuple(ssize) + tuple(vsize)))
 
     name = segmentation.name + ' unbin'
     seg = Segmentation(name, volume)
@@ -116,14 +116,14 @@ def unbin_mask(segmentation, volume):
 
     # Copy regions
     copy_regions(segmentation.all_regions(), bsize, seg)
-    
+
     return s
 
 # -----------------------------------------------------------------------------
 #
 def copy_regions(regions, bin_size, seg):
 
-    from regions import Region
+    from .regions import Region
     rlist = []
     for r in regions:
         if r.rid in seg.id_to_region:
@@ -160,35 +160,35 @@ def color_by_direction(segmentation, pattern = 'circle',
 #
 def direction_color(axis, pattern = 'circle', opacity = 1):
 
-  import Matrix
-  x,y,z = Matrix.normalize_vector(axis)
-  if pattern in ('circle', 'circle111'):
-      if pattern == 'circle':
-          tf = Matrix.vector_rotation_transform((0,0,1),(1,1,1))
-          x,y,z = Matrix.apply_matrix(tf, (x,y,z))
-      r, g, b = (x*x+2*y*z+1)/2, (y*y+2*x*z+1)/2, (z*z+2*x*y+1)/2
-      from math import pow
-      r, g, b = [pow(k,0.25) for k in (r,g,b)]
-  elif pattern == 'rgb':
-      r, g, b = abs(x), abs(y), abs(z)
-  elif pattern == 'rgb2':
-      r, g, b = x*x, y*y, z*z
-  elif pattern == 'cmy':
-      r, g, b = y*y+z*z, x*x+z*z, x*x+y*y
-      from math import sqrt
-      r, g, b = [sqrt(k) for k in (r,g,b)]
-  elif pattern == 'cmy2':
-      r, g, b = y*y+z*z, x*x+z*z, x*x+y*y
-  elif pattern == 'cmz':
-      r, g, b = (x*x-2*y*z+1)/2, (y*y-2*x*z+1)/2, (z*z-2*x*y+1)/2
-      from math import sqrt
-      r, g, b = [sqrt(k) for k in (r,g,b)]
-  elif pattern == 'rgb111':
-      r, g, b = (x*x+y*z+.5)/1.5, (y*y+x*z+.5)/1.5, (z*z+x*y+.5)/1.5
-  else:
-      from Commands import CommandError
-      raise CommandError('Unknown color pattern %s ("circle", "circle111", "rgb", "rgb2", "cmy", "cmy2", "cmz", "rgb111")'
-                         % pattern)
+    import Matrix
+    x,y,z = Matrix.normalize_vector(axis)
+    if pattern in ('circle', 'circle111'):
+        if pattern == 'circle':
+            tf = Matrix.vector_rotation_transform((0,0,1),(1,1,1))
+            x,y,z = Matrix.apply_matrix(tf, (x,y,z))
+        r, g, b = (x*x+2*y*z+1)/2, (y*y+2*x*z+1)/2, (z*z+2*x*y+1)/2
+        from math import pow
+        r, g, b = [pow(k,0.25) for k in (r,g,b)]
+    elif pattern == 'rgb':
+        r, g, b = abs(x), abs(y), abs(z)
+    elif pattern == 'rgb2':
+        r, g, b = x*x, y*y, z*z
+    elif pattern == 'cmy':
+        r, g, b = y*y+z*z, x*x+z*z, x*x+y*y
+        from math import sqrt
+        r, g, b = [sqrt(k) for k in (r,g,b)]
+    elif pattern == 'cmy2':
+        r, g, b = y*y+z*z, x*x+z*z, x*x+y*y
+    elif pattern == 'cmz':
+        r, g, b = (x*x-2*y*z+1)/2, (y*y-2*x*z+1)/2, (z*z-2*x*y+1)/2
+        from math import sqrt
+        r, g, b = [sqrt(k) for k in (r,g,b)]
+    elif pattern == 'rgb111':
+        r, g, b = (x*x+y*z+.5)/1.5, (y*y+x*z+.5)/1.5, (z*z+x*y+.5)/1.5
+    else:
+        from Commands import CommandError
+        raise CommandError('Unknown color pattern %s ("circle", "circle111", "rgb", "rgb2", "cmy", "cmy2", "cmz", "rgb111")'
+                           % pattern)
 
 #  r, g, b = [pow(k,0.33) for k in (r,g,b)]
 #  r, g, b = [pow(k,0.5) for k in (r,g,b)]
@@ -199,8 +199,8 @@ def direction_color(axis, pattern = 'circle', opacity = 1):
 #  g /= n
 #  b /= n
 
-  color = (r,g,b,opacity)
-  return color
+    color = (r,g,b,opacity)
+    return color
 
 # -----------------------------------------------------------------------------
 # Color sphere so opposite points have the same color, colors vary continuously
@@ -216,47 +216,47 @@ def direction_color(axis, pattern = 'circle', opacity = 1):
 #
 def color_sphere(radius = 1, pattern = 'circle'):
 
-  from chimera import openModels as om
-  from _surface import SurfaceModel
-  cs = [m for m in om.list(modelTypes = [SurfaceModel])
-        if m.name == 'Direction colors']
-  if cs:
-    p = cs[0].surfacePieces[0]
-  else:
-    from Shape.shapecmd import sphere_shape
-    p = sphere_shape(radius = radius, modelName = 'Direction colors')
-    
-  v,t = p.geometry
-  #vmask = [1 if z >= 0 else 0 for x,y,z in v]
-  #p.triangleAndEdgeMask = None
-  #p.setTriangleMaskFromVertexMask(vmask)
-  from numpy import empty, float32
-  c = empty((p.vertexCount,4), float32)
-  for i, axis in enumerate(v):
-      c[i,:] = direction_color(axis, pattern)
-  p.vertexColors = c
-  p.useLighting = False
+    from chimera import openModels as om
+    from _surface import SurfaceModel
+    cs = [m for m in om.list(modelTypes = [SurfaceModel])
+          if m.name == 'Direction colors']
+    if cs:
+        p = cs[0].surfacePieces[0]
+    else:
+        from Shape.shapecmd import sphere_shape
+        p = sphere_shape(radius = radius, modelName = 'Direction colors')
+
+    v,t = p.geometry
+    #vmask = [1 if z >= 0 else 0 for x,y,z in v]
+    #p.triangleAndEdgeMask = None
+    #p.setTriangleMaskFromVertexMask(vmask)
+    from numpy import empty, float32
+    c = empty((p.vertexCount,4), float32)
+    for i, axis in enumerate(v):
+        c[i,:] = direction_color(axis, pattern)
+    p.vertexColors = c
+    p.useLighting = False
 
 #  f = s.addPiece(c[:,:3], t, (0.5,0.5,0.5,1))
 #  f.displayStyle = f.Mesh
 #  f.setTriangleMaskFromVertexMask(vmask)
 
-  return p
-        
+    return p
+
 # -----------------------------------------------------------------------------
 #
 def remove_sphere_key():
 
-  from chimera import openModels as om
-  from _surface import SurfaceModel
-  om.close([m for m in om.list(modelTypes = [SurfaceModel])
-            if m.name == 'Direction colors'])
-        
+    from chimera import openModels as om
+    from _surface import SurfaceModel
+    om.close([m for m in om.list(modelTypes = [SurfaceModel])
+              if m.name == 'Direction colors'])
+
 # -----------------------------------------------------------------------------
 #
 def slice_view(**kw):
 
-    # Translate keyword names.
+        # Translate keyword names.
     n2n = {'traceSpacing': 'trace_spacing',
            'traceTipLength': 'trace_tip_length',
            'unbendSize': 'unbend_size',
@@ -268,12 +268,12 @@ def slice_view(**kw):
            'imageSpacing': 'image_spacing',
            'showImage': 'show_image',
            }
-    kw = dict([(n2n[k],v) if k in n2n else (k,v) for k,v in kw.items()])
+    kw = dict([(n2n[k],v) if k in n2n else (k,v) for k,v in list(kw.items())])
 
     from chimera import tasks, CancelOperation
     task = tasks.Task('Slice images', modal = True)
     kw['task'] = task
-    import orthoview
+    from . import orthoview
     try:
         orthoview.make_orthoslice_images(**kw)
     except CancelOperation:
@@ -315,7 +315,7 @@ def export_mask(segmentation, savePath = None, format = 'mrc',
                 for o2 in range(b2):
                     aub[o0::b0,o1::b1,o2::b2] = array
         array = aub
-                    
+
     from VolumeData import Array_Grid_Data
     g = Array_Grid_Data(array, origin, step)
     g.name = segmentation.name + ' region ids'
@@ -331,7 +331,7 @@ def export_mask(segmentation, savePath = None, format = 'mrc',
         save_grid_data(g, savePath, format)
 
     return g
-        
+
 # -----------------------------------------------------------------------------
 #
 def segmentation_arg(s):
@@ -339,14 +339,14 @@ def segmentation_arg(s):
     from chimera.specifier import evalSpec
     sel = evalSpec(s)
     mlist = sel.models()
-    from regions import Segmentation
+    from .regions import Segmentation
     slist = [s for s in mlist if isinstance(s, Segmentation)]
     if len(slist) == 0:
-        raise CommandError, 'No segmentation specified'
+        raise CommandError('No segmentation specified')
     elif len(slist) > 1:
-        raise CommandError, 'Multiple segmentations specified'
+        raise CommandError('Multiple segmentations specified')
     return slist[0]
-        
+
 # -----------------------------------------------------------------------------
 #
 def regions_arg(s):
@@ -359,5 +359,5 @@ def regions_arg(s):
     rlist = [p.region for p in plist
              if hasattr(p,'region') and isinstance(p.region, Region)]
     if len(rlist) == 0:
-        raise CommandError, 'No segmentation regions specified'
+        raise CommandError('No segmentation regions specified')
     return rlist

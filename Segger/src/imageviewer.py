@@ -33,17 +33,17 @@ class ImageViewer(ModelessDialog):
         self.shown_size = None
         self.image_tag = None
 
-        import Tkinter
+        import tkinter
 
         parent.rowconfigure(0, weight=1)
         parent.columnconfigure(0, weight=1)
 
-        self.canvas = c = Tkinter.Canvas(parent, highlightthickness = 0)
+        self.canvas = c = tkinter.Canvas(parent, highlightthickness = 0)
         c.grid(row = 0, column = 0, sticky = 'news')
 
-        sv = Tkinter.Scrollbar(parent, orient=Tkinter.VERTICAL, command=c.yview)
+        sv = tkinter.Scrollbar(parent, orient=tkinter.VERTICAL, command=c.yview)
         sv.grid(row = 0, column = 1, sticky = 'ns')
-        sh = Tkinter.Scrollbar(parent, orient=Tkinter.HORIZONTAL,
+        sh = tkinter.Scrollbar(parent, orient=tkinter.HORIZONTAL,
                                command=c.xview)
         sh.grid(row = 1, column = 0, sticky = 'ew')
 
@@ -67,7 +67,7 @@ class ImageViewer(ModelessDialog):
         from PIL.ImageTk import PhotoImage
         pi = PhotoImage(image)
         c = self.canvas
-        c.save_image = pi	# Tk Label keeps no count.
+        c.save_image = pi       # Tk Label keeps no count.
         t = c.create_image(0,0,anchor="nw",image=pi)
         if not self.image_tag is None:
             c.delete(self.image_tag)
@@ -122,7 +122,7 @@ class ImageViewer(ModelessDialog):
         if self.image is None:
             return
 
-	def save(okay, dialog, self = self):
+        def save(okay, dialog, self = self):
             if not okay:
                 return
             paths_and_types = dialog.getPathsAndTypes()
@@ -131,12 +131,12 @@ class ImageViewer(ModelessDialog):
             path, format = paths_and_types[0]
             self.image.save(path, format)
 
-	from OpenSave import SaveModeless
-	SaveModeless(title = 'Save Image',
-		     filters = [('JPEG', '*.jpg', '.jpg'),
-				('PNG', '*.png', '.png'),
-				('TIFF', '*.tif', '.tif')],
-		     command = save )
+        from OpenSave import SaveModeless
+        SaveModeless(title = 'Save Image',
+                     filters = [('JPEG', '*.jpg', '.jpg'),
+                                ('PNG', '*.png', '.png'),
+                                ('TIFF', '*.tif', '.tif')],
+                     command = save )
 
 # ------------------------------------------------------------------------------
 #

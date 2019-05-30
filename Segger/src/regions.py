@@ -1,11 +1,11 @@
 import numpy
-from _surface import SurfaceModel
 
 from sys import stderr
-from Segger import timing
+from . import timing
 from time import clock
 
-class Segmentation ( SurfaceModel ):
+from chimerax.core.models import Surface
+class Segmentation ( Surface ):
 
     def __init__(self, name, volume = None, open = True):
 
@@ -14,11 +14,11 @@ class Segmentation ( SurfaceModel ):
         self.name = name
         if volume is None:
             self.mask = None
-            print " - no mask?"
+            print(" - no mask?")
         else:
             from numpy import zeros, uint32
             self.mask = zeros(volume.data.size[::-1], uint32)
-            print " - made mask from", volume.name
+            print((" - made mask from", volume.name))
         self.regions = set()            # Top level regions
         self.id_to_region = {}
         self.max_region_id = 0
@@ -27,8 +27,8 @@ class Segmentation ( SurfaceModel ):
         self.seg_map = volume           # Map being segmented.
         self.map_level = None           # Good contouring level.
         tf = None if volume is None else volume.data.ijk_to_xyz_transform
-        print " - ijk_to_xyz tr: "
-        print tf
+        print(" - ijk_to_xyz tr: ")
+        print(tf)
         self.ijk_to_xyz_transform = tf  # mask to physical coords
         self.surface_resolution = 1     # voxels
 
@@ -54,7 +54,7 @@ class Segmentation ( SurfaceModel ):
         self.seg_map = volume
         if not volume is None:
             self.ijk_to_xyz_transform = volume.data.ijk_to_xyz_transform
-    
+
     def point_transform(self):
 
         v = self.volume_data()
@@ -77,7 +77,7 @@ class Segmentation ( SurfaceModel ):
         from Matrix import length
         step = [length([tf[r][c] for r in (0,1,2)]) for c in (0,1,2)]
         return step
-        
+
     def voxel_volume(self):
 
         t = self.point_transform()
@@ -135,14 +135,14 @@ class Segmentation ( SurfaceModel ):
                     c = rcons[id2r[r1id]][id2r[r2id]]
                     c.maximum_density = dmax
                     c.D = dsum
-                
+
             if timing: t3 = clock()
 
             self.rcons = rcons
-            cc = sum([len(t) for t in rcons.values()])/2
-            print 'Computed %d contacting pairs' % cc
+            cc = sum([len(t) for t in list(rcons.values())])/2
+            print(('Computed %d contacting pairs' % cc))
             if timing:
-                print 'Time %.2f: contact calc %.2f sec, contact objects %.2f sec, maxima %.2f sec' % (t3-t0,t1-t0,t2-t1,t3-t2)
+                print(('Time %.2f: contact calc %.2f sec, contact objects %.2f sec, maxima %.2f sec' % (t3-t0,t1-t0,t2-t1,t3-t2)))
 
 
         return self.rcons
@@ -153,15 +153,15 @@ class Segmentation ( SurfaceModel ):
 
     def open_map(self, open = True):
 
-        print self.name, ":",
+        print((self.name, ":"))
 
         v = self.volume_data()
         if v :
-            print "already has map set"
+            print("already has map set")
             return None
 
         if not hasattr(self, 'map_path') and not hasattr(self,'map_name'):
-            print "doesn't have map_path or name"
+            print("doesn't have map_path or name")
             return None
 
         #p = self.map_path
@@ -175,17 +175,17 @@ class Segmentation ( SurfaceModel ):
         for v in volume_list() :
             if hasattr(self, 'map_path') and v.data.path == self.map_path :
                 dmap = v
-                print "found open map by path"
+                print("found open map by path")
                 break
             elif hasattr(self, 'map_name') and self.map_name in v.name :
                 dmap = v
-                print "found open map by name"
+                print("found open map by name")
                 break
 
         if dmap == None :
             from os.path import isfile
             if not isfile(self.map_path) :
-                print "Map file is not on disk"
+                print("Map file is not on disk")
                 return None
 
             if open:
@@ -195,16 +195,16 @@ class Segmentation ( SurfaceModel ):
 
             maps = open_volume_file(self.map_path, **kw)
             if len(maps) == 0 :
-                print "error opening map file"
+                print("error opening map file")
                 return None
 
-            print "loaded map"
+            print("loaded map")
             dmap = maps[0]
 
         if dmap == None :
-            print "could not find/open map"
+            print("could not find/open map")
             return None
-        
+
         self.set_volume_data(dmap)
         if not self.map_level is None:
             dmap.set_parameters(surface_levels = [self.map_level])
@@ -283,7 +283,7 @@ class Segmentation ( SurfaceModel ):
             p = r.preg
             if p and not p in rset:
                 parents.add(p)
-            
+
             i += 1
 
         for p in parents:
@@ -296,7 +296,7 @@ class Segmentation ( SurfaceModel ):
         #rcons = self.region_contacts(task)
         #regions = SmallConnectedRegions ( self.childless_regions(), rcons, minRegionSize, task )
         #self.remove_regions(regions, task = task)
-        
+
         rregs = []
         for r in self.regions :
             np = len ( r.points() )
@@ -304,7 +304,7 @@ class Segmentation ( SurfaceModel ):
                 rregs.append ( r )
 
         self.remove_regions(rregs, remove_children=True, update_surfaces=True, task = task)
-        print 'Removed %d regions smaller than %d voxels' % (len(rregs), minRegionSize)
+        print(('Removed %d regions smaller than %d voxels' % (len(rregs), minRegionSize)))
 
 
     def remove_contact_regions ( self, minContactSize, task = None ) :
@@ -315,18 +315,18 @@ class Segmentation ( SurfaceModel ):
         for r in self.all_regions() :
             csize = 0
             if r in rcons:
-                for rc, con in rcons[r].iteritems() :
+                for rc, con in rcons[r].items() :
                     csize += con.N
             if csize < minContactSize :
                 rregs.append ( r )
 
         self.remove_regions(rregs, remove_children=True, update_surfaces=True, task = task)
 
-        print 'Removed %d regions with <%d contact size' % (len(rregs), minContactSize)
+        print(('Removed %d regions with <%d contact size' % (len(rregs), minContactSize)))
 
 
     def join_regions ( self, regs, max_point = None, color = None ) :
-    
+
         if len(regs) == 0 :
             return None
 
@@ -355,9 +355,9 @@ class Segmentation ( SurfaceModel ):
         import Matrix
         import _contour
         import numpy
-        
+
         centers, syms = csyms
-        print "Finding %d-symmetry region groups" % len(syms)
+        print(("Finding %d-symmetry region groups" % len(syms)))
 
         com = centers[0]
         t_0_com = ( (1.0,0.0,0.0,-com[0]),
@@ -389,7 +389,7 @@ class Segmentation ( SurfaceModel ):
         # larger regions from finding corresponding large regions
         # that are true symmetric counterparts
 
-        print " - sorting regions by size..."
+        print(" - sorting regions by size...")
         task.updateStatus ( 'Sorting regions by size' )
         size_regs = []
         for reg in self.regions : size_regs.append ( [ len(reg.points()), reg] )
@@ -439,17 +439,17 @@ class Segmentation ( SurfaceModel ):
                     # ignore regions that already have a sid
                     # not sure if this is a good idea yet
                     rm2 = {}
-                    for sym_rid, count in rm.iteritems() :
+                    for sym_rid, count in rm.items() :
                         if sym_rid in self.rid_sid : continue
                         else : rm2[sym_rid] = count
                     rm = rm2
 
 
-                unique_sym_rids = rm.keys ()
+                unique_sym_rids = list(rm.keys ())
                 if len ( unique_sym_rids ) == 0 : continue
 
                 # take the rid that appears the most as the symmetric counterpart
-                sym_rid = unique_sym_rids [ numpy.argmax ( rm.values() ) ]
+                sym_rid = unique_sym_rids [ numpy.argmax ( list(rm.values()) ) ]
 
                 self.rid_sid [ sym_rid ] = sid_at
                 sreg = self.id_to_region [ sym_rid ]
@@ -457,8 +457,8 @@ class Segmentation ( SurfaceModel ):
 
             #if r.rid > 30 : break
 
-        print "%d regions, sid_at: %d - # sids: %d" % (
-            len(self.regions), sid_at, len(set(self.rid_sid.values())) )
+        print(("%d regions, sid_at: %d - # sids: %d" % (
+            len(self.regions), sid_at, len(set(self.rid_sid.values())) )))
 
 
     def calculate_watershed_regions ( self, mm, thrD, csyms=None, task = None ) :
@@ -486,15 +486,15 @@ class Segmentation ( SurfaceModel ):
                 task.updateStatus('Created regions %d of %d' % (r, n))
             reg = Region ( self, r+1, max_points[r] )
             regions.append(reg)
-        
+
         self.regions = set(regions)
         self.id_to_region = dict([(r.rid, r) for r in regions])
         if timing: t3 = clock()
 
         np = sum([r.point_count() for r in regions])
-        print 'Calculated %d watershed regions covering %d grid points' % (len(regions), np)
+        print(('Calculated %d watershed regions covering %d grid points' % (len(regions), np)))
         if timing:
-            print 'Time %.2f: watershed mask %.2f, maxima %.2f, region objects %.2f' % (t3-t0, t1-t0, t2-t1, t3-t2)
+            print(('Time %.2f: watershed mask %.2f, maxima %.2f, region objects %.2f' % (t3-t0, t1-t0, t2-t1, t3-t2)))
 
         if csyms :
             self.find_sym_regions ( csyms, task )
@@ -536,15 +536,15 @@ class Segmentation ( SurfaceModel ):
             if timing: t3 = clock()
             num_regs = len(self.regions)
 
-            print "Smoothing width %d voxels, %d regions" % (slev, num_regs)
-            if timing: 
-                print 'Time %.2f: smooth %.2f, group %.2f' % (t3-t1, t2-t1, t3-t2)
+            print(("Smoothing width %d voxels, %d regions" % (slev, num_regs)))
+            if timing:
+                print(('Time %.2f: smooth %.2f, group %.2f' % (t3-t1, t2-t1, t3-t2)))
 
             if num_regs <= min_reg : break
-            
+
         self.smoothing_level = steps  * sdev
 
-        print "--------------- sdev: %.1f ---------------" % self.smoothing_level
+        print(("--------------- sdev: %.1f ---------------" % self.smoothing_level))
 
         return rlist
 
@@ -564,7 +564,7 @@ class Segmentation ( SurfaceModel ):
                 rm[pt].append(reg)
             else:
                 rm[pt] = [reg]
-        groups = [(pt,regs) for pt,regs in rm.items() if len(regs) >= 2]
+        groups = [(pt,regs) for pt,regs in list(rm.items()) if len(regs) >= 2]
 
         rlist = []
         for i, (pt,regs) in enumerate(groups):
@@ -593,7 +593,7 @@ class Segmentation ( SurfaceModel ):
                 rm[pt].append(reg)
             else:
                 rm[pt] = [reg]
-        groups = [(pt,regs) for pt,regs in rm.items() if len(regs) >= 2]
+        groups = [(pt,regs) for pt,regs in list(rm.items()) if len(regs) >= 2]
 
         rlist = []
         for i, (pt,regs) in enumerate(groups):
@@ -621,9 +621,9 @@ class Segmentation ( SurfaceModel ):
                 rlist.append(newReg)
 
             else :
-                print "Trying to join: ", sid_rids
-                clr = random_color() 
-                for sid, rids in sid_rids.iteritems () :
+                print(("Trying to join: ", sid_rids))
+                clr = random_color()
+                for sid, rids in sid_rids.items () :
                     for rid in rids :
                         reg = self.id_to_region [ rid ]
                         reg.color = clr
@@ -641,7 +641,7 @@ class Segmentation ( SurfaceModel ):
         conr = ConnectedRegions ( regions, cons, min_contact )
 
         # List of sets of connected regions.
-        rsets = dict([(id(cr), cr) for r, cr in conr.items()]).values()
+        rsets = list(dict([(id(cr), cr) for r, cr in list(conr.items())]).values())
 
         nregs = []
         for rset in rsets :
@@ -649,43 +649,43 @@ class Segmentation ( SurfaceModel ):
                 r = self.join_regions ( tuple(rset) )
                 nregs.append(r)
 
-        print "Created %d connected regions" % len(nregs)
+        print(("Created %d connected regions" % len(nregs)))
 
 
     def group_connected_n ( self, nsteps, stopAt = 1, regions=None, csyms = None, task = None ) :
 
         nregs0 = len(self.regions)
-        print "Grouping connected - %d regions" % nregs0
+        print(("Grouping connected - %d regions" % nregs0))
 
         newRegs, delRegs = [], []
 
         for si in range (nsteps) :
 
             cons = group_contacts(self.region_contacts(), limit_regions=regions)
-    
+
             if task :
                 task.updateStatus( 'Making contacts list' )
-    
+
             minN, maxN = 1e5, 0
-            clist = []        
-            for r1, r1cons in cons.iteritems() :
-                for r2, con in r1cons.iteritems () :
+            clist = []
+            for r1, r1cons in cons.items() :
+                for r2, con in r1cons.items () :
                     clist.append ( [r1, r2, con] )
                     if con.N < minN : minN = con.N
                     if con.N > maxN : maxN = con.N
 
             if len(clist) == 0 :
-                print " - no more connections, stopping"
+                print(" - no more connections, stopping")
                 break
-            
-            print " - %d cons, N %d - %d, sorting..." % (len(clist), minN, maxN)
-    
+
+            print((" - %d cons, N %d - %d, sorting..." % (len(clist), minN, maxN)))
+
             if task :
                 task.updateStatus( 'Sorting contacts list' )
-    
+
             clist.sort ( reverse=True, key=lambda x: x[2].N )
-            
-            
+
+
             #rgrouped = {}
             nregs = []
             for r1, r2, con in clist :
@@ -695,13 +695,13 @@ class Segmentation ( SurfaceModel ):
                     #rgrouped[r1], rgrouped[r2] = 1, 1
                     nregs.append(r)
                     if si == 0 : delRegs.extend ( [r1,r2] )
-            
+
             newRegs = nregs[:]
-    
-            print " - connected %d regions, now at %d" % ( len(nregs), len(self.regions) )
-            
-            if len(nregs) <= stopAt : 
-                print " - stopping for %d regions" % stopAt
+
+            print((" - connected %d regions, now at %d" % ( len(nregs), len(self.regions) )))
+
+            if len(nregs) <= stopAt :
+                print((" - stopping for %d regions" % stopAt))
                 break
 
         return newRegs, delRegs
@@ -722,7 +722,7 @@ class Segmentation ( SurfaceModel ):
 
         self.remove_regions(removeRegs, update_surfaces = False, task = task)
 
-        print 'Ungrouped %d regions into %d regions' % ( len(regs), len(rlist) )
+        print(('Ungrouped %d regions into %d regions' % ( len(regs), len(rlist) )))
         return [newRegs, removeRegs]
 
 
@@ -732,14 +732,14 @@ class Segmentation ( SurfaceModel ):
 
         dmap = None
         init_mat = None
-        
-        print " -- showing ?", len(self.regions), "? regions"
-        
+
+        print((" -- showing ?", len(self.regions), "? regions"))
+
         rlist = list(self.regions)
         rlist.sort(lambda r1,r2: cmp(r2.point_count(),r1.point_count()))
-        
+
         self.style = style
-        
+
         for i, reg in enumerate(rlist):
 
             if not max_reg is None and i >= max_reg :
@@ -753,7 +753,7 @@ class Segmentation ( SurfaceModel ):
             vt = None
 
             if style == 'Voxel_Surfaces' :
-            
+
                 reg.make_surface (None,None,self.regions_scale,bForce)
 
             elif style == 'Density_Maxima' :
@@ -774,7 +774,7 @@ class Segmentation ( SurfaceModel ):
 
                 tpoints = reg.map_points()
                 vt = None
-                print " - reg %d, %d voxels" % (reg.rid, len(tpoints))
+                print((" - reg %d, %d voxels" % (reg.rid, len(tpoints))))
                 import VolumeData
                 sg = VolumeData.zone_masked_grid_data( dmap.data, tpoints, dmap.data.step[0] )
                 m = sg.full_matrix()
@@ -794,14 +794,14 @@ class Segmentation ( SurfaceModel ):
                 surf_sp0 = None
                 for sp in dmap.surfacePieces :
                     v, t = sp.geometry
-                    #print "- %d vertices, %d tris" % (len(v), len(t))
+                    #print("- %d vertices, %d tris" % (len(v), len(t)))
                     if len(v) == 8 and len(t) == 12 :
                         continue
                     if len(v) == 0 and len(t) == 0 :
                         surf_sp0 = sp
                     else :
                         surf_sp = sp
- 
+
                 try : vt = surf_sp.geometry
                 except : vt = surf_sp0.geometry
 
@@ -822,7 +822,7 @@ class Segmentation ( SurfaceModel ):
 
         d = self.volume_data()
         if d is None:
-            from segment_dialog import umsg
+            from .segment_dialog import umsg
             #segdlg = volume_segmentation_dialog ()
             #if segdlg :
             umsg ("No map - select segmentation & map, then File -> Associate")
@@ -865,24 +865,24 @@ class Segmentation ( SurfaceModel ):
                 if r.surface_piece == None :
                     continue
                 elif r.surface_piece.vertexColors is not None :
-                    #print " - v color 0 : ", r.surface_piece.vertexColors[0]
+                    #print(" - v color 0 : ", r.surface_piece.vertexColors[0])
                     clr = r.surface_piece.vertexColors[0]
                 else :
-                    #print " - s color : ", r.surface_piece.color
+                    #print(" - s color : ", r.surface_piece.color)
                     clr = r.surface_piece.color
                 colors[c.rid] = clr
                 r.color = clr
         return colors
-        
-        
-            
+
+
+
     def all_regions ( self ):
 
-        return self.id_to_region.values()
+        return list(self.id_to_region.values())
 
     def childless_regions ( self ):
 
-        rlist = [r for r in self.id_to_region.values() if len(r.cregs) == 0]
+        rlist = [r for r in list(self.id_to_region.values()) if len(r.cregs) == 0]
         return rlist
 
     def selected_regions ( self ) :
@@ -1023,7 +1023,7 @@ class Region:
             tf = self.segmentation.point_transform()
             import _contour
             _contour.affine_transform_vertices ( com.reshape((1,3)), tf )
-            
+
         return com
 
 
@@ -1042,7 +1042,7 @@ class Region:
     def enclosed_volume ( self ) :
 
         return self.point_count() * self.segmentation.voxel_volume()
-        
+
 
     def set_color ( self, color ):
 
@@ -1093,7 +1093,7 @@ class Region:
             vertices, triangles, normals = \
                 surface_points ( self.points(),
                                  resolution = seg.surface_resolution,
-                                 density_threshold = 0.1, 
+                                 density_threshold = 0.1,
                                  smoothing_factor = .25,
                                  smoothing_iterations = 5 )
             tf = seg.point_transform()
@@ -1118,7 +1118,7 @@ class Region:
 
         rgba = self.top_parent().color
         nsp = self.segmentation.addPiece ( vertices, triangles, rgba )
-        # print " - added piece with color", nsp.color
+        # print(" - added piece with color", nsp.color)
 
         try : sidstr = ", sym # %d" % self.segmentation.rid_sid [ self.rid ]
         except : sidstr = ""
@@ -1146,7 +1146,7 @@ class Region:
         rcons = self.segmentation.region_contacts()
         for r in self.childless_regions():
             if r in rcons:
-                rset.update(rcons[r].keys())
+                rset.update(list(rcons[r].keys()))
         cr = set()
         for r in rset:
             cr.add(r.top_parent())
@@ -1218,7 +1218,7 @@ class Region:
             else:
                 self.segmentation.calculate_region_bounds()
                 if self.npoints is None:
-                    print 'empty region', self.rid
+                    print(('empty region', self.rid))
                     self.npoints = 0
         return self.npoints
 
@@ -1252,7 +1252,7 @@ class Region:
     def get_attribute(self, name, default = None):
 
         return self.attrib[name] if hasattr(self, 'attrib') and name in self.attrib else default
-        
+
     def set_attribute(self, name, value):
 
         if self.is_reserved_name(name):
@@ -1270,8 +1270,8 @@ class Region:
     def remove_attribute(self, name):
 
         if hasattr(self, 'attrib') and name in self.attrib:
-          del self.attrib[name]
-          delattr(self, name)
+            del self.attrib[name]
+            delattr(self, name)
 
     def attributes(self):
 
@@ -1303,7 +1303,7 @@ def group_contacts ( rcons, limit_regions = None, task = None ) :
             if task and i % 1000 == 0:
                 task.updateStatus('group contacts %d of %d' % (i, len(rcons)))
             r1pcons = cons.setdefault(r1_parent, {})
-            for r2, o in r1cons.iteritems() :
+            for r2, o in r1cons.items() :
                 r2_parent = top[r2]
                 if r2_parent != r1_parent:
                     if limit_regions is None or r2_parent in limit_regions:
@@ -1327,13 +1327,13 @@ def GroupedRegions ( regions, rset = None ):
         rset = set ( regions )
     else:
         rset.update( regions )
-        
+
     for r in regions:
         GroupedRegions ( r.cregs, rset )
 
     return rset
 
-        
+
 def SmallRegions ( regions, minRegionSize ) :
 
     sreg = [r for r in regions if r.point_count() < minRegionSize ]
@@ -1344,7 +1344,7 @@ def SmallConnectedRegions ( regions, rcons, minRegionSize, task = None ) :
 
     conr = ConnectedRegions ( regions, rcons, task=task )
     csize = {}
-    for rset in conr.values():
+    for rset in list(conr.values()):
         s = id(rset)
         if not s in csize:
             csize[s] = sum([c.point_count() for c in rset])
@@ -1414,7 +1414,7 @@ def random_color(avoid_rgba = None, minimum_rgba_distance = 0.2):
         if d > minimum_rgba_distance * minimum_rgba_distance:
             break
     return c
-    
+
 
 def segmentations():
 
@@ -1489,8 +1489,8 @@ def group_by_contacts(smod, task = None):
             rj.color_level = len(smod.regions)
             tp[p1] = tp[p2] = rj
             rmax[rj] = max((rmax[p1], rmax[p2]))
-    print 'max group depth', maximum_group_depth(smod.regions)
-    print 'resorted', rcnt
+    print(('max group depth', maximum_group_depth(smod.regions)))
+    print(('resorted', rcnt))
 
 def connected_subsets(connections):
 
@@ -1510,7 +1510,7 @@ def connected_subsets(connections):
             for e in s2:
                 subset[e] = s1
             pairs.append((e1, e2))
-    subsets = dict([(id(s),s) for s in subset.values()]).values()
+    subsets = list(dict([(id(s),s) for s in list(subset.values())]).values())
     return subsets, pairs
 
 def region_maxima(regions, map, rmax = None):
@@ -1579,7 +1579,7 @@ def mean_and_sd(regions, volume):
     map_size = volume.data.size
     binned_mask = bin_size(mask_size, map_size)
     if binned_mask is None:
-        print 'Incompatible mask (%d,%d,%d) and map (%d,%d,%d) sizes.' % (tuple(mask_size) + tuple(map_size))
+        print(('Incompatible mask (%d,%d,%d) and map (%d,%d,%d) sizes.' % (tuple(mask_size) + tuple(map_size))))
         return None
 
     vmat = volume.full_matrix()
@@ -1670,7 +1670,7 @@ def masked_matrix (regions, volume) :
     mmat = numpy.zeros_like ( vmat )
 
     mask_matrix(regions, vmat, mmat, binned_mask)
-    
+
     return mmat
 
 
@@ -1792,7 +1792,7 @@ def color_surface_pieces(plist, mask, ijk_to_xyz, offset, colormap):
 
     import Matrix
     xyz_to_ijk = Matrix.invert_matrix(ijk_to_xyz)
-        
+
     for p in plist:
         v, t = p.geometry
         n = p.normals

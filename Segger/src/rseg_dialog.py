@@ -7,10 +7,10 @@
 # to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 # copies of the Software, and to permit persons to whom the Software is
 # furnished to do so, subject to the following conditions:
-# 
+#
 # The above copyright notice and this permission notice shall be included in
 # all copies or substantial portions of the Software.
-# 
+#
 # THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 # IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 # FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -22,7 +22,7 @@
 import chimera
 import os
 import os.path
-import Tkinter
+import tkinter
 from CGLtk import Hybrid
 import VolumeData
 import _multiscale
@@ -37,10 +37,11 @@ from time import clock
 import sets
 import FitMap
 
-from axes import prAxes
-import regions
-import graph
+from .axes import prAxes
+from . import regions
+from . import graph
 from Segger import dev_menus, timing, seggerVersion
+import importlib
 
 OML = chimera.openModels.list
 
@@ -51,7 +52,7 @@ REG_OPACITY = 0.45
 
 
 
-from segment_dialog import current_segmentation, segmentation_map
+from .segment_dialog import current_segmentation, segmentation_map
 
 
 class RSeg_Dialog ( chimera.baseDialog.ModelessDialog ):
@@ -73,21 +74,21 @@ class RSeg_Dialog ( chimera.baseDialog.ModelessDialog ):
 
         row = 0
 
-        menubar = Tkinter.Menu(parent, type = 'menubar', tearoff = False)
+        menubar = tkinter.Menu(parent, type = 'menubar', tearoff = False)
         tw.config(menu = menubar)
 
-        f = Tkinter.Frame(parent)
+        f = tkinter.Frame(parent)
         f.grid(column=0, row=row, sticky='ew')
-        l = Tkinter.Label(f, text='  ')
+        l = tkinter.Label(f, text='  ')
         l.grid(column=0, row=row, sticky='w')
 
 
 
         row += 1
-        ff = Tkinter.Frame(f)
+        ff = tkinter.Frame(f)
         ff.grid(column=0, row=row, sticky='w')
         if 1 :
-            l = Tkinter.Label(ff, text = "1. Select map in Segment Map dialog, press Segment button.", anchor = 'w')
+            l = tkinter.Label(ff, text = "1. Select map in Segment Map dialog, press Segment button.", anchor = 'w')
             l.grid(column=0, row=0, sticky='ew', padx=5, pady=1)
 
 
@@ -95,18 +96,18 @@ class RSeg_Dialog ( chimera.baseDialog.ModelessDialog ):
 
 
         row += 1
-        ff = Tkinter.Frame(f)
+        ff = tkinter.Frame(f)
         ff.grid(column=0, row=row, sticky='w')
         if 1 :
-            l = Tkinter.Label(ff, text = "2. Optional - for icosahedral (not round) shells: ", anchor = 'w')
+            l = tkinter.Label(ff, text = "2. Optional - for icosahedral (not round) shells: ", anchor = 'w')
             l.grid(column=0, row=0, sticky='ew', padx=5, pady=1)
 
 
         row += 1
-        ff = Tkinter.Frame(f)
+        ff = tkinter.Frame(f)
         ff.grid(column=0, row=row, sticky='w')
         if 1 :
-            l = Tkinter.Label(ff, text = "     A. Use Tools -> Higher-Order Structure -> Icosahedron Surface.", anchor = 'w')
+            l = tkinter.Label(ff, text = "     A. Use Tools -> Higher-Order Structure -> Icosahedron Surface.", anchor = 'w')
             l.grid(column=0, row=0, sticky='ew', padx=5, pady=1)
 
 
@@ -114,127 +115,127 @@ class RSeg_Dialog ( chimera.baseDialog.ModelessDialog ):
 
 
         row += 1
-        ff = Tkinter.Frame(f)
+        ff = tkinter.Frame(f)
         ff.grid(column=0, row=row, sticky='w')
         if 1 :
-            l = Tkinter.Label(ff, text = "     B. Match Icosahedron to current map & segmentation.", anchor = 'w')
+            l = tkinter.Label(ff, text = "     B. Match Icosahedron to current map & segmentation.", anchor = 'w')
             l.grid(column=0, row=0, sticky='ew', padx=5, pady=1)
 
 
         row += 1
-        ff = Tkinter.Frame(f)
+        ff = tkinter.Frame(f)
         ff.grid(column=0, row=row, sticky='w')
         if 1 :
-            l = Tkinter.Label(ff, text = "     C. From Icosahedron Surface ", anchor = 'w')
+            l = tkinter.Label(ff, text = "     C. From Icosahedron Surface ", anchor = 'w')
             l.grid(column=0, row=0, sticky='ew', padx=5, pady=1)
 
-            b = Tkinter.Button(ff, text="Find Axes", command=self.Icos)
+            b = tkinter.Button(ff, text="Find Axes", command=self.Icos)
             b.grid (column=1, row=0, sticky='w', padx=5, pady=1)
-            
+
         if dev_menus :
-            
-            b = Tkinter.Button(ff, text="Line CC", command=self.LineCC)
+
+            b = tkinter.Button(ff, text="Line CC", command=self.LineCC)
             b.grid (column=2, row=0, sticky='w', padx=5, pady=1)
 
 
 
         row += 1
-        ff = Tkinter.Frame(f)
+        ff = tkinter.Frame(f)
         ff.grid(column=0, row=row, sticky='w')
         if 1 :
-            l = Tkinter.Label(ff, text = "3. Make histogram of distances from center of map to center of each region,", anchor = 'w')
+            l = tkinter.Label(ff, text = "3. Make histogram of distances from center of map to center of each region,", anchor = 'w')
             l.grid(column=0, row=0, sticky='ew', padx=5, pady=1)
-            
+
 
         row += 1
-        ff = Tkinter.Frame(f)
+        ff = tkinter.Frame(f)
         ff.grid(column=0, row=row, sticky='w')
         if 1 :
-            l = Tkinter.Label(ff, text = "    using", anchor = 'w')
+            l = tkinter.Label(ff, text = "    using", anchor = 'w')
             l.grid(column=0, row=0, sticky='ew', padx=5, pady=1)
 
-            self.numBins = Tkinter.StringVar(ff)
+            self.numBins = tkinter.StringVar(ff)
             self.numBins.set ( "600" )
-            e = Tkinter.Entry(ff, width=10, textvariable=self.numBins)
+            e = tkinter.Entry(ff, width=10, textvariable=self.numBins)
             e.grid(column=1, row=0, sticky='w', padx=5, pady=1)
 
-            l = Tkinter.Label(ff, text = "bins", anchor = 'w')
+            l = tkinter.Label(ff, text = "bins", anchor = 'w')
             l.grid(column=2, row=0, sticky='ew', padx=5, pady=1)
 
-            b = Tkinter.Button(ff, text="Make Histogram", command=self.MakeHist)
+            b = tkinter.Button(ff, text="Make Histogram", command=self.MakeHist)
             b.grid (column=3, row=0, sticky='w', padx=5, pady=1)
 
 
         row += 1
-        ff = Tkinter.Frame(f)
+        ff = tkinter.Frame(f)
         ff.grid(column=0, row=row, sticky='w')
         if 1 :
-            l = Tkinter.Label(ff, text = "4. Plot histogram (e.g. using plot.ly), find distances with low values.", anchor = 'w')
-            l.grid(column=0, row=0, sticky='ew', padx=5, pady=1)
-            
-
-        row += 1
-        ff = Tkinter.Frame(f)
-        ff.grid(column=0, row=row, sticky='w')
-        if 1 :
-            l = Tkinter.Label(ff, text = "5. Enter distances at which to separate regions, separated by commas:", anchor = 'w')
+            l = tkinter.Label(ff, text = "4. Plot histogram (e.g. using plot.ly), find distances with low values.", anchor = 'w')
             l.grid(column=0, row=0, sticky='ew', padx=5, pady=1)
 
 
         row += 1
-        ff = Tkinter.Frame(f)
+        ff = tkinter.Frame(f)
         ff.grid(column=0, row=row, sticky='w')
         if 1 :
-            l = Tkinter.Label(ff, text = "   ", anchor = 'w')
+            l = tkinter.Label(ff, text = "5. Enter distances at which to separate regions, separated by commas:", anchor = 'w')
             l.grid(column=0, row=0, sticky='ew', padx=5, pady=1)
 
-            self.segRads = Tkinter.StringVar(ff)
-            
+
+        row += 1
+        ff = tkinter.Frame(f)
+        ff.grid(column=0, row=row, sticky='w')
+        if 1 :
+            l = tkinter.Label(ff, text = "   ", anchor = 'w')
+            l.grid(column=0, row=0, sticky='ew', padx=5, pady=1)
+
+            self.segRads = tkinter.StringVar(ff)
+
             if 0 or dev_menus :
                 self.segRads.set ( "1006" )
-                
-            e = Tkinter.Entry(ff, width=40, textvariable=self.segRads)
-            e.grid(column=1, row=0, sticky='w', padx=5, pady=1)
-            
 
-            b = Tkinter.Button(ff, text="Group", command=self.Segment)
+            e = tkinter.Entry(ff, width=40, textvariable=self.segRads)
+            e.grid(column=1, row=0, sticky='w', padx=5, pady=1)
+
+
+            b = tkinter.Button(ff, text="Group", command=self.Segment)
             b.grid (column=2, row=0, sticky='ew', padx=5, pady=1)
 
 
         row += 1
-        f = Tkinter.Frame(parent)
+        f = tkinter.Frame(parent)
         f.grid(column=0, row=row, sticky='ew')
-        l = Tkinter.Label(f, text='  ')
+        l = tkinter.Label(f, text='  ')
         l.grid(column=0, row=row, sticky='w')
 
 
         row += 1
-        dummyFrame = Tkinter.Frame(parent, relief='groove', borderwidth=1)
-        Tkinter.Frame(dummyFrame).pack()
+        dummyFrame = tkinter.Frame(parent, relief='groove', borderwidth=1)
+        tkinter.Frame(dummyFrame).pack()
         dummyFrame.grid(row=row,column=0,columnspan=7, pady=7, sticky='we')
 
 
         row = row + 1
-        self.msg = Tkinter.Label(parent, width = 60, anchor = 'w', justify = 'left', fg="red")
+        self.msg = tkinter.Label(parent, width = 60, anchor = 'w', justify = 'left', fg="red")
         self.msg.grid(column=0, row=row, sticky='ew', padx=5, pady=1)
         row += 1
 
 
     def umsg ( self, txt ) :
-        print txt
+        print(txt)
         self.status ( txt )
-    
+
     def status ( self, txt ) :
         txt = txt.rstrip('\n')
         self.msg.configure(text = txt)
         self.msg.update_idletasks()
-    
+
 
 
 
     def Icos ( self ) :
 
-        imod = None 
+        imod = None
         axmod = None
         for m in chimera.openModels.list() :
             if m.name == "Icosahedron" :
@@ -246,23 +247,23 @@ class RSeg_Dialog ( chimera.baseDialog.ModelessDialog ):
         if axmod == None :
             pass
         else :
-            chimera.openModels.close ( [axmod] )            
+            chimera.openModels.close ( [axmod] )
 
 
         if imod == None :
             self.umsg ( "No Icosahedron model found - please follow step 2." )
             return
-        
 
-        if len(imod.surfacePieces) <> 1 :
+
+        if len(imod.surfacePieces) != 1 :
             self.umsg ( "Please set 'Subdivision factor' to 1" )
             return
 
 
-        print len(imod.surfacePieces[0].geometry[1]), " tris"
-        print len(imod.surfacePieces[0].geometry[0]), " verts"
+        print(len(imod.surfacePieces[0].geometry[1]), " tris")
+        print(len(imod.surfacePieces[0].geometry[0]), " verts")
 
-        if len(imod.surfacePieces[0].geometry[1]) <> 20 :
+        if len(imod.surfacePieces[0].geometry[1]) != 20 :
             self.umsg ( "Please set 'Subdivision factor' to 1" )
             return
 
@@ -274,8 +275,8 @@ class RSeg_Dialog ( chimera.baseDialog.ModelessDialog ):
         surf_mod = _surface.SurfaceModel()
         chimera.openModels.add([surf_mod], sameAs = imod)
 
-        import axes; reload (axes)
-        
+        from . import axes; importlib.reload (axes)
+
         self.icos_vecs = []
         from numpy import arccos, pi
 
@@ -302,17 +303,17 @@ class RSeg_Dialog ( chimera.baseDialog.ModelessDialog ):
 
                 cyl = axes.AddCylinderSolid ( chimera.Vector(0,0,0), pv, r, (.6,.4,.4,1), 10.0, surf_mod )
                 cyl.name = "Icosahedron_Axes"
-                
+
                 p1v = chimera.Vector ( p1[0], p1[1], p1[2] ); p1v.normalize ()
                 p2v = chimera.Vector ( p2[0], p2[1], p2[2] ); p2v.normalize ()
                 p3v = chimera.Vector ( p3[0], p3[1], p3[2] ); p3v.normalize ()
-                
+
                 a1 = arccos ( p1v * pv ) * 180.0 / pi
                 a2 = arccos ( p2v * pv ) * 180.0 / pi
                 a3 = arccos ( p3v * pv ) * 180.0 / pi
-                
+
                 a12 = arccos ( p1v * p2v ) * 180.0 / pi
-                
+
                 # print a1, a2, a3, a12
 
 
@@ -322,7 +323,7 @@ class RSeg_Dialog ( chimera.baseDialog.ModelessDialog ):
             dp = pv1 * pv2
             ang = arccos ( dp )
             #print ang * 180.0 / pi
-            
+
         self.umsg ( "Axes built." )
 
 
@@ -334,23 +335,23 @@ class RSeg_Dialog ( chimera.baseDialog.ModelessDialog ):
         if segMap == None :
             self.umsg ( "Please select a map in the Segment Map Dialog" )
             return
-        
-        import axes
-        reload(axes)
+
+        from . import axes
+        importlib.reload(axes)
         pts, weights = axes.map_points ( segMap )
-        print len(pts)
+        print(len(pts))
 
         COM, U, S, V = prAxes ( pts )
 
-        print " - COM : ", COM
+        print(" - COM : ", COM)
 
 
         smod = current_segmentation ()
         if smod == None :
             self.umsg ( "Please select a Current Segmentation in the Segment Map dialog" )
             return
-        
-        print "Seg has %d regions" % (len(smod.regions))
+
+        print("Seg has %d regions" % (len(smod.regions)))
 
 
         if hasattr(self, 'icos_vecs') :
@@ -365,12 +366,12 @@ class RSeg_Dialog ( chimera.baseDialog.ModelessDialog ):
 
             if 0 and r.surface_piece != None :
                 if r.surface_piece.display == False :
-                    print "i" + ri,
+                    print("i" + ri, end=' ')
                     continue
             try :
                 p = r.center_of_points ()
             except :
-                print "+"
+                print("+")
                 continue
 
             rvec = chimera.Vector ( p[0], p[1], p[2] ) - chimera.Vector (COM[0], COM[1], COM[2])
@@ -395,30 +396,30 @@ class RSeg_Dialog ( chimera.baseDialog.ModelessDialog ):
                     self.status ( "Making histogram %d regions, at %d" % (len(regs), ri+1) )
                 last = at; at += 1
 
-        print ""
+        print("")
 
-        dists = distByReg.values ()
+        dists = list(distByReg.values ())
         maxDist = max (dists) + 0.01
         minDist = min (dists)
         nbins = int ( self.numBins.get() )
         dr = (maxDist - minDist) / float(nbins)
-        print "%d dists - max %.2f, min %.2f, nb %d, dr %.2f" % (len(dists), maxDist, minDist, nbins, dr)
+        print("%d dists - max %.2f, min %.2f, nb %d, dr %.2f" % (len(dists), maxDist, minDist, nbins, dr))
 
         bins = []
         for i in range (nbins) :
             bins.append ( [] )
 
-        print "bad bins: ",
-        for regm, rad in distByReg.iteritems() :
+        print("bad bins: ", end=' ')
+        for regm, rad in distByReg.items() :
             bini = int ( numpy.floor ( (rad - minDist) / dr ) )
             if bini >= len(bins) :
-                print bini,
+                print(bini, end=' ')
                 bini = len(bins)-1
             bins[bini].append (regm)
 
-        print ""
-        
-        
+        print("")
+
+
 
         if 0 :
             f = open ( "rads.txt", "w" )
@@ -430,7 +431,7 @@ class RSeg_Dialog ( chimera.baseDialog.ModelessDialog ):
                 vn = v / (4 * 3.14 * rm * rm)
                 f.write ( "%d\t%.2f\t%.2f\t%d\t%f\n" % (k, vmin, vmax, v, vn) )
             f.close()
-        
+
         self.distByReg = distByReg
         #print self.distByReg
 
@@ -466,20 +467,20 @@ class RSeg_Dialog ( chimera.baseDialog.ModelessDialog ):
         if segMap == None :
             self.umsg ( "Please select a map in the Segment Map Dialog" )
             return
-        
+
         smod = current_segmentation ()
         if smod == None :
             self.umsg ( "Please select a Current Segmentation in the Segment Map dialog" )
             return
-        
-        print "Seg has %d regions" % (len(smod.regions))
 
-		
-        print "Seg rads:", self.segRads.get()
+        print("Seg has %d regions" % (len(smod.regions)))
+
+
+        print("Seg rads:", self.segRads.get())
 
 
         if hasattr(self, 'distByReg') :
-            print "Found distByReg"
+            print("Found distByReg")
         else :
             self.umsg ( "Make Histogram first." )
             return
@@ -490,7 +491,7 @@ class RSeg_Dialog ( chimera.baseDialog.ModelessDialog ):
         for rstr in self.segRads.get().split(",") :
             try :
                 radv = float(rstr)
-            except : 
+            except :
                 self.umsg ( "Error parsing distances; enter only numbers and commas" )
                 return
 
@@ -501,12 +502,12 @@ class RSeg_Dialog ( chimera.baseDialog.ModelessDialog ):
         self.umsg ( "Segmenting..." )
 
 
-        print "Sep rads:", sepRs
+        print("Sep rads:", sepRs)
         sregs = []
-        for r in sepRs : 
+        for r in sepRs :
             sregs.append ( [] )
-	
-        for reg, rad in self.distByReg.iteritems() :
+
+        for reg, rad in self.distByReg.items() :
             #if reg.surface_piece != None :
             #    if reg.surface_piece.display == False :
             #        continue
@@ -518,7 +519,7 @@ class RSeg_Dialog ( chimera.baseDialog.ModelessDialog ):
                     break
 
         for i, regs in enumerate (sregs) :
-            print "%d - %d regs" % (i, len(regs))
+            print("%d - %d regs" % (i, len(regs)))
             if len(regs) > 1 :
                 try :
                     smod.join_regions ( regs )
@@ -526,17 +527,17 @@ class RSeg_Dialog ( chimera.baseDialog.ModelessDialog ):
                     self.umsg ( "An error occurred - regions may have changed - please start again." )
                     smod.display_regions()
                     return
-		
+
         smod.display_regions()
-        
+
         self.umsg ( "Done, created %d groups based on radial distances" % len(sregs)  )
-        
-        from segment_dialog import volume_segmentation_dialog
+
+        from .segment_dialog import volume_segmentation_dialog
         volume_segmentation_dialog().ReportRegionCount ( smod )
 
-    
-    
-    
+
+
+
     def GetMod ( self, name ) :
 
         for m in chimera.openModels.list() :
@@ -546,9 +547,9 @@ class RSeg_Dialog ( chimera.baseDialog.ModelessDialog ):
 
 
 
-    
+
     def LineCC ( self ) :
-    
+
         dmap = segmentation_map()
         if dmap == None :
             umsg ( "No map selected" )
@@ -560,13 +561,13 @@ class RSeg_Dialog ( chimera.baseDialog.ModelessDialog ):
         if len(mlist) == 0 :
             umsg ( "No molecule found" )
             return
-            
+
         mol = mlist[0]
-        
-        print "Doing line CC in " + dmap.name + " using mol " + mol.name
-        
-        print dmap.openState.xform
-        print mol.openState.xform
+
+        print("Doing line CC in " + dmap.name + " using mol " + mol.name)
+
+        print(dmap.openState.xform)
+        print(mol.openState.xform)
 
 
         rccs = []
@@ -587,7 +588,7 @@ class RSeg_Dialog ( chimera.baseDialog.ModelessDialog ):
                 rmap = makeMap ( "#%d:%d@CA" % (mol.id, res.id.position)
                                  , resolution, 1, (.5, .5, .5, 1.0), "resmap" )
                 rmap_pos = cat.coord().toVector()
-                print " - sphere map pos ", rmap_pos
+                print(" - sphere map pos ", rmap_pos)
                 #rpoints, rpoint_weights = fit_points (rmap)
                 rpoints, rpoint_weights = fit_points_old (rmap)
                 xf = rmap.openState.xform
@@ -604,7 +605,7 @@ class RSeg_Dialog ( chimera.baseDialog.ModelessDialog ):
             #xf = dmap.openState.xform.inverse
             xf2 = xf.__copy__()
             xf2.multiply ( trx )
-            
+
             rmap.openState.xform = xf2
             break
 
@@ -613,11 +614,11 @@ class RSeg_Dialog ( chimera.baseDialog.ModelessDialog ):
                 olap, corr = overlap_and_correlation ( rpoint_weights, rmap_values )
 
                 if radi % 100 == 0 :
-                    print " %d - overlap: %f, cross-correlation: %f" % (radi, olap, corr)
+                    print(" %d - overlap: %f, cross-correlation: %f" % (radi, olap, corr))
 
                 rccs.append ( [radi,corr] )
             #print corr,
-    
+
         #chimera.openModels.close ( rmap )
 
 
@@ -663,8 +664,8 @@ def fit_points_old ( fmap, threshold = None ) :
     #mass = numpy.sum(weights, dtype=numpy.single)
     #fmap.rotation_center = numpy.dot(weights,points) / mass
 
-    if 1 : print "FitPoints from %s with threshold %.4f, %d nonzero" % (
-        fmap.name, threshold, len(nz) )
+    if 1 : print("FitPoints from %s with threshold %.4f, %d nonzero" % (
+        fmap.name, threshold, len(nz) ))
 
     return points, weights
 
@@ -739,4 +740,3 @@ def show_dialog (closeOld = True):
 
 # -----------------------------------------------------------------------------
 #
-

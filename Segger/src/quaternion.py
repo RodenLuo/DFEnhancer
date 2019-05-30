@@ -139,5 +139,3 @@ def slerp (p, q, t) :
 
     else :
         return Quaternion (p.s, chimera.Vector(p.v[0], p.v[1], p.v[2]))
-
-

@@ -22,7 +22,7 @@
 import chimera
 import os
 import os.path
-import Tkinter
+import tkinter
 from CGLtk import Hybrid
 import VolumeData
 import _multiscale
@@ -37,10 +37,11 @@ from time import clock
 import sets
 import FitMap
 
-from axes import prAxes
-import regions
-import graph
+from .axes import prAxes
+from . import regions
+from . import graph
 from Segger import dev_menus, timing, seggerVersion
+import importlib
 
 OML = chimera.openModels.list
 
@@ -51,7 +52,7 @@ REG_OPACITY = 0.45
 
 
 
-from segment_dialog import current_segmentation, segmentation_map
+from .segment_dialog import current_segmentation, segmentation_map
 
 
 class ISeg_Dialog ( chimera.baseDialog.ModelessDialog ):
@@ -73,115 +74,115 @@ class ISeg_Dialog ( chimera.baseDialog.ModelessDialog ):
 
         row = 0
 
-        menubar = Tkinter.Menu(parent, type = 'menubar', tearoff = False)
+        menubar = tkinter.Menu(parent, type = 'menubar', tearoff = False)
         tw.config(menu = menubar)
 
-        f = Tkinter.Frame(parent)
+        f = tkinter.Frame(parent)
         f.grid(column=0, row=row, sticky='ew')
-        l = Tkinter.Label(f, text='  ')
+        l = tkinter.Label(f, text='  ')
         l.grid(column=0, row=row, sticky='w')
 
 
 
         row += 1
-        ff = Tkinter.Frame(f)
+        ff = tkinter.Frame(f)
         ff.grid(column=0, row=row, sticky='w')
         if 1 :
-            l = Tkinter.Label(ff, text = "  1. Tools -> Higher-Order Structure -> Icosahedron Surface.", anchor = 'w')
+            l = tkinter.Label(ff, text = "  1. Tools -> Higher-Order Structure -> Icosahedron Surface.", anchor = 'w')
             l.grid(column=0, row=0, sticky='ew', padx=5, pady=1)
 
 
 
 
         row += 1
-        ff = Tkinter.Frame(f)
+        ff = tkinter.Frame(f)
         ff.grid(column=0, row=row, sticky='w')
         if 1 :
-            l = Tkinter.Label(ff, text = "    - show & match icosahedron to current map (change Orientation if necesary)", anchor = 'w')
+            l = tkinter.Label(ff, text = "    - show & match icosahedron to current map (change Orientation if necesary)", anchor = 'w')
             l.grid(column=0, row=0, sticky='ew', padx=5, pady=1)
 
 
         row += 1
-        ff = Tkinter.Frame(f)
+        ff = tkinter.Frame(f)
         ff.grid(column=0, row=row, sticky='w')
         if 1 :
 
-            l = Tkinter.Label(ff, text = "  2. Make icosahedral surface mesh", anchor = 'w')
+            l = tkinter.Label(ff, text = "  2. Make icosahedral surface mesh", anchor = 'w')
             l.grid(column=0, row=0, sticky='ew', padx=5, pady=1)
 
 
         row += 1
-        ff = Tkinter.Frame(f)
+        ff = tkinter.Frame(f)
         ff.grid(column=0, row=row, sticky='w')
         if 1 :
 
-            l = Tkinter.Label(ff, text = "        ", anchor = 'w')
+            l = tkinter.Label(ff, text = "        ", anchor = 'w')
             l.grid(column=0, row=0, sticky='ew', padx=5, pady=1)
 
-            b = Tkinter.Button(ff, text="Make", command=self.Icos2)
+            b = tkinter.Button(ff, text="Make", command=self.Icos2)
             b.grid (column=1, row=0, sticky='w', padx=5, pady=1)
 
-            b = Tkinter.Button(ff, text="Toggle Display - Mesh/Solid", command=self.ToggleDisp)
+            b = tkinter.Button(ff, text="Toggle Display - Mesh/Solid", command=self.ToggleDisp)
             b.grid (column=3, row=0, sticky='w', padx=5, pady=1)
 
 
         row += 1
-        ff = Tkinter.Frame(f)
+        ff = tkinter.Frame(f)
         ff.grid(column=0, row=row, sticky='w')
         if 1 :
 
-            l = Tkinter.Label(ff, text = "  3. Push outward", anchor = 'w')
+            l = tkinter.Label(ff, text = "  3. Push outward", anchor = 'w')
             l.grid(column=0, row=0, sticky='ew', padx=5, pady=1)
 
 
         row += 1
-        ff = Tkinter.Frame(f)
+        ff = tkinter.Frame(f)
         ff.grid(column=0, row=row, sticky='w')
         if 1 :
-            l = Tkinter.Label(ff, text = "        # iterations: ", anchor = 'w')
+            l = tkinter.Label(ff, text = "        # iterations: ", anchor = 'w')
             l.grid(column=0, row=0, sticky='ew', padx=5, pady=1)
 
-            self.numIt = Tkinter.StringVar(ff)
+            self.numIt = tkinter.StringVar(ff)
             self.numIt.set ( "100" )
-            e = Tkinter.Entry(ff, width=7, textvariable=self.numIt)
+            e = tkinter.Entry(ff, width=7, textvariable=self.numIt)
             e.grid(column=1, row=0, sticky='w', padx=5, pady=1)
 
-            l = Tkinter.Label(ff, text = ", stiffness: ", anchor = 'w')
+            l = tkinter.Label(ff, text = ", stiffness: ", anchor = 'w')
             l.grid(column=2, row=0, sticky='ew', padx=5, pady=1)
 
-            self.springF = Tkinter.StringVar(ff)
+            self.springF = tkinter.StringVar(ff)
             self.springF.set ( "0.2" )
-            e = Tkinter.Entry(ff, width=7, textvariable=self.springF)
+            e = tkinter.Entry(ff, width=7, textvariable=self.springF)
             e.grid(column=3, row=0, sticky='w', padx=5, pady=1)
 
 
-            b = Tkinter.Button(ff, text="Push", command=self.Icos2Push)
+            b = tkinter.Button(ff, text="Push", command=self.Icos2Push)
             b.grid (column=4, row=0, sticky='w', padx=5, pady=1)
 
 
 
         row += 1
-        ff = Tkinter.Frame(f)
+        ff = tkinter.Frame(f)
         ff.grid(column=0, row=row, sticky='w')
         if 1 :
-            l = Tkinter.Label(ff, text = "  -  Set radius:", anchor = 'w')
+            l = tkinter.Label(ff, text = "  -  Set radius:", anchor = 'w')
             l.grid(column=0, row=0, sticky='ew', padx=5, pady=1)
 
 
 
         row += 1
-        ff = Tkinter.Frame(f)
+        ff = tkinter.Frame(f)
         ff.grid(column=0, row=row, sticky='w')
         if 1 :
 
-            l = Tkinter.Label(ff, text = "        ", anchor = 'w')
+            l = tkinter.Label(ff, text = "        ", anchor = 'w')
             l.grid(column=0, row=0, sticky='ew', padx=5, pady=1)
 
-            sv = Tkinter.StringVar(ff)
+            sv = tkinter.StringVar(ff)
             sv.trace("w", lambda name, index, mode, sv=sv: self.set_rad_changed_cb(sv.get()) )
             self.setRad = sv
 
-            e = Tkinter.Entry(ff, width=7, textvariable=sv )
+            e = tkinter.Entry(ff, width=7, textvariable=sv )
             e.grid(column=1, row=0, sticky='w', padx=5, pady=1)
 
 
@@ -195,22 +196,22 @@ class ISeg_Dialog ( chimera.baseDialog.ModelessDialog ):
             #self.radius = rs
 
 
-            self.rad = Tkinter.DoubleVar(ff)
+            self.rad = tkinter.DoubleVar(ff)
             self.rad.set ( 100 )
 
             smod = self.GetMod ( "Icosahedron Faces"  )
             if smod != None :
-                print "Found faces..."
+                print("Found faces...")
                 verts, tris = smod.icosVerts0, smod.icosTris
                 p1 = smod.icosVerts [ tris[0][0] ]
                 r = numpy.sqrt ( numpy.sum(p1*p1) )
                 p1 = smod.icosVerts0 [ tris[0][0] ]
                 r0 = numpy.sqrt ( numpy.sum(p1*p1) )
-                print " - rad %.4f, orig: %.4f" % (r, r0)
+                print(" - rad %.4f, orig: %.4f" % (r, r0))
                 self.rad.set ( r )
 
 
-            self.radius = Tkinter.Scale(ff, from_=0, to=1500, variable=self.rad, orient=Tkinter.HORIZONTAL, length=350, command=self.radius_changed_cb)
+            self.radius = tkinter.Scale(ff, from_=0, to=1500, variable=self.rad, orient=tkinter.HORIZONTAL, length=350, command=self.radius_changed_cb)
             self.radius.grid(column=2, row=0, sticky='w', padx=5, pady=1, columnspan=10)
 
 
@@ -226,34 +227,34 @@ class ISeg_Dialog ( chimera.baseDialog.ModelessDialog ):
 
 
         row += 1
-        ff = Tkinter.Frame(f)
+        ff = tkinter.Frame(f)
         ff.grid(column=0, row=row, sticky='w')
         if 1 :
 
-            l = Tkinter.Label(ff, text = "  5. Cross-correlation / Mask densities between", anchor = 'w')
+            l = tkinter.Label(ff, text = "  5. Cross-correlation / Mask densities between", anchor = 'w')
             l.grid(column=0, row=0, sticky='ew', padx=5, pady=1)
 
 
         row += 1
-        ff = Tkinter.Frame(f)
+        ff = tkinter.Frame(f)
         ff.grid(column=0, row=row, sticky='w')
         if 1 :
-            l = Tkinter.Label(ff, text = "        start radius: ", anchor = 'w')
+            l = tkinter.Label(ff, text = "        start radius: ", anchor = 'w')
             l.grid(column=0, row=0, sticky='ew', padx=5, pady=1)
 
-            self.startRad = Tkinter.StringVar(ff)
-            e = Tkinter.Entry(ff, width=7, textvariable=self.startRad)
+            self.startRad = tkinter.StringVar(ff)
+            e = tkinter.Entry(ff, width=7, textvariable=self.startRad)
             e.grid(column=1, row=0, sticky='w', padx=5, pady=1)
 
-            l = Tkinter.Label(ff, text = ", end radius: ", anchor = 'w')
+            l = tkinter.Label(ff, text = ", end radius: ", anchor = 'w')
             l.grid(column=2, row=0, sticky='ew', padx=5, pady=1)
 
-            self.endRad = Tkinter.StringVar(ff)
-            e = Tkinter.Entry(ff, width=7, textvariable=self.endRad)
+            self.endRad = tkinter.StringVar(ff)
+            e = tkinter.Entry(ff, width=7, textvariable=self.endRad)
             e.grid(column=3, row=0, sticky='w', padx=5, pady=1)
 
 
-            b = Tkinter.Button(ff, text="CC", command=self.Icos2CC)
+            b = tkinter.Button(ff, text="CC", command=self.Icos2CC)
             b.grid (column=4, row=0, sticky='w', padx=5, pady=1)
 
             #b = Tkinter.Button(ff, text="+CC", command=self.Icos2PushCC)
@@ -264,57 +265,57 @@ class ISeg_Dialog ( chimera.baseDialog.ModelessDialog ):
 
 
         row += 1
-        ff = Tkinter.Frame(f)
+        ff = tkinter.Frame(f)
         ff.grid(column=0, row=row, sticky='w')
         if 1 :
-            l = Tkinter.Label(ff, text = "  6. Radii separated by commas:", anchor = 'w')
+            l = tkinter.Label(ff, text = "  6. Radii separated by commas:", anchor = 'w')
             l.grid(column=0, row=0, sticky='ew', padx=5, pady=1)
 
 
         row += 1
-        ff = Tkinter.Frame(f)
+        ff = tkinter.Frame(f)
         ff.grid(column=0, row=row, sticky='w')
         if 1 :
-            l = Tkinter.Label(ff, text = "   ", anchor = 'w')
+            l = tkinter.Label(ff, text = "   ", anchor = 'w')
             l.grid(column=0, row=0, sticky='ew', padx=5, pady=1)
 
-            self.segRads = Tkinter.StringVar(ff)
+            self.segRads = tkinter.StringVar(ff)
 
             if 0 or dev_menus :
                 self.segRads.set ( "" )
 
-            e = Tkinter.Entry(ff, width=40, textvariable=self.segRads)
+            e = tkinter.Entry(ff, width=40, textvariable=self.segRads)
             e.grid(column=1, row=0, sticky='w', padx=5, pady=1)
 
 
         row += 1
-        ff = Tkinter.Frame(f)
+        ff = tkinter.Frame(f)
         ff.grid(column=0, row=row, sticky='w')
         if 1 :
-            l = Tkinter.Label(ff, text = "   ", anchor = 'w')
+            l = tkinter.Label(ff, text = "   ", anchor = 'w')
             l.grid(column=0, row=0, sticky='ew', padx=5, pady=1)
 
-            b = Tkinter.Button(ff, text="Mask Map", command=self.Icos2Map0)
+            b = tkinter.Button(ff, text="Mask Map", command=self.Icos2Map0)
             b.grid (column=1, row=0, sticky='w', padx=5, pady=1)
 
-            b = Tkinter.Button(ff, text="Group Regions", command=self.Segment2)
+            b = tkinter.Button(ff, text="Group Regions", command=self.Segment2)
             b.grid (column=2, row=0, sticky='ew', padx=5, pady=1)
 
 
         row += 1
-        dummyFrame = Tkinter.Frame(parent, relief='groove', borderwidth=1)
-        Tkinter.Frame(dummyFrame).pack()
+        dummyFrame = tkinter.Frame(parent, relief='groove', borderwidth=1)
+        tkinter.Frame(dummyFrame).pack()
         dummyFrame.grid(row=row,column=0,columnspan=7, pady=7, sticky='we')
 
 
         row = row + 1
-        self.msg = Tkinter.Label(parent, width = 60, anchor = 'w', justify = 'left', fg="red")
+        self.msg = tkinter.Label(parent, width = 60, anchor = 'w', justify = 'left', fg="red")
         self.msg.grid(column=0, row=row, sticky='ew', padx=5, pady=1)
         row += 1
 
 
     def umsg ( self, txt ) :
-        print txt
+        print(txt)
         self.status ( txt )
 
     def status ( self, txt ) :
@@ -342,15 +343,15 @@ class ISeg_Dialog ( chimera.baseDialog.ModelessDialog ):
             return
 
 
-        if len(imod.surfacePieces) <> 1 :
+        if len(imod.surfacePieces) != 1 :
             self.umsg ( "Please set 'Subdivision factor' to 1" )
             return
 
 
-        print len(imod.surfacePieces[0].geometry[1]), " tris"
-        print len(imod.surfacePieces[0].geometry[0]), " verts"
+        print(len(imod.surfacePieces[0].geometry[1]), " tris")
+        print(len(imod.surfacePieces[0].geometry[0]), " verts")
 
-        if len(imod.surfacePieces[0].geometry[1]) <> 20 :
+        if len(imod.surfacePieces[0].geometry[1]) != 20 :
             self.umsg ( "Please set 'Subdivision factor' to 1" )
             return
 
@@ -363,7 +364,7 @@ class ISeg_Dialog ( chimera.baseDialog.ModelessDialog ):
         surf_mod.name = "Icosahedron Faces"
         chimera.openModels.add([surf_mod], sameAs = imod)
 
-        import axes; reload (axes)
+        from . import axes; importlib.reload (axes)
 
         self.icos_vecs = []
         from numpy import arccos, pi
@@ -546,7 +547,7 @@ class ISeg_Dialog ( chimera.baseDialog.ModelessDialog ):
 
     def Icos2PushN ( self, smod, N, springf ) :
 
-        print " - pushing %s, %d surfaces - %d iter " % ( smod.name, len(smod.surfacePieces), N )
+        print(" - pushing %s, %d surfaces - %d iter " % ( smod.name, len(smod.surfacePieces), N ))
 
         for spi, sp in enumerate ( smod.surfacePieces ) :
             verts, tris = sp.geometry
@@ -573,12 +574,12 @@ class ISeg_Dialog ( chimera.baseDialog.ModelessDialog ):
                     fv = 0.1 * sp.N
 
                     if 1 :
-		                for vj, eqd in nmap.iteritems() :
-		                    v = verts[vj] - verts[vi]
-		                    vl = numpy.sqrt ( numpy.sum(v*v) )
-		                    vn = v / vl
-		                    ff = vl - eqd
-		                    fv = fv + springf * ff * vn              # SGIV: 0.2
+                        for vj, eqd in nmap.items() :
+                            v = verts[vj] - verts[vi]
+                            vl = numpy.sqrt ( numpy.sum(v*v) )
+                            vn = v / vl
+                            ff = vl - eqd
+                            fv = fv + springf * ff * vn              # SGIV: 0.2
 
                     verts[vi] = verts[vi] + f * fv
 
@@ -591,7 +592,7 @@ class ISeg_Dialog ( chimera.baseDialog.ModelessDialog ):
 
     def Icos2PushNSym ( self, smod, N ) :
 
-        print " - pushing - sym - %s, %d surfaces - %d iter " % ( smod.name, len(smod.surfacePieces), N )
+        print(" - pushing - sym - %s, %d surfaces - %d iter " % ( smod.name, len(smod.surfacePieces), N ))
 
         sp = smod.sps[0]
         verts,tris = sp.geometry
@@ -616,12 +617,12 @@ class ISeg_Dialog ( chimera.baseDialog.ModelessDialog ):
                 fv = 0.1 * sp.N
 
                 if 1 :
-	                for vj, eqd in nmap.iteritems() :
-	                    v = verts[vj] - verts[vi]
-	                    vl = numpy.sqrt ( numpy.sum(v*v) )
-	                    vn = v / vl
-	                    ff = vl - eqd
-	                    fv = fv + 0.2 * ff * vn              # SGIV: 0.2
+                    for vj, eqd in nmap.items() :
+                        v = verts[vj] - verts[vi]
+                        vl = numpy.sqrt ( numpy.sum(v*v) )
+                        vn = v / vl
+                        ff = vl - eqd
+                        fv = fv + 0.2 * ff * vn              # SGIV: 0.2
 
                 verts[vi] = verts[vi] + f * fv
 
@@ -679,7 +680,7 @@ class ISeg_Dialog ( chimera.baseDialog.ModelessDialog ):
             self.status ( "Did not find Icos2" )
             return
 
-        print "Push/CC..."
+        print("Push/CC...")
 
         self.Icos2PushN ( smod, 100 )
 
@@ -736,7 +737,7 @@ class ISeg_Dialog ( chimera.baseDialog.ModelessDialog ):
 
         p1 = smod.icosVerts [ smod.icosTris[0][0] ]
         rS = numpy.sqrt ( numpy.sum(p1*p1) )
-        print " - rad before: ", rS
+        print(" - rad before: ", rS)
 
         ccs = []
         #fp = open ( fname, "w" )
@@ -1021,7 +1022,7 @@ class ISeg_Dialog ( chimera.baseDialog.ModelessDialog ):
 
 
         sepRs = self.segRads.get().split(",")
-        print "Sep rads:", sepRs
+        print("Sep rads:", sepRs)
 
         if len(sepRs) != 2 :
             self.umsg ( "Enter two radii separated by a comma" )
@@ -1073,11 +1074,11 @@ class ISeg_Dialog ( chimera.baseDialog.ModelessDialog ):
 
         self.updateIcos2 ( start_rad )
         minr, maxr = self.MinRad2 ( smod ), self.MaxRad2 ( smod )
-        print " - start rad %d -- min rad %.1f, max rad %.1f" % ( start_rad, numpy.sqrt(minr), numpy.sqrt(maxr))
+        print(" - start rad %d -- min rad %.1f, max rad %.1f" % ( start_rad, numpy.sqrt(minr), numpy.sqrt(maxr)))
 
         done = time.time()
         elapsed = done - start
-        print "Took: ", elapsed
+        print("Took: ", elapsed)
 
 
         pt = numpy.array ( [[0,0,0]], numpy.float32 )
@@ -1089,23 +1090,23 @@ class ISeg_Dialog ( chimera.baseDialog.ModelessDialog ):
             for j in range ( dmap.data.size[1] ) :
                 p[1] = j * f1[1][1] + f1[1][3]
                 for k in range ( dmap.data.size[2] ) :
-                	#p[2] = k * f1[2][2] + f1[2][3]
+                        #p[2] = k * f1[2][2] + f1[2][3]
                     #pt = numpy.array ( [[i,j,k]], numpy.float32 )
                     #p[0],p[1],p[2] = ti,tj,tk
                     #transform_vertices ( pt, f1 )
-					p[2] = k * f1[2][2] + f1[2][3]
-					ptr = numpy.sum ( p*p )
-					if ptr < minr :
-					    pass
-					elif ptr > maxr :
-					    nm[k,j,i] = mm[k,j,i]
-					elif self.PIsOutside ( pt[0], smod ) :
-					    nm[k,j,i] = mm[k,j,i]
+                    p[2] = k * f1[2][2] + f1[2][3]
+                    ptr = numpy.sum ( p*p )
+                    if ptr < minr :
+                        pass
+                    elif ptr > maxr :
+                        nm[k,j,i] = mm[k,j,i]
+                    elif self.PIsOutside ( pt[0], smod ) :
+                        nm[k,j,i] = mm[k,j,i]
 
 
         self.updateIcos2 ( end_rad )
         minr, maxr = self.MinRad2 ( smod ), self.MaxRad2 ( smod )
-        print " - end rad %d -- min rad %.1f, max rad %.1f" % (start_rad, numpy.sqrt(minr), numpy.sqrt(maxr))
+        print(" - end rad %d -- min rad %.1f, max rad %.1f" % (start_rad, numpy.sqrt(minr), numpy.sqrt(maxr)))
 
         for i in range ( dmap.data.size[0] ) :
             self.status ( "Masking %s, inside radius %d, %d/%d" % (dmap.name, end_rad, i+1, dmap.data.size[0]) )
@@ -1116,14 +1117,14 @@ class ISeg_Dialog ( chimera.baseDialog.ModelessDialog ):
                     #pt = numpy.array ( [[i,j,k]], numpy.float32 )
                     #p[0],p[1],p[2] = ti,tj,tk
                     #transform_vertices ( pt, f1 )
-					p[2] = k * f1[2][2] + f1[2][3]
-					ptr = numpy.sum ( p*p )
-					if ptr < minr :
-					    continue
-					elif ptr > maxr :
-					    nm[k,j,i] = 0.0
-					elif self.PIsOutside ( p, smod ) :
-					    nm[k,j,i] = 0.0
+                    p[2] = k * f1[2][2] + f1[2][3]
+                    ptr = numpy.sum ( p*p )
+                    if ptr < minr :
+                        continue
+                    elif ptr > maxr :
+                        nm[k,j,i] = 0.0
+                    elif self.PIsOutside ( p, smod ) :
+                        nm[k,j,i] = 0.0
 
 
 
@@ -1135,7 +1136,7 @@ class ISeg_Dialog ( chimera.baseDialog.ModelessDialog ):
 
         done = time.time()
         elapsed = done - start
-        print "Took: ", elapsed
+        print("Took: ", elapsed)
 
 
     def Icos2Map0 ( self ) :
@@ -1157,7 +1158,7 @@ class ISeg_Dialog ( chimera.baseDialog.ModelessDialog ):
         minr, maxr = 300, 400
         pt = numpy.array ( [[0,0,0]], numpy.float32 )
         p = pt[0]
-        
+
         im, jm, km = dmap.data.size[0]/2, dmap.data.size[1]/2, dmap.data.size[2]/2
 
         for i in range ( dmap.data.size[0] ) :
@@ -1179,9 +1180,9 @@ class ISeg_Dialog ( chimera.baseDialog.ModelessDialog ):
         except : nvg = VolumeViewer.volume.volume_from_grid_data ( ndata )
         nvg.name = dmap.name + "__%.0f--to--%.0f" % (minr, maxr)
 
-        
-        
-        
+
+
+
 
     def Segment2 ( self ) :
 
@@ -1195,7 +1196,7 @@ class ISeg_Dialog ( chimera.baseDialog.ModelessDialog ):
             self.umsg ( "Please select a Current Segmentation in the Segment Map dialog" )
             return
 
-        print "Seg has %d regions" % (len(smod.regions))
+        print("Seg has %d regions" % (len(smod.regions)))
 
 
         imod2 = self.GetMod ( "Icosahedron Faces" )
@@ -1214,7 +1215,7 @@ class ISeg_Dialog ( chimera.baseDialog.ModelessDialog ):
 
             sepRs.append ( radv )
 
-        print "Sep rads:", sepRs
+        print("Sep rads:", sepRs)
         regs = list(smod.regions)
         sregs = []
 
@@ -1258,9 +1259,9 @@ class ISeg_Dialog ( chimera.baseDialog.ModelessDialog ):
 
             sregs.append ( gregs )
             regs = left_regs
-            print " - rad %.1f - %d regions inside" % ( srad, len(gregs) )
+            print(" - rad %.1f - %d regions inside" % ( srad, len(gregs) ))
 
-        print " - remaining %d regions" % ( len(regs) )
+        print(" - remaining %d regions" % ( len(regs) ))
         sregs.append ( regs )
 
 
@@ -1278,7 +1279,7 @@ class ISeg_Dialog ( chimera.baseDialog.ModelessDialog ):
 
         self.umsg ( "Done, created %d groups based on radial distances" % len(sregs)  )
 
-        from segment_dialog import volume_segmentation_dialog
+        from .segment_dialog import volume_segmentation_dialog
         volume_segmentation_dialog().ReportRegionCount ( smod )
 
 
@@ -1302,10 +1303,10 @@ class ISeg_Dialog ( chimera.baseDialog.ModelessDialog ):
 
         mol = mlist[0]
 
-        print "Doing line CC in " + dmap.name + " using mol " + mol.name
+        print("Doing line CC in " + dmap.name + " using mol " + mol.name)
 
-        print dmap.openState.xform
-        print mol.openState.xform
+        print(dmap.openState.xform)
+        print(mol.openState.xform)
 
 
         rccs = []
@@ -1326,7 +1327,7 @@ class ISeg_Dialog ( chimera.baseDialog.ModelessDialog ):
                 rmap = makeMap ( "#%d:%d@CA" % (mol.id, res.id.position)
                                  , resolution, 1, (.5, .5, .5, 1.0), "resmap" )
                 rmap_pos = cat.coord().toVector()
-                print " - sphere map pos ", rmap_pos
+                print(" - sphere map pos ", rmap_pos)
                 #rpoints, rpoint_weights = fit_points (rmap)
                 rpoints, rpoint_weights = fit_points_old (rmap)
                 xf = rmap.openState.xform
@@ -1352,7 +1353,7 @@ class ISeg_Dialog ( chimera.baseDialog.ModelessDialog ):
                 olap, corr = overlap_and_correlation ( rpoint_weights, rmap_values )
 
                 if radi % 100 == 0 :
-                    print " %d - overlap: %f, cross-correlation: %f" % (radi, olap, corr)
+                    print(" %d - overlap: %f, cross-correlation: %f" % (radi, olap, corr))
 
                 rccs.append ( [radi,corr] )
             #print corr,
@@ -1402,8 +1403,8 @@ def fit_points_old ( fmap, threshold = None ) :
     #mass = numpy.sum(weights, dtype=numpy.single)
     #fmap.rotation_center = numpy.dot(weights,points) / mass
 
-    if 1 : print "FitPoints from %s with threshold %.4f, %d nonzero" % (
-        fmap.name, threshold, len(nz) )
+    if 1 : print("FitPoints from %s with threshold %.4f, %d nonzero" % (
+        fmap.name, threshold, len(nz) ))
 
     return points, weights
 

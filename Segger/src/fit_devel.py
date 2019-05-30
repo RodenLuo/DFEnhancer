@@ -1,9 +1,9 @@
-from Segger import dev_menus, timing
+from . import dev_menus, timing
 
 class Fit_Devel:
 
     def add_devel_menus(self, fmenu):
-    
+
         if dev_menus:
             fmenu.add_separator()
             for lbl, var, val in (
@@ -52,7 +52,7 @@ class Fit_Devel:
                              ):
                 fmenu.add_command(label = lbl, command = cmd)
 
-        
+
 
     def ExportFitScores ( self ) :
 
@@ -60,7 +60,7 @@ class Fit_Devel:
         if num == 0 :
             umsg ( "No fits to export" )
             return
-        
+
         ccs = []
         for i in range ( num ) :
             le = self.fit_listbox.get ( i )
@@ -95,23 +95,23 @@ class Fit_Devel:
 
         mol = self.list_fits[0][0].mols[0]
         mmap = self.list_fits[0][1]
-        
+
         if hasattr(mol, 'openedAs'):
             import os.path
             idir, ifile = os.path.split(mol.openedAs[0])
             base, suf = os.path.splitext(ifile)
             map_base, map_suf = os.path.splitext( mmap.name )
             ifile = base + "_fits_in_%s" % map_base
-                       
+
         from OpenSave import SaveModeless
         SaveModeless ( title = 'Save Fit Scores',
                        filters = [('TXT', '*.txt', '.txt')],
-                       initialdir = idir, initialfile = ifile, command = save )            
+                       initialdir = idir, initialfile = ifile, command = save )
 
     def SimChainMaps ( self ) :
 
         dmap = segmentation_map()
-        if dmap == None : print "No segmentation map"; return
+        if dmap == None : print("No segmentation map"); return
 
         map_name = os.path.splitext ( dmap.name ) [0]
         path = os.path.dirname ( dmap.data.path ) + os.path.sep
@@ -121,24 +121,24 @@ class Fit_Devel:
         self.SetResolution()
 
         try : res = float ( self.simRes.get() )
-        except : print "Invalid number entered for resolution:", self.simRes.get(); return
+        except : print("Invalid number entered for resolution:", self.simRes.get()); return
 
         try : grid = float ( self.simGridSp.get() )
         except : grid = res / 3.0
 
         mol = getMod ( self.struc.get() )
-        if mol == None : print "Structure", self.struc.get(), "not found"; return
+        if mol == None : print("Structure", self.struc.get(), "not found"); return
 
         try : mol.chain_colors
         except : mol.chain_colors = RandColorChains ( mol )
-            
-        print "Simulating %d chain maps for %s, res %.3f, grid %.3f" % (
-            len(mol.chain_colors.keys()), mol.name, res, grid)
+
+        print("Simulating %d chain maps for %s, res %.3f, grid %.3f" % (
+            len(list(mol.chain_colors.keys())), mol.name, res, grid))
 
 
         dmap.fitted_mols = []
 
-        for cid, clr in mol.chain_colors.iteritems() :
+        for cid, clr in mol.chain_colors.items() :
 
             cname = map_name + "_" + cid + ".mrc"
 
@@ -147,29 +147,29 @@ class Fit_Devel:
             if mv == None :
 
                 sel_str = "#%d:.%s" % (mol.id, cid)
-                print "%s [%s]" % (cname, sel_str),
+                print("%s [%s]" % (cname, sel_str), end=' ')
 
                 cmd = "molmap %s %f sigmaFactor 0.187 gridSpacing %f replace false" % ( sel_str, res, grid )
-                print " -", cmd
+                print(" -", cmd)
                 chimera.runCommand ( cmd )
 
                 for mod in chimera.openModels.list() :
                     ts = mod.name.split()
                     if len(ts) > 1 and mod.name.find("map") >=0 and mod.name.find("res") >=0 :
-                        print " - saving to:", path + cname
+                        print(" - saving to:", path + cname)
                         mod.write_file ( path + cname, "mrc" )
                         chimera.openModels.close ( mod )
                         break
 
                 mv = VolumeViewer.open_volume_file ( path + cname )[0]
-                print " - loaded:", mv.name
+                print(" - loaded:", mv.name)
 
             class FakeMolecule:
                 def __init__(self, fmap):
                     self.fmap = fmap
 
             fmol = FakeMolecule ( mv )
-            
+
             dmap.fitted_mols.append ( fmol )
 
             #gv.imap = imap
@@ -177,13 +177,13 @@ class Fit_Devel:
             #gv.chain_id = cid
             #dmap.chain_maps.append ( gv )
 
-        
+
 
 
     def StrucChainMaps ( self ) :
 
         dmap = segmentation_map()
-        if dmap == None : print "No segmentation map"; return
+        if dmap == None : print("No segmentation map"); return
 
         mols = []
         if self.UseAllMods.get() :
@@ -197,19 +197,19 @@ class Fit_Devel:
                 m.chain_colors = RandColorChains ( m )
 
         if len(mols) == 0 :
-            print "No structures"; return
+            print("No structures"); return
 
         self.MakeChainMaps ( mols, dmap )
-        print "- %d chain or unit maps" % len ( dmap.chain_maps )
+        print("- %d chain or unit maps" % len ( dmap.chain_maps ))
 
 
 
     def StrucShowChainMaps ( self ) :
 
         dmap = segmentation_map()
-        if dmap == None : print "No segmentation map"; return
+        if dmap == None : print("No segmentation map"); return
 
-        print "%s - showing %d chain maps" % (dmap.name, len(dmap.chain_maps))
+        print("%s - showing %d chain maps" % (dmap.name, len(dmap.chain_maps)))
         for chm in dmap.chain_maps :
             chm.display = True
 
@@ -217,9 +217,9 @@ class Fit_Devel:
     def StrucHideChainMaps ( self ) :
 
         dmap = segmentation_map()
-        if dmap == None : print "No segmentation map"; return
+        if dmap == None : print("No segmentation map"); return
 
-        print "%s - hiding %d chain maps" % (dmap.name, len(dmap.chain_maps))
+        print("%s - hiding %d chain maps" % (dmap.name, len(dmap.chain_maps)))
         for chm in dmap.chain_maps :
             chm.display = False
 
@@ -227,9 +227,9 @@ class Fit_Devel:
     def StrucCloseChainMaps ( self ) :
 
         dmap = segmentation_map()
-        if dmap == None : print "No segmentation map"; return
-        
-        print "%s - closing %d chain maps" % (dmap.name, len(dmap.chain_maps))
+        if dmap == None : print("No segmentation map"); return
+
+        print("%s - closing %d chain maps" % (dmap.name, len(dmap.chain_maps)))
 
         for chm in dmap.chain_maps :
             chm.close()
@@ -241,15 +241,15 @@ class Fit_Devel:
     def StrucDelChainMaps ( self ) :
 
         dmap = segmentation_map()
-        if dmap == None : print "No segmentation map"; return
+        if dmap == None : print("No segmentation map"); return
 
         path = os.path.dirname ( dmap.data.path ) + os.path.sep
 
-        print "%s - deleting %d chain maps" % (dmap.name, len(dmap.chain_maps))
+        print("%s - deleting %d chain maps" % (dmap.name, len(dmap.chain_maps)))
         for chm in dmap.chain_maps :
             try : os.remove ( path + chm.name )
-            except : print " - could not delete", chm.name
-            chm.close()            
+            except : print(" - could not delete", chm.name)
+            chm.close()
 
         dmap.chain_maps = []
 
@@ -257,14 +257,14 @@ class Fit_Devel:
     def StrucChMapsOvRegs ( self ) :
 
         dmap = segmentation_map()
-        if dmap == None : print "No segmentation map"; return
+        if dmap == None : print("No segmentation map"); return
         path = os.path.dirname ( dmap.data.path ) + os.path.sep
 
-        print "%s - %d chain maps" % (dmap.name, len(dmap.chain_maps))
+        print("%s - %d chain maps" % (dmap.name, len(dmap.chain_maps)))
 
         smod = self.CurrentSegmentation()
         if smod == None : return
-        if len(smod.regions) == 0 : print " - no regions!"; return
+        if len(smod.regions) == 0 : print(" - no regions!"); return
 
 
         for mn in ["2AW4.pdb", "2AVY.pdb"] :
@@ -288,7 +288,7 @@ class Fit_Devel:
             if chm.chain_id == "B" and chm.mol.name == "2AW4.pdb" : continue
 
             chm.display = True
-            print "%s - %s" % (chm.name, chm.chain_id)
+            print("%s - %s" % (chm.name, chm.chain_id))
 
             oregs = self.ShowOverlappingRegions ()
             chimera.viewer.viewAll ()
@@ -297,7 +297,7 @@ class Fit_Devel:
             chm.display = False
 
             if len(oregs) == 0 :
-                print " - NO overlapping regions"
+                print(" - NO overlapping regions")
                 continue
 
 
@@ -322,36 +322,36 @@ class Fit_Devel:
             self.rotaSearch.set ( 0 )
             self.FitMapToSelRGroup ()
             rmsd = RMSD ( ress, fmol )
-            print "\nRMSD: %f " % rmsd,
+            print("\nRMSD: %f " % rmsd, end=' ')
             tag = chm.chain_id
 
             msk_dmap = None
-            
+
             if rmsd > 15.0 :
                 msk_dmap = self.MaskMapWRegions ()
                 self.FitMapToSelRGroup ()
                 rmsd = RMSD ( ress, fmol )
-                print "\nRMSD: %f " % rmsd,
+                print("\nRMSD: %f " % rmsd, end=' ')
                 tag = chm.chain_id + "m"
 
             if rmsd > 15.0 :
                 self.rotaSearch.set ( 1 )
                 self.FitMapToSelRGroup ()
                 rmsd = RMSD ( ress, fmol )
-                print "\nRMSD: %f " % rmsd,
+                print("\nRMSD: %f " % rmsd, end=' ')
                 tag = chm.chain_id + "r"
 
             if rmsd > 15.0 :
                 self.rotaSearch.set ( 1 )
                 self.FitMapToSelRGroup ( msk_dmap )
                 rmsd = RMSD ( ress, fmol )
-                print "\nRMSD: %f " % rmsd,
+                print("\nRMSD: %f " % rmsd, end=' ')
                 tag = chm.chain_id + "rm"
 
 
             if rmsd < 15.0 :
 
-                print "_________ YES _______\n"
+                print("_________ YES _______\n")
 
                 self.SelRegsOptimizeShapeScore ()
                 oregs = self.ShowOverlappingRegions ()
@@ -360,7 +360,7 @@ class Fit_Devel:
 
                 path = os.path.dirname ( dmap.data.path ) + os.path.sep
                 log_file = path + "ribo_fits_sms_corr.txt"
-                print "SMS log to", log_file
+                print("SMS log to", log_file)
                 fpl = open ( log_file, 'a' )
                 fpl.write ( "%s %f " % (tag, sim_dmap.sms) )
                 fpl.close ()
@@ -372,7 +372,7 @@ class Fit_Devel:
 
             else :
 
-                print "_________ NO _______\n"
+                print("_________ NO _______\n")
 
 
             #sim_dmap.close()
@@ -383,17 +383,17 @@ class Fit_Devel:
             self.StrucCloseChainMap()
 
             #return
-            
+
 
     def StrucCloseChainMap ( self ) :
 
         chm = self.MoleculeMap(create = False)
         if chm :
-            print " --- closing ", chm.mol.name
+            print(" --- closing ", chm.mol.name)
             chimera.openModels.close ( [chm.mol] )
-            print " --- closing ", chm.chmap.name
+            print(" --- closing ", chm.chmap.name)
             chm.chmap.close()
-            print " --- closing ", chm.name
+            print(" --- closing ", chm.name)
             chm.close()
 
 
@@ -417,7 +417,7 @@ class Fit_Devel:
             r.max_ov_cid = None
             r.max_ov_bioM = None
 
-        smod.p_ctrs = []            
+        smod.p_ctrs = []
 
         while self.NextBioMt () :
 
@@ -432,14 +432,14 @@ class Fit_Devel:
             if 1 :
                 atoms = chimera.selection.OSLSelection( "#%d:.%s" % (fmap.mol.id, 'P') ).atoms()
                 points = _multiscale.get_atom_coordinates ( atoms, transformed = False )
-                print " - %d points" % len(points)
+                print(" - %d points" % len(points))
                 com = numpy.sum(points, axis=0) / len(points)
                 comv = numpy.array ( [ [ com[0], com[1], com[2] ] ], numpy.float32 )
                 _contour.affine_transform_vertices( comv, Matrix.xform_matrix(fmap.openState.xform) )
                 _contour.affine_transform_vertices( comv, Matrix.xform_matrix(smod.openState.xform.inverse()) )
 
-                print com[0], com[1], com[2]
-                print comv[0][0], comv[0][1], comv[0][2]
+                print(com[0], com[1], com[2])
+                print(comv[0][0], comv[0][1], comv[0][2])
 
                 C = chimera.Vector ( comv[0][0], comv[0][1], comv[0][2] )
                 smod.p_ctrs.append ( C )
@@ -471,7 +471,7 @@ class Fit_Devel:
         if fmap == None : return False
 
         dmap = segmentation_map()
-        if dmap == None : print "No segmentation map"; return
+        if dmap == None : print("No segmentation map"); return
 
         try : mol = fmap.mol
         except : "no mol"; return False
@@ -479,15 +479,15 @@ class Fit_Devel:
         try : mol.bio_mts
         except : mol.bio_mts = BioMatrices ( mol )
 
-        print " - %d bio matrices" % len(mol.bio_mts)
+        print(" - %d bio matrices" % len(mol.bio_mts))
 
         try : mol.bio_mt_at = mol.bio_mt_at + 1
         except : mol.bio_mt_at = 1
 
-        print "_______________ at matrix %d _______________" % mol.bio_mt_at
+        print("_______________ at matrix %d _______________" % mol.bio_mt_at)
 
         try : amat = mol.bio_mts[ mol.bio_mt_at ]
-        except : print " - no such matrix"; return False
+        except : print(" - no such matrix"); return False
 
         fmap.M = fmap.M0 * am_2_M(amat)
 
@@ -513,23 +513,23 @@ class Fit_Devel:
     def ShowChRegs ( self ) :
 
         mol = getMod ( self.struc.get() )
-        if mol == None : print self.struc.get(), "not open"; return
-        print "Structure:", mol.name
+        if mol == None : print(self.struc.get(), "not open"); return
+        print("Structure:", mol.name)
 
         try : chain_colors = mol.chain_colors
         except :  chain_colors = RandColorChains ( mol )
         mol.chain_colors = chain_colors
 
         dmap = segmentation_map()
-        if dmap == None : print "No segmentation map"; return
+        if dmap == None : print("No segmentation map"); return
 
         try : mol.chain_maps
         except : self.MakeChainMaps ( mol, dmap )
-        print "- %d chain maps" % len ( mol.chain_maps )
+        print("- %d chain maps" % len ( mol.chain_maps ))
 
         smod = self.CurrentSegmentation()
         if smod == None : return
-        print "- %d regions" % len ( smod.surfacePieces )
+        print("- %d regions" % len ( smod.surfacePieces ))
 
 
         # for sp in smod.surfacePieces : sp.display = False
@@ -548,7 +548,7 @@ class Fit_Devel:
             ov_regs = ov_regs + regs
 
             if len(regs) == 0 :
-                print " - no regions found";
+                print(" - no regions found");
                 return
 
             # rgroups[chmap.chain_id] = regs
@@ -569,7 +569,7 @@ class Fit_Devel:
                 max_ov = 0.0
                 max_ov_chm = None
                 for chm in mol.chain_maps :
-                    imap = self.MapIndexesInMap ( dmap, chm ) 
+                    imap = self.MapIndexesInMap ( dmap, chm )
                     ipoints = r.points()
                     noverlap = 0
                     for i,j,k in ipoints :
@@ -591,7 +591,7 @@ class Fit_Devel:
     def ExtractProteins ( self ) :
 
         dmap = segmentation_map()
-        if dmap == None : print "No segmentation map"; return
+        if dmap == None : print("No segmentation map"); return
 
         path = os.path.dirname ( dmap.data.path ) + os.path.sep
 
@@ -604,32 +604,32 @@ class Fit_Devel:
 
         mname = os.path.splitext ( fmol.name )[0]
 
-        print "%s - %d chains" % (fmol.name, len(fmol.ch_colors.keys()))
+        print("%s - %d chains" % (fmol.name, len(list(fmol.ch_colors.keys()))))
 
-        for cid, clr in fmol.ch_colors.iteritems () :
+        for cid, clr in fmol.ch_colors.items () :
 
-            print cid,
+            print(cid, end=' ')
             cmol = copyMolChain ( None, fmol, cid, cid, None, clr.rgba() )
             cmol.name = "%s_%s.pdb" % (mname, cid)
 
-            print " - %d atoms" % len(cmol.atoms)
+            print(" - %d atoms" % len(cmol.atoms))
 
             if len(cmol.atoms) > 0 :
-                print " - writing", path + cmol.name
+                print(" - writing", path + cmol.name)
                 chimera.PDBio().writePDBfile ( [cmol], path + cmol.name )
 
 
-        print ""
+        print("")
 
     def ZeroDMap_with_FMap ( self ) :
-        
+
         dmap = segmentation_map()
-        if dmap == None : print "No segmentation map"; return
+        if dmap == None : print("No segmentation map"); return
 
         fmap = self.MoleculeMap()
-        if fmap == None : print 'Choose a molecule'; return
+        if fmap == None : print('Choose a molecule'); return
 
-        print "Taking %s away from %s" % ( fmap.name, dmap.name )
+        print("Taking %s away from %s" % ( fmap.name, dmap.name ))
         rname = dmap.name + '_-_' + fmap.name
 
         mmc = getMod ( rname )
@@ -637,9 +637,9 @@ class Fit_Devel:
         if mmc == None :
             mmc = dmap.writable_copy ()
             mmc.name = rname
-            print " - cloned", dmap.name
+            print(" - cloned", dmap.name)
         else :
-            print " - found", mmc.name
+            print(" - found", mmc.name)
 
         self.ZeroOverlappingRegion ( mmc, fmap )
 
@@ -659,7 +659,7 @@ class Fit_Devel:
         # the copy is needed! otherwise the _contour.afine_transform does not work for some reason
         points = numpy.transpose ( nzs ).astype(numpy.float32)
 
-        print " - %s - %d points above %.3f" % ( mask_map.name, len(points), thr )
+        print(" - %s - %d points above %.3f" % ( mask_map.name, len(points), thr ))
 
         # transform to index reference frame of ref_map
         f1 = mask_map.data.ijk_to_xyz_transform
@@ -692,12 +692,12 @@ class Fit_Devel:
     def TakeDMap_with_FMap ( self ) :
 
         dmap = segmentation_map()
-        if dmap == None : print "No segmentation map"; return
+        if dmap == None : print("No segmentation map"); return
 
         fmap = self.MoleculeMap()
-        if fmap == None : print 'Choose a molecule'; return
+        if fmap == None : print('Choose a molecule'); return
 
-        print "Taking densities from %s with %s" % ( dmap.name, fmap.name )
+        print("Taking densities from %s with %s" % ( dmap.name, fmap.name ))
         rname = fmap.name + '_-_' + dmap.name
 
         #mmc = fmap.writable_copy ( require_copy = True )
@@ -718,7 +718,7 @@ class Fit_Devel:
         df_mat = df_mat * f_mask
 
         df_data = VolumeData.Array_Grid_Data ( df_mat, fmap.data.origin, fmap.data.step, fmap.data.cell_angles )
-        
+
         try : df_v = VolumeViewer.volume.add_data_set ( df_data, None )
         except : df_v = VolumeViewer.volume.volume_from_grid_data ( df_data )
 
@@ -730,23 +730,23 @@ class Fit_Devel:
     def NextFit ( self ) :
 
         dmap = segmentation_map()
-        if dmap == None : print "No segmentation map"; return
+        if dmap == None : print("No segmentation map"); return
 
         self.fit_at = self.fit_at + 1
         sms, o = self.fits[self.fit_at]
 
-        print "Fit %d, %s, corr %.3f, sms %.3f, regions" % (self.fit_at, o.mname, o.cor, o.sms),
+        print("Fit %d, %s, corr %.3f, sms %.3f, regions" % (self.fit_at, o.mname, o.cor, o.sms), end=' ')
 
         smod = self.CurrentSegmentation()
         if smod == None : return
 
         for r in smod.surfacePieces : r.display = False
-        for r in o.regs : r.display = True; print r.rid,
+        for r in o.regs : r.display = True; print(r.rid, end=' ')
 
-        print ""
+        print("")
 
         fmol = getMod ( o.mname )
-        if fmol == None : print "Fitted mol %s not open" % o.mname; return
+        if fmol == None : print("Fitted mol %s not open" % o.mname); return
 
         fmap = None
         for m in chimera.openModels.list() :
@@ -762,9 +762,9 @@ class Fit_Devel:
         self.struc.set ( fmap.mols[0].name )
 
         if fmap == None :
-            print "Fitted map corresponding to %s not open" % o.mname; return
+            print("Fitted map corresponding to %s not open" % o.mname); return
 
-        print "Found fitted map", fmap.name                
+        print("Found fitted map", fmap.name)
 
         fmap.M = o.M
         tXO, tXR = xf_2_M ( dmap.openState.xform )
@@ -777,9 +777,9 @@ class Fit_Devel:
     def BestFits0 ( self ) :
 
         dmap = segmentation_map()
-        if dmap == None : print "No segmentation map"; return
+        if dmap == None : print("No segmentation map"); return
         path = os.path.dirname ( dmap.data.path ) + os.path.sep
-        print " - path:", path
+        print(" - path:", path)
 
         smod = self.CurrentSegmentation()
         if smod == None : return
@@ -794,33 +794,33 @@ class Fit_Devel:
 
             sms, o = sms_o
 
-            print "%d - %s - corr %.3f, sm_corr %.3f, regions, dv %.3f" % (
-                i+1, o.mname, o.cor, o.sms, o.dv),
+            print("%d - %s - corr %.3f, sm_corr %.3f, regions, dv %.3f" % (
+                i+1, o.mname, o.cor, o.sms, o.dv), end=' ')
 
             bRegionsClaimed = False
             for r in o.regs :
-                print r.rid,
-                if regs_claimed.has_key ( r.rid ) :
+                print(r.rid, end=' ')
+                if r.rid in regs_claimed :
                     bRegionsClaimed = True
-                    print "*",
+                    print("*", end=' ')
                 else :
                     r.display = False
                     regs_claimed[r.rid] = True
 
-            print ""
+            print("")
 
             if bRegionsClaimed :
-                print " - one or more regions claimed"
+                print(" - one or more regions claimed")
                 break
 
             nsp = smod.join_regions ( o.regs )
             self.nRegions.set ( len(smod.surfacePieces) )
 
             fmol = getMod ( o.mname )
-            if fmol == None : print " - fitted mol %s not open" % o.mname; return
+            if fmol == None : print(" - fitted mol %s not open" % o.mname); return
 
             fmap = fitMap ( o.mname )
-            if fmap == None : print " - fitted map not open"
+            if fmap == None : print(" - fitted map not open")
 
             fmap.M = o.M
             tXO, tXR = xf_2_M ( dmap.openState.xform )
@@ -840,9 +840,9 @@ class Fit_Devel:
 
     def AlignToSel ( self ) :
 
-        if len(self.struc.get()) == 0 : print "Please select a structure first"; return
+        if len(self.struc.get()) == 0 : print("Please select a structure first"); return
         m = getMod ( self.struc.get() )
-        if m == None : print self.struc.get(), "not open"; return
+        if m == None : print(self.struc.get(), "not open"); return
 
         m_cid = None
         to_cid = None
@@ -855,22 +855,22 @@ class Fit_Devel:
 
             if m_cid == None and sel_at.molecule == m :
                 m_cid = cid
-                print "Found selected atom in chain %s in %s" % (cid, m.name)
+                print("Found selected atom in chain %s in %s" % (cid, m.name))
             elif m_to == None and sel_at.molecule != m :
                 m_to = sel_at.molecule
                 to_cid = cid
-                print "Found selected atom in chain %s in %s" % (cid, m_to.name)
+                print("Found selected atom in chain %s in %s" % (cid, m_to.name))
 
         if m_cid == None or m_to == None or to_cid == None :
-            print "Please select at least two atoms in the corresponding structures to align"
+            print("Please select at least two atoms in the corresponding structures to align")
             return
-        
-        print "Aligning %s chain %s to %s chain %s" % (m.name, m_cid, m_to.name, to_cid)
+
+        print("Aligning %s chain %s to %s chain %s" % (m.name, m_cid, m_to.name, to_cid))
 
         m_seq = m.sequences ( asDict=True ) [m_cid]
         to_seq = m_to.sequences ( asDict=True ) [to_cid]
 
-        print " -- %d residues -- %d residues" % ( len(m_seq.residues), len(to_seq.residues) )
+        print(" -- %d residues -- %d residues" % ( len(m_seq.residues), len(to_seq.residues) ))
 
         m_ats, to_ats = AlignChains ( m_seq, to_seq )
         xf, rmsd = chimera.match.matchAtoms ( to_ats, m_ats )
@@ -881,7 +881,7 @@ class Fit_Devel:
         sums = numpy.sum ( numpy.sum ( vss, axis=1 ) )
         armsd = numpy.sqrt ( sums / float ( len(m_points) ) )
 
-        print " - %d aligned - RMSD: %.4f, RMSD as placed: %.4f" % ( len(m_ats), rmsd, armsd )
+        print(" - %d aligned - RMSD: %.4f, RMSD as placed: %.4f" % ( len(m_ats), rmsd, armsd ))
 
         mxf = m_to.openState.xform
         mxf.multiply ( xf )
@@ -895,13 +895,13 @@ class Fit_Devel:
             if om_mol == m : fmap = om; break
 
         if fmap == None :
-            print " - no map found for struc"
+            print(" - no map found for struc")
             return
 
         dmap = segmentation_map()
-        if dmap == None : print "No segmentation map"; return
+        if dmap == None : print("No segmentation map"); return
 
-        print ""
+        print("")
         umsg ( "Fitting %s and %s into %s" % ( fmap.name, m.name, dmap.name ) )
 
         fxf = m.openState.xform
@@ -926,23 +926,23 @@ class Fit_Devel:
     def FitRMSD ( self ) :
 
         dmap = segmentation_map()
-        if dmap == None : print "No segmentation map"; return
+        if dmap == None : print("No segmentation map"); return
 
-        print "Map: %s" % dmap.name
-        try : print " - %d fitted molecules" % len(dmap.fitted_mols)
-        except : print " - no fitted molecules found"; return
+        print("Map: %s" % dmap.name)
+        try : print(" - %d fitted molecules" % len(dmap.fitted_mols))
+        except : print(" - no fitted molecules found"); return
 
 
-        if len(self.struc.get()) == 0 : print "Please select a structure first"; return
+        if len(self.struc.get()) == 0 : print("Please select a structure first"); return
         m = getMod ( self.struc.get() )
-        if m == None : print self.struc.get(), "not open"; return
+        if m == None : print(self.struc.get(), "not open"); return
 
         # try : m.ch_colors
         # except : m.ch_colors = RandColorChains ( m )
         # print "%s - %d chains -" % ( m.name, len(m.ch_colors) ), m.ch_colors.keys()
 
-        print " - aligning %s (%d chains) to %d fit mols" % (
-            m.name, len(m.sequences()), len(dmap.fitted_mols) )
+        print(" - aligning %s (%d chains) to %d fit mols" % (
+            m.name, len(m.sequences()), len(dmap.fitted_mols) ))
 
 
         mseqs = m.sequences()
@@ -957,7 +957,7 @@ class Fit_Devel:
             min_m_atoms = None
             min_f_atoms = None
 
-            print "Chain %s - %d residues" % ( m_seq.chain, len(m_seq.residues) )
+            print("Chain %s - %d residues" % ( m_seq.chain, len(m_seq.residues) ))
 
             for fmi, fm in enumerate ( dmap.fitted_mols ) :
 
@@ -965,8 +965,8 @@ class Fit_Devel:
                 except : pass
 
                 f_seq = fm.sequences()[0]
-                print " - %d/%d %s, %d residues" % (
-                    fmi+1, len(dmap.fitted_mols), dmap.fitted_mols[fmi].name, len(f_seq.residues) ),
+                print(" - %d/%d %s, %d residues" % (
+                    fmi+1, len(dmap.fitted_mols), dmap.fitted_mols[fmi].name, len(f_seq.residues) ), end=' ')
 
                 m_ats, f_ats = AlignChains ( m_seq, f_seq )
                 xf, rmsd = chimera.match.matchAtoms ( m_ats, f_ats )
@@ -976,8 +976,8 @@ class Fit_Devel:
                 sums = numpy.sum ( numpy.sum ( vss, axis=1 ) )
                 armsd = numpy.sqrt ( sums / float ( len(m_points) ) )
 
-                print " %d aligned - RMSD: %.4f, RMSD as placed: %.4f" % (
-                    len(m_ats), rmsd, armsd )
+                print(" %d aligned - RMSD: %.4f, RMSD as placed: %.4f" % (
+                    len(m_ats), rmsd, armsd ))
 
                 if armsd < min_rmsd :
                     min_rmsd = armsd
@@ -986,22 +986,22 @@ class Fit_Devel:
                     min_f_atoms = f_ats
 
             if min_fmi != None :
-                print " - min is %d - %s" % (min_fmi, dmap.fitted_mols[min_fmi].name)
+                print(" - min is %d - %s" % (min_fmi, dmap.fitted_mols[min_fmi].name))
                 fmol_msi[min_fmi] = msi
                 m_atoms = m_atoms + min_m_atoms
                 f_atoms = f_atoms + min_f_atoms
             else :
-                print " - no maps left to align!"
+                print(" - no maps left to align!")
 
-        print ""
-        
+        print("")
+
         # m.chain_fitmol = {}
-        for fmi, msi in fmol_msi.iteritems () :
-            print "Chain %s -- fit mol %s" % ( mseqs[msi].chain, dmap.fitted_mols[fmi].name )
+        for fmi, msi in fmol_msi.items () :
+            print("Chain %s -- fit mol %s" % ( mseqs[msi].chain, dmap.fitted_mols[fmi].name ))
             # m.chain_fitmol [ mseqs[msi].chain ] = dmap.fitted_mols[fmi]
 
 
-        print ""
+        print("")
 
         xf, rmsd = chimera.match.matchAtoms ( m_atoms, f_atoms )
         m_points = _multiscale.get_atom_coordinates ( m_atoms, transformed = True )
@@ -1010,8 +1010,8 @@ class Fit_Devel:
         sums = numpy.sum ( numpy.sum ( vss, axis=1 ) )
         armsd = numpy.sqrt ( sums / float ( len(m_points) ) )
 
-        print "Total %d residues aligned - RMSD: %.4f, RMSD as placed: %.4f" % (
-            len(m_atoms), rmsd, armsd )
+        print("Total %d residues aligned - RMSD: %.4f, RMSD as placed: %.4f" % (
+            len(m_atoms), rmsd, armsd ))
 
 
 
@@ -1019,23 +1019,23 @@ class Fit_Devel:
     def FitRMSDNoRef ( self ) :
 
         dmap = segmentation_map()
-        if dmap == None : print "No segmentation map"; return
+        if dmap == None : print("No segmentation map"); return
 
-        print "Map: %s" % dmap.name
-        try : print " - %d fitted molecules" % len(dmap.fitted_mols)
-        except : print " - no fitted molecules found"; return
+        print("Map: %s" % dmap.name)
+        try : print(" - %d fitted molecules" % len(dmap.fitted_mols))
+        except : print(" - no fitted molecules found"); return
 
 
-        if len(self.struc.get()) == 0 : print "Please select a structure first"; return
+        if len(self.struc.get()) == 0 : print("Please select a structure first"); return
         m = getMod ( self.struc.get() )
-        if m == None : print self.struc.get(), "not open"; return
+        if m == None : print(self.struc.get(), "not open"); return
 
         # try : m.ch_colors
         # except : m.ch_colors = RandColorChains ( m )
         # print "%s - %d chains -" % ( m.name, len(m.ch_colors) ), m.ch_colors.keys()
 
-        print " - aligning %s (%d chains) to %d fit mols" % (
-            m.name, len(m.sequences()), len(dmap.fitted_mols) )
+        print(" - aligning %s (%d chains) to %d fit mols" % (
+            m.name, len(m.sequences()), len(dmap.fitted_mols) ))
 
 
         mseqs = m.sequences()
@@ -1061,7 +1061,7 @@ class Fit_Devel:
                 for i in range ( len(cmap) ) :
                     cid = cmap[i]
                     # print cid, fmols[i].name,
-                    for ca_posi, cat in ch_cas[cid].iteritems() :
+                    for ca_posi, cat in ch_cas[cid].items() :
                         mats.append ( cat.coord() )
                         fats.append ( f_ch_cas[i][ca_posi].coord() )
 
@@ -1074,16 +1074,16 @@ class Fit_Devel:
                     min_cid = chains[i2]
                     min_txf = txf
 
-            print "- pos %d is %s, rmsd %f" % (i1, min_cid, min_rmsd),
+            print("- pos %d is %s, rmsd %f" % (i1, min_cid, min_rmsd), end=' ')
             cmap[i1] = min_cid
-            print cmap
+            print(cmap)
             # return
 
             for at in m.atoms :
                 c = min_txf.apply ( at.coord() )
                 at.setCoord ( c )
 
-        print cmap
+        print(cmap)
 
 
 
@@ -1091,9 +1091,9 @@ class Fit_Devel:
     def PlaceBestFits ( self ) :
 
         dmap = segmentation_map()
-        if dmap == None : print "No segmentation map"; return
+        if dmap == None : print("No segmentation map"); return
         path = os.path.dirname ( dmap.data.path ) + os.path.sep
-        print " - path:", path
+        print(" - path:", path)
 
         map_name = os.path.splitext ( dmap.name )[0]
 
@@ -1112,14 +1112,14 @@ class Fit_Devel:
 
             sms, o = sms_o
 
-            print "%d/%d - %s - corr %.3f, sm_corr %.3f, dv %.3f" % (
-                i+1, len(self.fits), o.mname, o.cor, o.sms, o.dv)
+            print("%d/%d - %s - corr %.3f, sm_corr %.3f, dv %.3f" % (
+                i+1, len(self.fits), o.mname, o.cor, o.sms, o.dv))
 
             fmol = getMod ( o.mname )
-            if fmol == None : print " - fitted mol %s not found" % o.mname; return
+            if fmol == None : print(" - fitted mol %s not found" % o.mname); return
 
             fmap = fitMap ( o.mname )
-            if fmap == None : print " - fitted map for %s not found" % fmol.name; return
+            if fmap == None : print(" - fitted map for %s not found" % fmol.name); return
 
             fmap.M = o.M
             tXO, tXR = xf_2_M ( dmap.openState.xform )
@@ -1129,12 +1129,12 @@ class Fit_Devel:
             for mol in fmap.mols : mol.openState.xform = xfA
 
             self.SaveFit ( fmap )
-            
+
 
             if 0 :
                 oregs = self.OverlappingRegions ( dmap, fmap, smod )
                 sms = self.ShapeMatchScore ( fmap.mol.atoms, dmap, oregs )
-                print " ---- sms %.4f --- " % (sms)
+                print(" ---- sms %.4f --- " % (sms))
                 scores.append ( sms )
 
             # if joinRegs : smod.join_regions ( regs )
@@ -1142,10 +1142,10 @@ class Fit_Devel:
 
         if 0 :
             log_f = path + map_name + "_fits_acc.txt"
-            print "\nAccuracies log file:", log_f
+            print("\nAccuracies log file:", log_f)
 
             try : fp = open ( log_f, "a" )
-            except : print " - could not open log file"; return
+            except : print(" - could not open log file"); return
             fp.write ( "%f %f %f " % ( min(scores), max(scores), sum(scores)/float(len(scores))) )
             for sm_score in scores : fp.write ( "%f " % sm_score )
             fp.write ( "\n" )
@@ -1157,13 +1157,13 @@ class Fit_Devel:
         smod = self.CurrentSegmentation()
 
         dmap = segmentation_map()
-        if dmap == None : print "No segmentation map"; return
+        if dmap == None : print("No segmentation map"); return
 
         dmap_name = os.path.splitext ( dmap.name )[0]
         path = os.path.dirname ( dmap.data.path ) + os.path.sep
 
         log_f = path + "%s_fits.txt" % (dmap_name)
-        print "Log file: %s" % log_f
+        print("Log file: %s" % log_f)
 
 
         class ClusterEntry :
@@ -1194,7 +1194,7 @@ class Fit_Devel:
 
         try : fp = open ( log_f, 'r' )
         except :
-            print "Could not open log file:", log_f
+            print("Could not open log file:", log_f)
             return
 
         self.clusters = []
@@ -1260,7 +1260,7 @@ class Fit_Devel:
 
         fp.close()
 
-        print "____________ %d alignments, %d clusters ____________" % ( li, len(self.clusters) )
+        print("____________ %d alignments, %d clusters ____________" % ( li, len(self.clusters) ))
 
         self.fits = []
 
@@ -1274,21 +1274,21 @@ class Fit_Devel:
         self.fits.reverse()
 
         log_f = path + "%s_fits_sorted.txt" % (dmap_name)
-        print "Writing fits to: %s" % log_f
+        print("Writing fits to: %s" % log_f)
         lfp = open ( log_f, "w" )
 
         for i, sms_o in enumerate ( self.fits ) :
             sms, o = sms_o
 
             if i < 20 :
-                print "%d - %s - correlation %.3f, dv %.3f" % (
-                    i+1, o.mname, o.cor, o.dv),
+                print("%d - %s - correlation %.3f, dv %.3f" % (
+                    i+1, o.mname, o.cor, o.dv), end=' ')
                 #for r in o.regs : print r.rid,
-                print ""
+                print("")
 
             lfp.write ( "%d - structure: %s, cross-correlation: %.3f, dVolume: %.3f\n" % (i+1, o.mname, o.cor, o.dv) )
 
-        print ""
+        print("")
 
         lfp.close ()
 
@@ -1301,9 +1301,9 @@ class Fit_Devel:
         if fmap == None : return
 
         vol = _surface.enclosed_volume ( *(fmap.surfacePieces[0].geometry) )[0]
-        print fmap.name + " volume: %f" % vol
+        print(fmap.name + " volume: %f" % vol)
 
-        print " - surface levels",fmap.surface_levels
+        print(" - surface levels",fmap.surface_levels)
         thr = fmap.surface_levels[0]
 
         mm = fmap.data.matrix()
@@ -1311,28 +1311,28 @@ class Fit_Devel:
         nz = numpy.shape ( numpy.nonzero ( mmab ) )[1]
         vvol = fmap.data.step[0] * fmap.data.step[1] * fmap.data.step[2]
         tvol = vvol * float(nz)
-        print "%s - %d above %f, volume %.3f" % (fmap.name, nz, thr, tvol)
+        print("%s - %d above %f, volume %.3f" % (fmap.name, nz, thr, tvol))
 
         vvol = fmap.data.step[0] * fmap.data.step[1] * fmap.data.step[2]
 
         tvol = vvol * float(nz)
-        print " - %d above %f, volume %.3f" % (nz, thr, tvol)
+        print(" - %d above %f, volume %.3f" % (nz, thr, tvol))
 
 
 
     def MaskedMap ( self ) :
 
         dmap = segmentation_map()
-        if dmap == None : print "Please select a density map"; return
+        if dmap == None : print("Please select a density map"); return
 
         fmap = self.MoleculeMap()
-        if fmap == None : print 'Choose a molecule'; return
+        if fmap == None : print('Choose a molecule'); return
 
 
         imap, f_COM, f_bRad = self.MapMaskedMapIndexes ( dmap, fmap, True )
 
 
-        
+
 
     def MapMaskedMapIndexes ( self, ref_map, mask_map, bAddMap=False ) :
 
@@ -1349,7 +1349,7 @@ class Fit_Devel:
 
         thr = mask_map.surface_levels[0]
         mm = numpy.where ( mm > thr, mm, numpy.zeros_like(mm) )
-        print "- in masked map, %d above %.3f" % ( numpy.shape(mm.nonzero())[1], thr )
+        print("- in masked map, %d above %.3f" % ( numpy.shape(mm.nonzero())[1], thr ))
 
         if bAddMap :
             mmd = VolumeData.Array_Grid_Data (mm, ref_map.data.origin, ref_map.data.step, ref_map.data.cell_angles, ref_map.data.rotation)
@@ -1358,7 +1358,7 @@ class Fit_Devel:
             #gv.openState.xform = dmap.openState.xform
 
         nze = numpy.nonzero ( mm )
-        print " - index values of %d non-zero points" % len ( nze[0] )
+        print(" - index values of %d non-zero points" % len ( nze[0] ))
 
         imap = {}
         for ei, i in enumerate ( nze[0] ) :
@@ -1404,7 +1404,7 @@ class Fit_Devel:
 
         nz = numpy.shape ( numpy.nonzero ( sg.matrix() ) )[1]
         if len(points) != nz :
-            print "mask failed [%d points, %d masked]" % ( len(points), nz )
+            print("mask failed [%d points, %d masked]" % ( len(points), nz ))
             return 0.0
 
         r_mask_matrix = sg.matrix()
@@ -1435,7 +1435,7 @@ class Fit_Devel:
 
         o, shape_cor = overlap_and_correlation ( f_weights, m_weights )
 
-        print " * shape map-masked correlation %.3f" % shape_cor
+        print(" * shape map-masked correlation %.3f" % shape_cor)
 
         return shape_cor
 
@@ -1456,7 +1456,7 @@ class Fit_Devel:
                 thr_at = fmap.surface_levels[0]
                 sms = new_sms
                 #print "- %.2f/%.4f" % (thr_at, sms),
-                
+
                 ro = VolumeViewer.volume.Rendering_Options()
                 fmap.update_surface ( False, ro )
                 for sp in fmap.surfacePieces :
@@ -1475,7 +1475,7 @@ class Fit_Devel:
             if new_sms > sms :
                 thr_at = fmap.surface_levels[0]
                 sms = new_sms
-                print "- %.2f/%.4f" % (thr_at, sms),
+                print("- %.2f/%.4f" % (thr_at, sms), end=' ')
 
                 ro = VolumeViewer.volume.Rendering_Options()
                 fmap.update_surface ( False, ro )
@@ -1499,7 +1499,7 @@ class Fit_Devel:
         thr_at = dmap.surface_levels[0]
         sms = self.ShapeMatchScore ( fmap, dmap, regs )
 
-        print ", optz regs - %.2f/%.4f" % (thr_at, sms),
+        print(", optz regs - %.2f/%.4f" % (thr_at, sms), end=' ')
 
         while 1 :
             dmap.surface_levels[0] = thr_at + .01
@@ -1507,7 +1507,7 @@ class Fit_Devel:
             if new_sms > sms :
                 thr_at = dmap.surface_levels[0]
                 sms = new_sms
-                print "- %.2f/%.4f" % (thr_at, sms),
+                print("- %.2f/%.4f" % (thr_at, sms), end=' ')
             else :
                 break
 
@@ -1523,7 +1523,7 @@ class Fit_Devel:
             if new_sms > sms :
                 thr_at = dmap.surface_levels[0]
                 sms = new_sms
-                print "- %.2f/%.4f" % (thr_at, sms),
+                print("- %.2f/%.4f" % (thr_at, sms), end=' ')
             else :
                 break
 
@@ -1534,28 +1534,28 @@ class Fit_Devel:
                 if len(v) == 8 and len(t) == 12 : sp.display = False
 
         dmap.surface_levels[0] = thr_at
-        print "| %.2f/%.4f" % (thr_at, sms)
+        print("| %.2f/%.4f" % (thr_at, sms))
         return sms
 
 
     def StrucBestShapeScore ( self ) :
 
         dmap = segmentation_map()
-        if dmap == None : print "No segmentation map"; return
+        if dmap == None : print("No segmentation map"); return
 
         fmap = self.MoleculeMap()
         if fmap == None : return
 
         # first find out which region overlaps the most
-        
+
         smod = self.CurrentSegmentation()
         if smod == None : return
-        if len(smod.regions) == 0 : print " - no regions!"; return
+        if len(smod.regions) == 0 : print(" - no regions!"); return
 
         max_overlap_num = 0
         max_overlap_reg = None
 
-        print "Region with highest overlap: ",
+        print("Region with highest overlap: ", end=' ')
 
         for region in smod.regions :
 
@@ -1569,13 +1569,13 @@ class Fit_Devel:
                 max_overlap_reg = region
 
         if max_overlap_num == 0 :
-            print "no region overlaps"
+            print("no region overlaps")
             return None
 
         else :
-            print "%d (%d)" % (max_overlap_reg.rid, max_overlap_num)    
+            print("%d (%d)" % (max_overlap_reg.rid, max_overlap_num))
             sms = self.ShapeMatchScore ( fmap.fmol.atoms, dmap, [max_overlap_reg] )
-            print " - shape match : %f" % sms
+            print(" - shape match : %f" % sms)
 
         return sms
 
@@ -1586,7 +1586,7 @@ class Fit_Devel:
 
 
         dmap = segmentation_map()
-        if dmap == None : print "No segmentation map"; return
+        if dmap == None : print("No segmentation map"); return
 
         smod = self.CurrentSegmentation()
         if smod is None : return
@@ -1601,10 +1601,10 @@ class Fit_Devel:
             umsg ( "Please select a region" );
             return
 
-        print "Shape score of %s to %d regions:" % (fmap.name, len(regs)),
+        print("Shape score of %s to %d regions:" % (fmap.name, len(regs)), end=' ')
         for r in regs :
-            print r.rid,
-        print ""
+            print(r.rid, end=' ')
+        print("")
 
         fmap.sms = self.ShapeMatchScore ( fmap.fmol.atoms, dmap, regs )
         ov, fmap.fit_score = map_overlap_and_correlation ( fmap, dmap, True )
@@ -1616,7 +1616,7 @@ class Fit_Devel:
 
         path = os.path.dirname ( dmap.data.path ) + os.path.sep
         log_file = path + smod.name + "_fits_sms.txt"
-        print "SMS to", log_file
+        print("SMS to", log_file)
 
         fpl = open ( log_file, 'a' )
         fpl.write ( "%s %f %f\n" % (fmap.name, fmap.sms, fmap.fit_score) )
@@ -1629,7 +1629,7 @@ class Fit_Devel:
 
 
         dmap = segmentation_map()
-        if dmap == None : print "No segmentation map"; return
+        if dmap == None : print("No segmentation map"); return
 
         smod = self.CurrentSegmentation()
         if smod is None : return
@@ -1644,10 +1644,10 @@ class Fit_Devel:
             umsg ( "Please select a region" );
             return
 
-        print "Shape score of %s to %d regions:" % (fmap.name, len(regs)),
+        print("Shape score of %s to %d regions:" % (fmap.name, len(regs)), end=' ')
         for r in regs :
-            print r.rid,
-        print ""
+            print(r.rid, end=' ')
+        print("")
 
         # fmap.sms = self.ShapeMatchScore ( fmap, dmap, regs )
         # self.ShapeMaskedCorr ( fmap, dmap, regs )
@@ -1660,18 +1660,18 @@ class Fit_Devel:
     def SegAccuracy ( self, tag = "_acc", joinRegs=True ) :
 
         dmap = segmentation_map()
-        if dmap == None : print "No segmentation map"; return
+        if dmap == None : print("No segmentation map"); return
         map_name = os.path.splitext ( dmap.name )[0]
 
         smod = self.CurrentSegmentation()
         if smod == None : return
 
         cmaps = dmap.chain_maps
-        print "\nMapping %d regions -> %d chain maps..." % (
-            len(smod.regions), len(cmaps) )
+        print("\nMapping %d regions -> %d chain maps..." % (
+            len(smod.regions), len(cmaps) ))
 
-        if len(smod.regions) == 0 : print " - no regions!"; return
-        if len(cmaps) == 0 : print " - no chain maps!"; return
+        if len(smod.regions) == 0 : print(" - no regions!"); return
+        if len(cmaps) == 0 : print(" - no chain maps!"); return
 
         ch_regs = {}
 
@@ -1694,7 +1694,7 @@ class Fit_Devel:
                     max_overlap_cmap = cm
 
             if max_overlap_num == 0 :
-                print "%d of %d - %d %d points - " % (reg_i+1, len(smod.regions), region.rid, len(ipoints) )
+                print("%d of %d - %d %d points - " % (reg_i+1, len(smod.regions), region.rid, len(ipoints) ))
 
             else :
                 # print "%d/%d - %d %d points - max overlap %d with %s" % (reg_i+1, len(smod.regions), region.rid, len(ipoints), max_overlap_num, max_overlap_cmap.name )
@@ -1708,22 +1708,22 @@ class Fit_Devel:
         scores = []
 
         for cm in cmaps :
-            print cm.name,
-            if ch_regs.has_key ( cm ) == False :
-                print " - no regions!"
+            print(cm.name, end=' ')
+            if ( cm in ch_regs) == False :
+                print(" - no regions!")
                 continue
 
             regs = ch_regs[cm]
-            print " - %d regions" % len(regs),
+            print(" - %d regions" % len(regs), end=' ')
 
             sms = self.ShapeMatchScore ( cm.atoms, dmap, regs )
-            print " - sms %.4f" % (sms)
+            print(" - sms %.4f" % (sms))
 
             if sms > 0.3 and len(regs) < 10 :
                 scores.append ( sms )
 
             else :
-                print "sms low: %.3f, nregs: %d" % (sms, len(regs))
+                print("sms low: %.3f, nregs: %d" % (sms, len(regs)))
 
             if joinRegs : smod.join_regions ( regs )
 
@@ -1732,14 +1732,14 @@ class Fit_Devel:
         path = os.path.dirname ( dmap.data.path ) + os.path.sep
 
         log_f = path + map_name + tag + ".txt"
-        print "\nAccuracies log file:", log_f
+        print("\nAccuracies log file:", log_f)
 
         res = NumberFromName ( dmap.name, 'r' );
         if res == None : res = 0.0
-        print " - resolution: %.0f, %d scores" % ( res, len(scores) )
+        print(" - resolution: %.0f, %d scores" % ( res, len(scores) ))
 
         try : fp = open ( log_f, "a" )
-        except : print " - could not open log file"; return
+        except : print(" - could not open log file"); return
         fp.write ( "%f %f %f %f " % ( res, min(scores), max(scores), sum(scores)/float(len(scores))) )
         for sm_score in scores : fp.write ( "%f " % sm_score )
         fp.write ( "\n" )
@@ -1753,7 +1753,7 @@ class Fit_Devel:
         #print "atoms from", fmol.name
         #points = get_atom_coordinates ( fmol.atoms, transformed = True )
 
-        print "shape match of %d atoms" % len(atoms)
+        print("shape match of %d atoms" % len(atoms))
         points = get_atom_coordinates ( atoms, transformed = True )
 
         tfd = xform_matrix( dmap.openState.xform.inverse() )
@@ -1778,24 +1778,24 @@ class Fit_Devel:
         regs_f = sg_fmap.matrix()
         regs_mz = numpy.where ( regs_m > dmap.surface_levels[0], numpy.ones_like(regs_m), numpy.zeros_like(regs_m) )
         regs_fz = numpy.where ( regs_f > dmap.surface_levels[0], numpy.ones_like(regs_f), numpy.zeros_like(regs_f) )
-        
+
         nz = numpy.shape ( numpy.nonzero ( regs_mz ) )[1]
-        print "regions %d nonzero, %d points" % (nz, len(points))
+        print("regions %d nonzero, %d points" % (nz, len(points)))
 
         if nz != len(points) :
-            print "mask failed - %d of %d pts nonzero" % (nz, len(points))
+            print("mask failed - %d of %d pts nonzero" % (nz, len(points)))
 
         nz = numpy.shape ( numpy.nonzero ( regs_fz ) )[1]
-        print "struct. %d nonzero, %d atoms" % (nz, len(atoms))
+        print("struct. %d nonzero, %d atoms" % (nz, len(atoms)))
 
         nz_int =  numpy.shape ( (regs_mz * regs_fz).nonzero () )[1]
         nz_uni =  numpy.shape ( (regs_mz + regs_fz).nonzero () )[1]
 
         sm_score = float(nz_int) / float (nz_uni)
 
-        if 1 or bPrint : print " - intersection %d, union %d" % (nz_int, nz_uni)
+        if 1 or bPrint : print(" - intersection %d, union %d" % (nz_int, nz_uni))
 
-        print " * shape match score %.3f" % sm_score
+        print(" * shape match score %.3f" % sm_score)
 
         return sm_score
 
@@ -1804,21 +1804,21 @@ class Fit_Devel:
 
     def MakeChainMaps ( self, mols, dmap ) :
 
-        try : print len(dmap.chain_maps), "chain maps so far"
+        try : print(len(dmap.chain_maps), "chain maps so far")
         except : dmap.chain_maps = []
 
 
         if len(mols) == 1 :
 
             mol = mols[0]
-            print "Making chain maps for %s in %s:" % (mol.name, dmap.name)
+            print("Making chain maps for %s in %s:" % (mol.name, dmap.name))
 
-            for cid, clr in mol.chain_colors.iteritems() :
+            for cid, clr in mol.chain_colors.items() :
 
                 map_name = os.path.splitext ( dmap.name )[0]
                 cname = map_name + "_" + cid
                 sel_str = "#%d:.%s" % (mol.id, cid)
-                print "%s [%s]" % (cname, sel_str),
+                print("%s [%s]" % (cname, sel_str), end=' ')
 
                 gv = self.SelStrucMap ( sel_str, mol, dmap, clr.rgba() )
                 if gv :
@@ -1832,7 +1832,7 @@ class Fit_Devel:
 
         else :
 
-            print "Making struc maps for %d strucs" % len(mols)
+            print("Making struc maps for %d strucs" % len(mols))
 
             for mol in mols :
 
@@ -1840,8 +1840,8 @@ class Fit_Devel:
                 mol_name = os.path.splitext ( mol.name )[0]
                 cname = map_name + "_" + mol_name
                 sel_str = "#%d" % (mol.id)
-                print "%s [%s]" % (cname, sel_str),
-                
+                print("%s [%s]" % (cname, sel_str), end=' ')
+
                 clr = (rand(), rand(), rand(), 1.0)
                 gv = self.SelStrucMap ( sel_str, mol, dmap, clr )
                 gv.name = cname
@@ -1854,9 +1854,9 @@ class Fit_Devel:
         atoms = chimera.selection.OSLSelection( sel_str ).atoms()
 
         if len(atoms) == 0 :
-            print "- empty"
+            print("- empty")
             return None
-        
+
         points = get_atom_coordinates ( atoms, transformed = True )
         transform_vertices ( points, xform_matrix(dmap.openState.xform.inverse()) )
 
@@ -1877,7 +1877,7 @@ class Fit_Devel:
         min_d = numpy.min ( dvals ) / 2.0
         min_d = dmap.surface_levels[0]
 
-        print " - min d: %.4f," % min_d,
+        print(" - min d: %.4f," % min_d, end=' ')
 
         gv.region = ( gv.region[0], gv.region[1], [1,1,1] )
 
@@ -1900,11 +1900,11 @@ class Fit_Devel:
         cm = gv.data.matrix()
 
         nze = numpy.nonzero ( cm )
-        print "%d NZ \\" % len ( nze[0] ),
+        print("%d NZ \\" % len ( nze[0] ), end=' ')
 
         cmt = numpy.where ( cm > min_d, cm, numpy.zeros_like(cm) )
         nze = numpy.nonzero ( cmt )
-        print " %d NZ" % len ( nze[0] )
+        print(" %d NZ" % len ( nze[0] ))
         gv.d_thr = min_d
 
         gv.imap = {}
@@ -1936,9 +1936,9 @@ class Fit_Devel:
         if fmap == None : return
 
         dmap = segmentation_map()
-        if dmap == None : print "No segmentation map"; return
+        if dmap == None : print("No segmentation map"); return
 
-        print "Fitting %s to %s" % ( fmap.name, dmap.name )
+        print("Fitting %s to %s" % ( fmap.name, dmap.name ))
 
         ov, corr = self.FitMapLocal ( fmap, dmap )
 
@@ -1968,7 +1968,7 @@ class Fit_Devel:
         fmap.fpoint_weights = numpy.compress(ge, fmap.fpoint_weights)
         nz = numpy.nonzero( fmap.fpoint_weights )[0]
 
-        print " - threshold %.4f, %d nonzero" % ( threshold, len(nz) )
+        print(" - threshold %.4f, %d nonzero" % ( threshold, len(nz) ))
 
         if len(nz) < len (fmap.fpoint_weights) :
             fmap.fpoints = numpy.take( fmap.fpoints, nz, axis=0 )
@@ -1988,10 +1988,10 @@ class Fit_Devel:
     def StrucGroupRegions ( self ) :
 
         dmap = segmentation_map()
-        if dmap == None : print "No segmentation map"; return
+        if dmap == None : print("No segmentation map"); return
 
         fmap = self.MoleculeMap()
-        if fmap == None : print 'Choose a molecule'; return
+        if fmap == None : print('Choose a molecule'); return
 
         smod = self.CurrentSegmentation()
         if smod == None : return
@@ -2000,7 +2000,7 @@ class Fit_Devel:
         regs = smod.selected_regions()
 
         if len(regs)==0 :
-            print "\nGrouping all regions"
+            print("\nGrouping all regions")
             tvol = self.MapVolume ( fmap )
             smod.rgroups = self.GroupAllRegions ( smod, tvol )
 
@@ -2008,25 +2008,25 @@ class Fit_Devel:
             tvol = self.MapVolume ( fmap )
             bRad = -1.0 # self.MapBoundingRad ( fmap )
 
-            print "\nMaking groups around region %d - target vol %.3f, b-Rad %.3f" % (regs[0].rid, tvol, bRad)
+            print("\nMaking groups around region %d - target vol %.3f, b-Rad %.3f" % (regs[0].rid, tvol, bRad))
             smod.rgroups, maxDepthReached = self.GroupAroundReg ( smod, regs[0], tvol, bRad )
-            print " - depth reached: %d" % maxDepthReached
+            print(" - depth reached: %d" % maxDepthReached)
 
 
         else :
-            print "Please select no regions (for global groups) or one region (for local groups)"
+            print("Please select no regions (for global groups) or one region (for local groups)")
             return
 
         if len ( smod.rgroups ) == 0 :
-            print "No groups result!"
+            print("No groups result!")
             return
 
         smod.rgroups.sort()
         smod.rgroup_at = 0
         dv, regs = smod.rgroups[smod.rgroup_at]
-        print "Group %d of %d - dv %f, regions:" % (smod.rgroup_at+1, len(smod.rgroups), dv),
-        for r in regs : print r.rid,
-        print ""
+        print("Group %d of %d - dv %f, regions:" % (smod.rgroup_at+1, len(smod.rgroups), dv), end=' ')
+        for r in regs : print(r.rid, end=' ')
+        print("")
 
         for sp in smod.surfacePieces :
             if regs.count ( sp.region ) > 0 : sp.display = True
@@ -2045,9 +2045,9 @@ class Fit_Devel:
 
         dv, regs = smod.rgroups[smod.rgroup_at]
 
-        print "Group %d/%d - dv %f, regions:" % (smod.rgroup_at+1, len(smod.rgroups), dv),
-        for r in regs : print r.rid,
-        print ""
+        print("Group %d/%d - dv %f, regions:" % (smod.rgroup_at+1, len(smod.rgroups), dv), end=' ')
+        for r in regs : print(r.rid, end=' ')
+        print("")
 
         for sp in smod.surfacePieces :
             if regs.count ( sp.region ) > 0 : sp.display = True
@@ -2060,24 +2060,24 @@ class Fit_Devel:
         smod = self.CurrentSegmentation()
         if smod == None : return
 
-        print "\nStructure:",
+        print("\nStructure:", end=' ')
         fmap = self.MoleculeMap()
-        if fmap == None : print 'Choose a molecule'; return
+        if fmap == None : print('Choose a molecule'); return
         tvol = self.MapVolume ( fmap )
 
 
-        regs = smod.selected_regions()        
-        if len(regs)==0 : print "no selected regions found"; return
+        regs = smod.selected_regions()
+        if len(regs)==0 : print("no selected regions found"); return
 
-        print "Finding group for %d selected regions:" % ( len(regs) ),
+        print("Finding group for %d selected regions:" % ( len(regs) ), end=' ')
         regs_vol = 0.0
         for r in regs :
-            print r.rid,
+            print(r.rid, end=' ')
             regs_vol = regs_vol + r.enclosed_volume()
-        print ""
+        print("")
 
         dv = abs ( tvol - regs_vol ) / tvol;
-        print " - total regions volume: %.3f - DV %.5f" % (regs_vol, dv)
+        print(" - total regions volume: %.3f - DV %.5f" % (regs_vol, dv))
 
         points = numpy.concatenate ( [r.map_points()
                                       for r in regs], axis=0 )
@@ -2088,10 +2088,10 @@ class Fit_Devel:
         points = points - comv
         regs_bRad = numpy.sqrt ( numpy.max ( numpy.sum ( numpy.square (points), 1 ) ) )
 
-        print " - COM: %.3f %.3f %.3f, bounding rad %.3f" % ( C[0], C[1], C[2], regs_bRad )
+        print(" - COM: %.3f %.3f %.3f, bounding rad %.3f" % ( C[0], C[1], C[2], regs_bRad ))
 
 
-        print "Searching %d groups" % len(smod.rgroups)
+        print("Searching %d groups" % len(smod.rgroups))
         gi = 0
         for dv, gregs in smod.rgroups :
             gi = gi + 1
@@ -2100,27 +2100,27 @@ class Fit_Devel:
             for r in regs :
                 if gregs.count ( r ) == 0 : allIn = False; break
             if allIn :
-                print " - FOUND! %d - dv %f - regs" % (gi, dv),
-                for r in gregs : print r.rid,
-                print ""
+                print(" - FOUND! %d - dv %f - regs" % (gi, dv), end=' ')
+                for r in gregs : print(r.rid, end=' ')
+                print("")
 
-        print " - done searching"
+        print(" - done searching")
 
 
 
     def FitMapsToRegionsAroundSel ( self ) :
 
-        print "_______________________________________________________________"
+        print("_______________________________________________________________")
 
         dmap = segmentation_map()
-        if dmap == None : print "No segmentation map"; return
+        if dmap == None : print("No segmentation map"); return
 
         smod = self.CurrentSegmentation()
         if smod is None : return
 
 
-        sregs = smod.selected_regions()        
-        if len(sregs) != 1 : print "please selected 1 region"; return
+        sregs = smod.selected_regions()
+        if len(sregs) != 1 : print("please selected 1 region"); return
 
         if timing: t0 = clock()
 
@@ -2137,15 +2137,15 @@ class Fit_Devel:
 
         if timing:
             t1 = clock()
-            print "Time: %.1f sec" % (t1 - t0)
+            print("Time: %.1f sec" % (t1 - t0))
 
 
     def MapBoundingRad ( self, fmap ) :
-        
+
         fmol = fmap.mol
         points = get_atom_coordinates ( fmol.atoms, transformed = False )
 
-        print "%s (%s)\n - COM: %.3f %.3f %.3f, bounding rad %.3f" % ( fmap.name, fmol.name, C[0], C[1], C[2], bRad )
+        print("%s (%s)\n - COM: %.3f %.3f %.3f, bounding rad %.3f" % ( fmap.name, fmol.name, C[0], C[1], C[2], bRad ))
 
         return bRad
 
@@ -2200,7 +2200,7 @@ def BioMatrices ( m ) :
             matrices[mi][ri][2] = float ( s[6] )
             matrices[mi][ri][3] = float ( s[7] )
 
-    return matrices                                       
+    return matrices
 
 
 
@@ -2256,7 +2256,7 @@ def AlignChains ( ref, match ) :
     # print " - aligned %d atoms" % len (refAtoms)
 
     if len ( refAtoms ) < 3 :
-        print "too few atoms to perform 3D alignment"
+        print("too few atoms to perform 3D alignment")
         return None
 
     return refAtoms, matchAtoms
@@ -2269,7 +2269,7 @@ def copyMolChain ( nmol, mol, cid, new_cid, xf, clr ) :
         nmol = chimera.Molecule()
         nmol.name = "complex"
 
-    print "Copying chain %s (%s) to %s" % (cid, mol.name, new_cid)
+    print("Copying chain %s (%s) to %s" % (cid, mol.name, new_cid))
     aMap = dict()
     for res in mol.residues :
         if res.id.chainId == cid :
@@ -2306,7 +2306,7 @@ def copyMolChain ( nmol, mol, cid, new_cid, xf, clr ) :
 
 def TransferChainMap ( a, m ) :
 
-    print " - tr %s" % ( a.name ),
+    print(" - tr %s" % ( a.name ), end=' ')
 
     new_v = m.writable_copy()
     new_v.name = a.name + "_tr"
@@ -2346,7 +2346,7 @@ def TransferChainMap ( a, m ) :
 
     mmN = numpy.where ( mm > a.d_thr, mm, numpy.zeros_like(mm) )
     nze = numpy.nonzero ( mmN )
-    print "%d NZ" % len ( nze[0] )
+    print("%d NZ" % len ( nze[0] ))
 
     gv.imap = {}
     for ei, i in enumerate ( nze[0] ) :
@@ -2389,7 +2389,7 @@ def RandColorChains ( m ) :
 
     ct = {}
     for r in m.residues: ct[r.id.chainId] = 1
-    clist = ct.keys()
+    clist = list(ct.keys())
     clist.sort()
     chains_clrs = {}
     cnames = ""
@@ -2400,7 +2400,7 @@ def RandColorChains ( m ) :
         chains_clrs[cid] = chimera.MaterialColor ( clr[0], clr[1], clr[2], 1.0 )
         cnames = cnames + cid
 
-    print "%s - color ribbon for %d chains -" % ( m.name, len(cnames) ), cnames
+    print("%s - color ribbon for %d chains -" % ( m.name, len(cnames) ), cnames)
 
     # color atoms
     for r in m.residues :
@@ -2413,8 +2413,3 @@ def RandColorChains ( m ) :
             at.color = clr
 
     return chains_clrs
-
-
-
-
-    
