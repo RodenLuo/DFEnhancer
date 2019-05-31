@@ -1,4 +1,3 @@
-import chimera
 import numpy
 
 def AxesMod ( COM=[0,0,0], U=None, Extents=[30,30,30], rad=1.0, f=1.0,

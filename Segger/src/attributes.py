@@ -285,7 +285,7 @@ class Attribute_Dialog(ModelessDialog):
 
     def table_line_selected(self, rsel):
 
-        rsel = [r for r in rsel if not r.segmentation.__destroyed__]
+        rsel = [r for r in rsel if not r.segmentation.deleted]
         regions.select_regions(rsel)
         self.last_selected = set(rsel)
 

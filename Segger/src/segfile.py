@@ -271,7 +271,7 @@ def read_segmentation(path, open = True, task = None):
         fname = os.path.basename(path)
 
         from .regions import Segmentation
-        s = Segmentation(fname, open = open)
+        s = Segmentation(fname, session, open = open)
 
         if 'map_path' in a:
             s.map_path = a.map_path

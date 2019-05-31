@@ -19,27 +19,16 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-import chimera
 import os
 import os.path
-import tkinter
-from CGLtk import Hybrid
-import VolumeData
-import _multiscale
-import MultiScale.surface
-import _surface
 import numpy
-import _contour
-import Matrix
-import VolumeViewer
 from sys import stderr
 from time import clock
 
 from .axes import prAxes
 from . import regions
-from . import graph; importlib.reload(graph)
-from Segger import dev_menus, timing, seggerVersion
-import importlib
+from . import graph
+from . import dev_menus, timing, seggerVersion
 
 #dev_menus = False
 showDevTools = False
@@ -47,7 +36,7 @@ showDevTools = False
 
 
 
-OML = chimera.openModels.list
+#OML = chimera.openModels.list
 
 REG_OPACITY = 0.45
 
@@ -61,14 +50,209 @@ def status ( txt ) :
     msg.configure(text = txt)
     msg.update_idletasks()
 
-
-class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
+from chimerax.core.tools import ToolInstance
+class Volume_Segmentation_Dialog ( ToolInstance ):
 
     title = "Segment Map (Segger v" + seggerVersion + ")"
     name = "segment map"
     buttons = ('Segment', 'Group', 'Ungroup', 'Options', 'Shortcuts', "Close")
     help = 'https://cryoem.slac.stanford.edu/ncmi/resources/software/segger'
+    def __init__(self, session, tool_name):
+        self.cur_seg = None
 
+        ToolInstance.__init__(self, session, tool_name)
+
+        from chimerax.ui import MainToolWindow
+        tw = MainToolWindow(self)
+        self.tool_window = tw
+        parent = tw.ui_area
+
+        from PyQt5.QtWidgets import QVBoxLayout, QHBoxLayout, QFrame, QCheckBox, QLabel, QPushButton, QLineEdit, QSlider
+        from PyQt5.QtCore import Qt
+
+        layout = QVBoxLayout(parent)
+        layout.setContentsMargins(0,0,0,0)
+        layout.setSpacing(0)
+        parent.setLayout(layout)
+
+        # Map menu
+        mf = QFrame(parent)
+        layout.addWidget(mf)
+        mlayout = QHBoxLayout(mf)
+        mlayout.setContentsMargins(0,0,0,0)
+        mlayout.setSpacing(10)
+        
+        sm = QLabel('Segment map', mf)
+        mlayout.addWidget(sm)
+        from chimerax.ui.widgets import ModelMenuButton
+        from chimerax.map import Volume
+        self._map_menu = mm = ModelMenuButton(session, class_filter = Volume)
+        # mm.value_changed.connect(self._map_chosen_cb)
+        mlayout.addWidget(mm)
+        mlayout.addStretch(1)    # Extra space at end
+
+        # Segmentation menu
+        sf = QFrame(parent)
+        layout.addWidget(sf)
+        slayout = QHBoxLayout(sf)
+        slayout.setContentsMargins(0,0,0,0)
+        slayout.setSpacing(10)
+        
+        self._seg_menu = cs = QLabel('Current segmentation', sf)
+        slayout.addWidget(cs)
+        from chimerax.ui.widgets import ModelMenuButton
+        from .regions import Segmentation
+        self._segmentation_menu = sm = ModelMenuButton(session, class_filter = Segmentation)
+        # mm.value_changed.connect(self._map_chosen_cb)
+        slayout.addWidget(sm)
+        self._region_count = rc = QLabel('', sf)
+        slayout.addWidget(rc)
+
+        slayout.addStretch(1)    # Extra space at end
+        
+        '''
+        sf = QFrame(parent)
+        layout.addWidget(sf)
+        
+        slayout = QHBoxLayout(sf)
+        slayout.setContentsMargins(0,0,0,0)
+        slayout.setSpacing(10)
+
+        self._show_eraser = se = QCheckBox('Show map eraser sphere', sf)
+        se.setCheckState(Qt.Checked)
+        se.stateChanged.connect(self._show_eraser_cb)
+        slayout.addWidget(se)
+        from chimerax.ui.widgets import ColorButton
+        self._sphere_color = sc = ColorButton(sf, max_size = (16,16), has_alpha_channel = True)
+        sc.color = self._default_color
+        sc.color_changed.connect(self._change_color_cb)
+        slayout.addWidget(sc)
+        slayout.addStretch(1)    # Extra space at end
+
+        rf = QFrame(parent)
+        layout.addWidget(rf)
+        rlayout = QHBoxLayout(rf)
+        rlayout.setContentsMargins(0,0,0,0)
+        rlayout.setSpacing(4)
+
+        rl = QLabel('Radius', rf)
+        rlayout.addWidget(rl)
+        self._radius_entry = rv = QLineEdit('', rf)
+        rv.setMaximumWidth(40)
+        rv.returnPressed.connect(self._radius_changed_cb)
+        rlayout.addWidget(rv)
+        self._radius_slider = rs = QSlider(Qt.Horizontal, rf)
+        smax = self._max_slider_value
+        rs.setRange(0,smax)
+        rs.valueChanged.connect(self._radius_slider_moved_cb)
+        rlayout.addWidget(rs)
+
+        rv.setText('%.4g' % self._sphere_model.radius)
+        self._radius_changed_cb()
+
+        '''
+
+        options = self._create_options_gui(parent)
+        layout.addWidget(options)
+        
+        bf = QFrame(parent)
+        layout.addWidget(bf)
+        blayout = QHBoxLayout(bf)
+        blayout.setContentsMargins(0,0,0,0)
+        blayout.setSpacing(10)
+
+        sb = QPushButton('Segment', bf)
+        sb.clicked.connect(self._segment)
+        blayout.addWidget(sb)
+
+        gb = QPushButton('Group', bf)
+        gb.clicked.connect(self._group)
+        blayout.addWidget(gb)
+        
+        ugb = QPushButton('Ungroup', bf)
+        ugb.clicked.connect(self._ungroup)
+        blayout.addWidget(ugb)
+
+        blayout.addStretch(1)    # Extra space at end
+
+        self._status_label = sl = QLabel(parent)
+        layout.addWidget(sl)
+        
+        layout.addStretch(1)    # Extra space at end
+
+        tw.manage(placement="side")
+        
+    def _create_options_gui(self, parent):
+        
+        from PyQt5.QtWidgets import QFrame, QVBoxLayout, QLabel
+        f = QFrame(parent)
+
+        layout = QVBoxLayout(f)
+        layout.setContentsMargins(0,0,0,0)
+        layout.setSpacing(0)
+
+        ol = QLabel('<b>Segmenting Options</b>', parent)
+        layout.addWidget(ol)
+
+        self._max_num_regions, self._surface_granularity = \
+            entries_row(f, 'Display at most', 6000, 'regions, granularity', 1, 'voxels')
+
+        self._min_region_size, self._min_contact_size = \
+            entries_row(f, 'Keep regions having at least', 1, 'voxels,', 0, 'contact voxels')
+        
+        self._group_smooth, self._num_steps, self._step_size, self._target_num_regions = \
+            entries_row(f, False, 'Group by smoothing', 4, 'steps of size', 1, ', stop at', 1, 'regions')
+
+        self._group_con, self._num_steps_con, self._target_num_regions_con, self._group_by_con_only_visible = \
+            entries_row(f, True, 'Group by connectivity', 20, 'steps, stop at', 1, 'regions', False, 'only visible')
+
+        radio_buttons(self._group_smooth, self._group_con)
+        
+        return f
+
+        
+    @classmethod
+    def get_singleton(self, session, create=True):
+        from chimerax.core import tools
+        return tools.get_singleton(session, Volume_Segmentation_Dialog, 'Segment Map', create=create)
+
+    def status(self, message):
+        self._status_label.setText(message)
+        self.session.logger.info(message)
+        
+    def _segment(self):
+        self.Segment()
+
+    def _group(self):
+        pass
+
+    def _ungroup(self):
+        pass
+
+    @property
+    def map_name(self):
+        v = self._map_menu.value
+        return v.name if v else ''
+
+    @property
+    def chosen_map(self):
+        v = self._map_menu.value
+        return v
+
+    def _get_chosen_segmentation(self):
+        return self._seg_menu.value
+    def _set_chosen_segmentation(self, seg):
+        self._seg_menu.value = seg
+    chosen_segmentation = property(_get_chosen_segmentation, _set_chosen_segmentation)
+
+    @property
+    def group_mode(self):
+        if self._group_smooth.value:
+            return 'smooth'
+        if self._group_con.value:
+            return 'connected'
+        return None
+    
     def fillInUI(self, parent):
 
         self.group_mouse_mode = None
@@ -201,7 +385,7 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
         from chimera.tkgui import aquaMenuBar
         aquaMenuBar(menubar, parent, row = 0, columnspan=3)
 
-        #umsg ( '')
+        #self.status ( '')
         f = tkinter.Frame(parent)
         f.grid(column=0, row=row, sticky='ew')
         row += 1
@@ -746,14 +930,14 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
         msg.grid(column=0, row=row, sticky='ew')
         self.msg = msg
 
-        umsg ( 'Select an open density map in the field above and press Segment!' )
+        self.status ( 'Select an open density map in the field above and press Segment!' )
         row += 1
 
         vlist = VolumeViewer.volume_list()
         if vlist:
             self.SetMapMenu(vlist[0])
 
-        for m in regions.segmentations() :
+        for m in regions.segmentations(self.session) :
 
             v = m.volume_data()
             if v and m.display :
@@ -1024,7 +1208,7 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
                 smods.append(smod)
 
             if len(smods) == 0:
-                umsg ( "No segmentation was loaded." )
+                self.status ( "No segmentation was loaded." )
                 return
 
             for smod in smods:
@@ -1037,7 +1221,7 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
             if v:
                 self.SetMapMenu(v)
             else :
-                umsg ( "Volume data not found" )
+                self.status ( "Volume data not found" )
             try:
                 self.RegsDispUpdate (task)
             except CancelOperation:
@@ -1048,7 +1232,7 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
 
         for s in smods:
             mname = os.path.basename(getattr(s, 'map_path', 'unknown'))
-            umsg('Opened segmentation %s of map %s, grid size (%d,%d,%d)'
+            self.status('Opened segmentation %s of map %s, grid size (%d,%d,%d)'
                  % ((s.name, mname) + tuple(s.grid_size())))
 
 
@@ -1062,18 +1246,18 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
 
             map = smod.volume_data()
             if map == None :
-                umsg ( "Map not found - please associate a map first" )
+                self.status ( "Map not found - please associate a map first" )
                 return
 
             if hasattr(smod, 'path') and smod.path:
                 from . import segfile
                 segfile.write_segmentation(smod, smod.path)
-                umsg ( "Saved" )
+                self.status ( "Saved" )
 
             else:
                 self.SaveSegmentationAs()
         else :
-            umsg ( "No segmentation selected" )
+            self.status ( "No segmentation selected" )
 
 
 
@@ -1088,16 +1272,16 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
 
         if seg is self.CurrentSegmentation():
             seg.name = os.path.basename(seg.path)
-            self.regions_file.set(seg.name)
+            self.chosen_segmentation.value = seg
 
     def ModelClosed(self, trigger, n, mlist):
 
         # Clear menus that are showing closed models.
-        if self.cur_dmap in mlist:
+        if self.chosen_map in mlist:
             self.SetMapMenu(None)
         if self.cur_seg in mlist:
             self.cur_seg = None
-            self.regions_file.set('')
+            self.chosen_segmentation.value = None
 
     def MapMenu ( self ) :
 
@@ -1110,8 +1294,7 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
 
     def SetMapMenu (self, dmap):
 
-        mname = dmap.name if dmap else ''
-        self.dmap.set(mname)
+        self.chosen_map.value = dmap
         self.cur_dmap = dmap
         #print "Set map menu to ", dmap.name
 
@@ -1123,14 +1306,14 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
 
     def SegmentationMap(self):
 
-        return self.cur_dmap
+        return self.chosen_map
 
     def FillSegmentationMenu ( self ) :
 
         menu = self.mbSegmentationMenu
         menu.delete ( 0, 'end' )      # Clear menu
 
-        open_names = [(m.name, m) for m in regions.segmentations()]
+        open_names = [(m.name, m) for m in regions.segmentations(self.session)]
         if len(open_names ) > 0 :
             menu.add_radiobutton ( label="Open regions files:" )
             menu.add_separator()
@@ -1176,10 +1359,10 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
         if rmod is None:
             mm = self.SegmentationMap()
             if mm == None :
-                print(self.dmap.get(), "not open");
+                print(self.map_name, "not open");
                 return
             path = os.path.dirname(mm.data.path) + os.path.sep
-            rfile = self.regions_file.get()
+            rfile = self.chosen_segmentation.name
             print(" - opening seg file " + rfile + " for map " + mm.name)
             rmod = self.OpenSegFiles ( [(path + rfile, 'Segmentation')] )[-1]
         else:
@@ -1188,7 +1371,7 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
             self.ReportRegionCount(rmod)
                         # hiding all other segmentations can be annoying sometimes
             if 0 :
-                for m in regions.segmentations():
+                for m in regions.segmentations(self.session):
                     if m != rmod:
                         m.display = False
                         if m.adj_graph : m.adj_graph.show_model(False)
@@ -1197,20 +1380,20 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
         self.cur_seg = rmod
         self.SetMapMenu(rmod.volume_data())
 
-        umsg ( "Showing %s - %d regions, %d surfaces" %
+        self.status ( "Showing %s - %d regions, %d surfaces" %
                (rfile, len(rmod.regions), len(rmod.surfacePieces)) )
 
 
     def CurrentSegmentation ( self, warn = True ):
 
         if warn and self.cur_seg is None:
-            umsg ( "No segmentation chosen" )
+            self.status ( "No segmentation chosen" )
         return self.cur_seg
 
     def SetCurrentSegmentation ( self, smod ):
 
         self.cur_seg = smod
-        self.regions_file.set(smod.name if smod else '')
+        self.chose_segmentation = smod
         if smod:
             self.SetMapMenu(smod.volume_data())
 
@@ -1224,12 +1407,7 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
 
     def SetSurfaceGranularity ( self, smod ):
 
-        g = self.surfaceGranularity.get()
-        try:
-            res = float(g)
-        except:
-            umsg ('Surface granularity "%s" is not a number' % g)
-            return
+        res = self._surface_granularity.value
 
         if res <= 0:
             return
@@ -1266,7 +1444,7 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
 
         for m in regions.segmentations () :
             if not m.display:
-                umsg ( "Closed %s" % m.name )
+                self.status ( "Closed %s" % m.name )
                 m.close()
 
 
@@ -1314,7 +1492,7 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
 
         print("Bounds - %d %d %d --> %d %d %d --> %d %d %d" % ( li, lj, lk, hi, hj, hk, n1,n2,n3 ))
 
-        umsg ( "Saving %d regions to mrc file..." % len(regs) )
+        self.status ( "Saving %d regions to mrc file..." % len(regs) )
 
         nmat = numpy.zeros ( (n3,n2,n1), numpy.float32 )
         dmat = dmap.full_matrix()
@@ -1344,24 +1522,24 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
         nv.write_file ( path, "mrc" )
 
         if [s.volume_data() for s in segs] == [dmap]:
-            umsg ( "Wrote %s" % ( nv.name, ) )
+            self.status ( "Wrote %s" % ( nv.name, ) )
         else:
-            umsg ( "Masked map %s, wrote %s" % ( dmap.name, nv.name ) )
+            self.status ( "Masked map %s, wrote %s" % ( dmap.name, nv.name ) )
 
 
 
     def WriteSelRegionsMRCFile ( self ) :
 
-        if len(self.dmap.get()) == 0 : umsg ("Please select a map from which density will be taken" ); return
+        if len(self.map_name) == 0 : self.status ("Please select a map from which density will be taken" ); return
         dmap = self.SegmentationMap()
-        if dmap == None : umsg ( "%s is not open" % self.dmap.get() ); return
+        if dmap == None : self.status ( "%s is not open" % self.map_name ); return
 
         smod = self.CurrentSegmentation()
         if smod == None : return
 
         regs = smod.selected_regions()
         if len(regs)==0 :
-            umsg ( "Please select one ore more regions to save to .mrc file" )
+            self.status ( "Please select one ore more regions to save to .mrc file" )
             return
 
         self.SaveRegsToMRC ( regs, dmap )
@@ -1369,9 +1547,9 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
 
     def WriteAllRegionsMRCFile ( self ) :
 
-        if len(self.dmap.get()) == 0 : umsg ("Please select a map from which density will be taken" ); return
+        if len(self.map_name) == 0 : self.status ("Please select a map from which density will be taken" ); return
         dmap = self.SegmentationMap()
-        if dmap == None : umsg ( "%s is not open" % self.dmap.get() ); return
+        if dmap == None : self.status ( "%s is not open" % self.map_name ); return
 
         smod = self.CurrentSegmentation()
         if smod == None : return
@@ -1386,9 +1564,9 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
 
     def WriteEachRegionMRCFile ( self ) :
 
-        if len(self.dmap.get()) == 0 : umsg ("Please select a map from which density will be taken" ); return
+        if len(self.map_name) == 0 : self.status ("Please select a map from which density will be taken" ); return
         dmap = self.SegmentationMap()
-        if dmap == None : umsg ( "%s is not open" % self.dmap.get() ); return
+        if dmap == None : self.status ( "%s is not open" % self.map_name ); return
 
         smod = self.CurrentSegmentation()
         if smod is None : return
@@ -1411,7 +1589,7 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
         else:
             return
         if not '%d' in path:
-            umsg ( "Must include '%d' in map file name for region number" )
+            self.status ( "Must include '%d' in map file name for region number" )
             return
 
         print("Saving each of %d regions to .mrc files" % len(regs))
@@ -1423,21 +1601,21 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
 
     def MaskMapWRegions ( self ) :
 
-        if len(self.dmap.get()) == 0 : umsg ("Please select a map from which density will be taken" ); return
+        if len(self.map_name) == 0 : self.status ("Please select a map from which density will be taken" ); return
         dmap = self.SegmentationMap()
-        if dmap == None : umsg ( "%s is not open" % self.dmap.get() ); return
+        if dmap == None : self.status ( "%s is not open" % self.map_name ); return
 
         smod = self.CurrentSegmentation()
         if smod is None : return
 
         regs = smod.selected_regions()
         if len(regs)==0 :
-            umsg ( "Please select one ore more regions" )
+            self.status ( "Please select one ore more regions" )
             return
 
         nv = regions.mask_volume(regs, dmap)
         if nv is None:
-            umsg ('Map size %d,%d,%d is incompatible with mask size %d,%d,%d'
+            self.status ('Map size %d,%d,%d is incompatible with mask size %d,%d,%d'
                   % (tuple(dmap.data.size) + tuple(smod.grid_size())))
             return
 
@@ -1446,16 +1624,16 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
 
     def MaskAnotherMapWRegions ( self ) :
 
-        if len(self.dmap.get()) == 0 : umsg ("Please select a map from which density will be taken" ); return
+        if len(self.map_name) == 0 : self.status ("Please select a map from which density will be taken" ); return
         dmap = self.SegmentationMap()
-        if dmap == None : umsg ( "%s is not open" % self.dmap.get() ); return
+        if dmap == None : self.status ( "%s is not open" % self.map_name ); return
 
         smod = self.CurrentSegmentation()
         if smod is None : return
 
         regs = smod.selected_regions()
         if len(regs)==0 :
-            umsg ( "Please select one ore more regions" )
+            self.status ( "Please select one ore more regions" )
             return
 
         points = regs[0].points().astype ( numpy.float32 )
@@ -1501,16 +1679,16 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
 
     def MaskAnotherMapWRegionsShrink ( self ) :
 
-        if len(self.dmap.get()) == 0 : umsg ("Please select a map from which density will be taken" ); return
+        if len(self.map_name) == 0 : self.status ("Please select a map from which density will be taken" ); return
         dmap = self.SegmentationMap()
-        if dmap == None : umsg ( "%s is not open" % self.dmap.get() ); return
+        if dmap == None : self.status ( "%s is not open" % self.map_name ); return
 
         smod = self.CurrentSegmentation()
         if smod is None : return
 
         regs = smod.selected_regions()
         if len(regs)==0 :
-            umsg ( "Please select one ore more regions" )
+            self.status ( "Please select one ore more regions" )
             return
 
         points = regs[0].points().astype ( numpy.float32 )
@@ -1547,7 +1725,7 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
 
         print("Bounds - %d %d %d --> %d %d %d --> %d %d %d" % ( li, lj, lk, hi, hj, hk, n1,n2,n3 ))
 
-        umsg ( "Saving %d regions to mrc file..." % len(regs) )
+        self.status ( "Saving %d regions to mrc file..." % len(regs) )
 
         nmat = numpy.zeros ( (n1,n2,n3), numpy.float32 )
         #dmat = dmap.full_matrix()
@@ -1585,16 +1763,16 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
         # thsi is useful for input to EMAN fitting procedures which
         # requires a cube map
 
-        if len(self.dmap.get()) == 0 : umsg ("Please select a map from which density will be taken" ); return
+        if len(self.map_name) == 0 : self.status ("Please select a map from which density will be taken" ); return
         dmap = self.SegmentationMap()
-        if dmap == None : umsg ( "%s is not open" % self.dmap.get() ); return
+        if dmap == None : self.status ( "%s is not open" % self.map_name ); return
 
         smod = self.CurrentSegmentation()
         if smod is None : return
 
         regs = smod.selected_regions()
         if len(regs)==0 :
-            umsg ( "Please select one ore more regions" )
+            self.status ( "Please select one ore more regions" )
             return
 
         if 0 :
@@ -1644,7 +1822,7 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
 
             print("Bounds - %d %d %d --> %d %d %d --> %d %d %d (%d)" % ( li, lj, lk, hi, hj, hk, n1, n2, n3, n ))
 
-            umsg ( "Saving %d regions to mrc file..." % len(regs) )
+            self.status ( "Saving %d regions to mrc file..." % len(regs) )
 
             nmat = numpy.zeros ( (n,n,n), numpy.float32 )
             #dmat = dmap.full_matrix()
@@ -1690,16 +1868,16 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
 
     def ExtractMapWRegionsCube ( self ) :
 
-        if len(self.dmap.get()) == 0 : umsg ("Please select a map from which density will be taken" ); return
+        if len(self.map_name) == 0 : self.status ("Please select a map from which density will be taken" ); return
         dmap = self.SegmentationMap()
-        if dmap == None : umsg ( "%s is not open" % self.dmap.get() ); return
+        if dmap == None : self.status ( "%s is not open" % self.map_name ); return
 
         smod = self.CurrentSegmentation()
         if smod is None : return
 
         regs = smod.selected_regions()
         if len(regs)==0 :
-            umsg ( "Please select one ore more regions" )
+            self.status ( "Please select one ore more regions" )
             return
 
         if 0 :
@@ -1732,7 +1910,7 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
 
             print("Bounds - %d %d %d --> %d %d %d --> %d %d %d, %d" % ( li, lj, lk, hi, hj, hk, n1,n2,n3, n ))
 
-            umsg ( "Saving %d regions to mrc file..." % len(regs) )
+            self.status ( "Saving %d regions to mrc file..." % len(regs) )
 
             #nmat = numpy.zeros ( (n3,n2,n1), numpy.float32 )
             nmat = numpy.zeros ( (n,n,n), numpy.float32 )
@@ -1776,21 +1954,21 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
 
     def SubtractRegionsFromMap ( self ) :
 
-        if len(self.dmap.get()) == 0 : umsg ("Please select a map from which density will be taken" ); return
+        if len(self.map_name) == 0 : self.status ("Please select a map from which density will be taken" ); return
         dmap = self.SegmentationMap()
-        if dmap == None : umsg ( "%s is not open" % self.dmap.get() ); return
+        if dmap == None : self.status ( "%s is not open" % self.map_name ); return
 
         smod = self.CurrentSegmentation()
         if smod is None : return
 
         regs = smod.selected_regions()
         if len(regs)==0 :
-            umsg ( "Please select one ore more regions" )
+            self.status ( "Please select one ore more regions" )
             return
 
         nv = regions.remove_mask_volume(regs, dmap)
         if nv is None:
-            umsg ('Map size %d,%d,%d is incompatible with mask size %d,%d,%d'
+            self.status ('Map size %d,%d,%d is incompatible with mask size %d,%d,%d'
                   % (tuple(dmap.data.size) + tuple(smod.grid_size())))
             return
 
@@ -1803,7 +1981,7 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
         dmap = segmentation_map()
 
         if dmap == None:
-            umsg ( "Please select a map in the Segment Map dialog" )
+            self.status ( "Please select a map in the Segment Map dialog" )
             return []
 
         print("Symmetry for", dmap.name)
@@ -1813,11 +1991,11 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
         syms, msg = find_point_symmetry ( dmap, nMax=8 )
 
         if syms is None :
-            umsg ( "No symmetry detected for %s" % dmap.name )
+            self.status ( "No symmetry detected for %s" % dmap.name )
             self.symmetryString.set ( "No symmetry detected" )
             return []
 
-        umsg ( msg )
+        self.status ( msg )
         start = msg.find(': ')+2
         end = msg.find (', center')
         self.symmetryString.set ( msg [start : end] )
@@ -1834,26 +2012,26 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
         dmap = segmentation_map()
 
         if dmap == None:
-            umsg ( "Please select a map..." )
+            self.status ( "Please select a map..." )
             return
 
         smod = self.CurrentSegmentation()
         if smod is None :
-            umsg ( "Select a segmentation..." )
+            self.status ( "Select a segmentation..." )
             return
 
         regions = smod.selected_regions()
         if len(regions)==0 :
-            umsg ( "Select one or more regions..." )
+            self.status ( "Select one or more regions..." )
             return
 
         csyms, sym_err = self.GetUseSymmetry ()
         if sym_err :
-            umsg ( sym_err )
+            self.status ( sym_err )
             return
 
         if csyms == None :
-            umsg ( 'Select "Use symmetry" to use this function...' )
+            self.status ( 'Select "Use symmetry" to use this function...' )
             return
 
         centers, syms = csyms
@@ -1920,24 +2098,23 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
         maxnr = self.MaximumRegionsToDisplay()
 
         if maxnr > 0 and len(smod.regions) >= maxnr  :
-            umsg('Only showing %d of %d regions.' % (maxnr, len(smod.regions)))
+            self.status('Only showing %d of %d regions.' % (maxnr, len(smod.regions)))
 
-        smod.display_regions(self.regsVisMode.get(), maxnr, task)
+        #vis_mode = self.regsVisMode.get()
+        vis_mode = 'Voxel_Surfaces'
+        smod.display_regions(vis_mode, maxnr, task)
 
         if maxnr >= len(smod.regions):
-            umsg ( "Showing %d region surfaces" % len(smod.regions) )
+            self.status ( "Showing %d region surfaces" % len(smod.regions) )
         else:
-            umsg ( "Showing %d of %d region surfaces" %
+            self.status ( "Showing %d of %d region surfaces" %
                    (maxnr, len(smod.regions)) )
 
         self.ReportRegionCount(smod)
 
     def MaximumRegionsToDisplay ( self ) :
 
-        try:
-            maxnr = int(self.maxNumRegions.get())
-        except:
-            maxnr = 0
+        maxnr = self._max_num_regions.value
         return maxnr
 
     def ReportRegionCount ( self, smod ):
@@ -1946,7 +2123,7 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
             s = ''
         else:
             s = "%s regions" % "{:,}".format( len(smod.regions) )
-        self.regionCount["text"] = s
+        self._region_count.setText(s)
 
 
     def RegsDispThr ( self ) :
@@ -1957,9 +2134,9 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
         print("%s - thresholding %d regions" % ( smod.name, len(smod.regions) ))
 
         dmap = self.SegmentationMap()
-        if dmap == None : print("Map %s not open" % self.dmap.get()); return
+        if dmap == None : print("Map %s not open" % self.map_name); return
         print(" - using map:", dmap.name)
-        dthr = dmap.surface_levels[0]
+        dthr = dmap.minimum_surface_level
 
         for r in smod.regions : r.remove_surface()
 
@@ -1967,7 +2144,7 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
         for reg in smod.regions :
 
             if maxnr > 0 and len(smod.surfacePieces) >= maxnr  :
-                umsg('Only showing %d of %d regions.' %
+                self.status('Only showing %d of %d regions.' %
                      (len(smod.surfacePieces), len(smod.regions)))
                 break
             reg.make_surface()
@@ -1985,9 +2162,9 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
 
     def ReduceMap ( self ) :
 
-        if len(self.dmap.get()) == 0 : umsg ("Please select a map first" ); return
+        if len(self.map_name) == 0 : self.status ("Please select a map first" ); return
         mm = self.SegmentationMap()
-        if mm == None : umsg ( "%s is not open" % self.dmap.get() ); return
+        if mm == None : self.status ( "%s is not open" % self.map_name ); return
 
         path = os.path.dirname ( mm.data.path ) + os.path.sep
         mname = os.path.splitext ( mm.name )[0]
@@ -2010,16 +2187,18 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
         csyms = None
         err_msg = None
 
-        if self.useSymmetry.get () :
+        #use_sym = self.useSymmetry.get ()
+        use_sym = False
+        if use_sym :
 
             sstring = self.symmetryString.get ()
             if len ( sstring ) == 0 :
-                umsg ("Detecting symmetry...")
+                self.status ("Detecting symmetry...")
                 self.DetectSym ()
                 sstring = self.symmetryString.get ()
 
             if len ( sstring ) == 0 :
-                umsg ( "Enter a symmetry string, e.g. D8" )
+                self.status ( "Enter a symmetry string, e.g. D8" )
                 return [None, "No symmetry specified or found"]
 
             print("Using symmetry:", sstring)
@@ -2057,50 +2236,41 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
 
         smod = self.CurrentSegmentation(warn = False)
         if smod :
-            chimera.openModels.close ( [smod] )
+            self.session.models.close ( [smod] )
 
-        if self.cur_dmap :
-            mname, mext = os.path.splitext ( self.cur_dmap.name )
-            print(" - current map: %s" % self.cur_dmap.name)
+        if self.chosen_map :
+            from os.path import splitext
+            mname, mext = splitext ( self.chosen_map.name )
+            print(" - current map: %s" % self.chosen_map.name)
             remm = []
-            for m in chimera.openModels.list() :
+            for m in self.session.models.list() :
                 if ".seg" in m.name and mname in m.name :
                     print(" - closing %s" % m.name)
                     remm.append ( m )
             if len(remm) > 0 :
-                chimera.openModels.close ( remm )
+                self.session.models.close ( remm )
 
-
-        from chimera import tasks, CancelOperation
-        task = tasks.Task('Segmenting %s' % self.dmap.get(), modal = True)
-
-        try:
-            smod = self.SegmentAndGroup(show, group, task)
-        except CancelOperation:
-            umsg('Cancelled segmentation')
-            return None
-        finally:
-            task.finished()
+        smod = self.SegmentAndGroup(show, group)
         return smod
 
 
 
     def SegmentAndGroup ( self, show = True, group = True, task = None ) :
 
-        if len(self.dmap.get()) == 0 :
-            umsg ("Select a density map in the Segment map field" );
+        if len(self.map_name) == 0 :
+            self.status ("Select a density map in the Segment map field" );
             return
 
         mm = self.SegmentationMap()
-        if mm == None : umsg ( "%s is not open" % self.dmap.get() ); return
+        if mm == None : self.status ( "%s is not open" % self.map_name ); return
 
-        thrD = mm.surface_levels[0]
+        thrD = mm.minimum_surface_level
         print("\n___________________________")
-        umsg ( "Segmenting %s, density threshold %f" % (mm.name, thrD) )
+        self.status ( "Segmenting %s, density threshold %f" % (mm.name, thrD) )
 
         csyms, sym_err = self.GetUseSymmetry ()
         if sym_err :
-            umsg ( sym_err )
+            self.status ( sym_err )
             return
 
         smod = self.CurrentSegmentation(warn = False)
@@ -2109,7 +2279,7 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
             msp = msuf.find(' ')
             mend = '' if msp == -1 else msuf[msp:]
             segname = mbase + mend + '.seg'
-            smod = regions.Segmentation(segname, mm)
+            smod = regions.Segmentation(segname, mm.session, mm)
             self.SetSurfaceGranularity(smod)
             self.SetCurrentSegmentation(smod)
 
@@ -2124,7 +2294,7 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
         if timing: t2 = clock()
 
         if group:
-            if self.groupMode.get() == 'smooth' :
+            if self.group_mode == 'smooth' :
                 self.SmoothAndGroup ( smod, task )
             else :
                 self.GroupByCons ( smod, task )
@@ -2132,7 +2302,7 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
 
         # Undisplay other segmentations
         if timing: t3 = clock()
-        for m in regions.segmentations() :
+        for m in regions.segmentations(self.session) :
             if m != smod:
                 m.display = False
 
@@ -2143,7 +2313,7 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
             t4 = clock()
             print("Time %.2f sec: watershed %.2f sec, small %.2f, group %.2f sec, display %.2f sec" % (t4-t0, t1-t0, t2-t1, t3-t2, t4-t3))
 
-        umsg ( '%d watershed regions, grouped to %d regions' % ( nwr, len(smod.regions)) )
+        self.status ( '%d watershed regions, grouped to %d regions' % ( nwr, len(smod.regions)) )
 
         return smod
 
@@ -2156,13 +2326,7 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
             if smod is None:
                 return
 
-        mrs = self.minRegionSize.get()
-        try:
-            minsize = int ( mrs )
-        except:
-            print('Minimum region size "%s" is not an integer' % mrs)
-            minsize = 1
-
+        minsize = self._min_region_size.value
         if minsize <= 1:
             return
 
@@ -2173,7 +2337,7 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
                 smod.remove_small_regions(minsize, task)
                 self.RegsDispUpdate(task)
             except CancelOperation:
-                umsg('Cancelled removing small regions')
+                self.status('Cancelled removing small regions')
                 return
             finally:
                 task.finished()
@@ -2191,13 +2355,7 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
             if smod is None:
                 return
 
-        mrs = self.minContactSize.get()
-        try:
-            minsize = int ( mrs )
-        except:
-            print('Minimum contact size "%s" is not an integer' % mrs)
-            minsize = 1
-
+        minsize = self._min_contact_size.value
         if minsize <= 0:
             return
 
@@ -2208,7 +2366,7 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
                 smod.remove_contact_regions(minsize, task)
                 self.RegsDispUpdate(task)
             except CancelOperation:
-                umsg('Cancelled removing small regions')
+                self.status('Cancelled removing small regions')
                 return
             finally:
                 task.finished()
@@ -2257,7 +2415,7 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
             regions.group_by_contacts(smod, task)
             self.RegsDispUpdate(task)
         except CancelOperation:
-            umsg('Cancelled contact grouping')
+            self.status('Cancelled contact grouping')
         finally:
             task.finished()
 
@@ -2268,7 +2426,7 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
 
     def CloseAll ( self ) :
 
-        umsg ( "Closing all segmentations." )
+        self.status ( "Closing all segmentations." )
 
         dmap = self.SegmentationMap()
         if dmap != None :
@@ -2288,12 +2446,12 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
         if seg :
             print(" - seg: ", seg.name)
 
-            if self.cur_dmap :
-                print(" - map: " + self.cur_dmap.name)
-                seg.set_volume_data ( self.cur_dmap )
-                umsg ( "Map %s is now associated with %s" % (self.cur_dmap.name, seg.name) )
+            if self.chosen_map :
+                print(" - map: " + self.chosen_map.name)
+                seg.set_volume_data ( self.chosen_map )
+                self.status ( "Map %s is now associated with %s" % (self.chosen_map.name, seg.name) )
             else :
-                umsg ( "No map selected" )
+                self.status ( "No map selected" )
 
 
     def SmoothAndGroup ( self, smod, task = None ) :
@@ -2302,24 +2460,24 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
             numit = int ( self.numSteps.get() )
             sdev = float ( self.stepSize.get() )
         except :
-            umsg ( "Enter an integer for # smoothing steps, float for step size" )
+            self.status ( "Enter an integer for # smoothing steps, float for step size" )
             return
 
         try :
             targNRegs = int(self.targNRegions.get())
         except :
-            umsg ( "Enter an integer for target # of regions" );
+            self.status ( "Enter an integer for target # of regions" );
             return
 
 
         csyms, sym_err = self.GetUseSymmetry ()
         if sym_err :
-            umsg ( sym_err )
+            self.status ( sym_err )
             return
 
 
         if targNRegs <= 0 :
-            umsg ( "# of regions" )
+            self.status ( "# of regions" )
             return
 
         smod.smooth_and_group(numit, sdev, targNRegs, csyms, task)
@@ -2331,28 +2489,18 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
 
     def GroupByCons ( self, smod, task = None ) :
 
-        try :
-            numit = int ( self.numStepsCon.get() )
-            #sdev = float ( self.stepSize.get() )
-        except :
-            umsg ( "Enter an integer for # steps" )
-            return
+        numit = self._num_steps_con.value
 
-        try :
-            targNRegs = int(self.targNRegionsCon.get())
-        except :
-            umsg ( "Enter an integer for target # of regions" );
-            return
-
+        targNRegs = self._target_num_regions_con.value
 
         csyms, sym_err = self.GetUseSymmetry ()
         if sym_err :
-            umsg ( sym_err )
+            self.status ( sym_err )
             return
 
 
         if targNRegs <= 0 :
-            umsg ( "Enter an integer > 0 for target # of regions" )
+            self.status ( "Enter an integer > 0 for target # of regions" )
             return
 
         print(" - grouping %d steps, target %d" % (numit, targNRegs))
@@ -2373,27 +2521,27 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
             return
 
         if smod.volume_data() is None:
-            umsg ('Segmentation map not opened')
+            self.status ('Segmentation map not opened')
             return
 
         if len(smod.regions) <= 1:
-            umsg ('%s has %d regions' % (smod.name, len(smod.regions)))
+            self.status ('%s has %d regions' % (smod.name, len(smod.regions)))
             return
 
 
         csyms, sym_err = self.GetUseSymmetry ()
         if sym_err :
-            umsg ( sym_err )
+            self.status ( sym_err )
             return
 
         regions = None
         if  self.groupByConsOnlyVis.get() :
             regions = smod.visible_regions()
             if len(regions) == 0 :
-                umsg ("Grouping by connections: no visible regions found or they are from a different model" )
+                self.status ("Grouping by connections: no visible regions found or they are from a different model" )
                 return
 
-            umsg ("Grouping by connections: applying only to %d regions visible" % len(regions) )
+            self.status ("Grouping by connections: applying only to %d regions visible" % len(regions) )
 
 
         from chimera import tasks, CancelOperation
@@ -2404,7 +2552,7 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
             #self.RegsDispUpdate ( task )        # Display region surfaces
 
         except CancelOperation :
-            umsg('Cancelled group by connections')
+            self.status('Cancelled group by connections')
             return
         finally:
             task.finished()
@@ -2417,7 +2565,7 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
         if smod.adj_graph :
             graph.create_graph ( smod, smod.graph_links )
 
-        umsg ( "Got %d regions after grouping by connections" % (len(smod.regions)) )
+        self.status ( "Got %d regions after grouping by connections" % (len(smod.regions)) )
 
 
     def SmoothAndGroupOneStep ( self ) :
@@ -2427,28 +2575,28 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
             return
 
         if smod.volume_data() is None:
-            umsg ('Segmentation map not opened')
+            self.status ('Segmentation map not opened')
             return
 
         if len(smod.regions) <= 1:
-            umsg ('%s has %d regions' % (smod.name, len(smod.regions)))
+            self.status ('%s has %d regions' % (smod.name, len(smod.regions)))
             return
 
         try :
             step = float ( self.stepSize.get() )
         except :
-            umsg ( "Enter <float> for step size" )
+            self.status ( "Enter <float> for step size" )
             return
 
         sdev = step + smod.smoothing_level
 
 
-        umsg ( "Smoothing and grouping, standard deviation %.3g voxels" % sdev)
+        self.status ( "Smoothing and grouping, standard deviation %.3g voxels" % sdev)
 
 
         csyms, sym_err = self.GetUseSymmetry ()
         if sym_err :
-            umsg ( sym_err )
+            self.status ( sym_err )
             return
 
 
@@ -2462,12 +2610,12 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
                 # since symmetry can block regions from joining indefinitely
                 if csyms or new_regs > 0 : break
 
-                umsg ('No new groups smoothing %.3g voxels' % sdev)
+                self.status ('No new groups smoothing %.3g voxels' % sdev)
                 sdev += step
             self.RegsDispUpdate ( task )         # Display region surfaces
 
         except CancelOperation:
-            umsg('Cancelled smooth and group')
+            self.status('Cancelled smooth and group')
             return
         finally:
             task.finished()
@@ -2477,7 +2625,7 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
         if smod.adj_graph :
             graph.create_graph ( smod, smod.graph_links )
 
-        umsg ( "Got %d regions after smoothing %.3g voxels." %
+        self.status ( "Got %d regions after smoothing %.3g voxels." %
                (len(smod.regions), sdev) )
 
 
@@ -2485,16 +2633,16 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
 
         dmap = self.SegmentationMap()
         if dmap == None :
-            umsg ( "No map selected" )
+            self.status ( "No map selected" )
             return
 
         smod = self.CurrentSegmentation()
         if smod == None :
-            umsg ( "No segmentation selected" )
+            self.status ( "No segmentation selected" )
             return
 
         if len(smod.regions) == 0 :
-            umsg ( "No regions found in %s" % smod.name )
+            self.status ( "No regions found in %s" % smod.name )
             return
 
         selatoms = chimera.selection.currentAtoms()
@@ -2515,13 +2663,13 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
                 from _contour import affine_transform_vertices as transform_vertices
                 transform_vertices( spoints,  Matrix.xform_matrix( mod.openState.xform ) )
             else :
-                umsg ("0 or more than 1 model selected")
+                self.status ("0 or more than 1 model selected")
                 return
 
 
         simap = self.PointIndexesInMap ( spoints, dmap )
 
-        umsg ( "Overlapping %d atoms with %d regions" % (
+        self.status ( "Overlapping %d atoms with %d regions" % (
             len(selatoms), len(smod.regions) ) )
 
         ovRatio = float ( self.overlappingPercentage.get() ) / 100.0
@@ -2540,7 +2688,7 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
             #if noverlap > 0 : oregs.append ( r )
         regions.select_regions ( oregs )
 
-        umsg ( "Selected %d regions" % ( len(oregs) ) )
+        self.status ( "Selected %d regions" % ( len(oregs) ) )
 
 
 
@@ -2548,7 +2696,7 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
     def GroupUsingFits ( self ) :
 
         dmap = self.SegmentationMap()
-        if dmap == None : print("Map %s not open" % self.dmap.get()); return
+        if dmap == None : print("Map %s not open" % self.map_name); return
 
         smod = self.CurrentSegmentation()
         if smod == None : return
@@ -2643,7 +2791,7 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
         for r in sregs :
             cr.update(r.contacting_regions())
 
-        umsg ( "Region has %d adjacent regions" % len(cr) )
+        self.status ( "Region has %d adjacent regions" % len(cr) )
         for r in cr :
             r.show_surface()
 
@@ -2715,10 +2863,10 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
 
         sregs = smod.grouped_regions()
         if len(sregs) == 0 :
-            umsg ( "No grouped regions" )
+            self.status ( "No grouped regions" )
             return
 
-        umsg ( "Showing %d grouped regions" % len(sregs) )
+        self.status ( "Showing %d grouped regions" % len(sregs) )
 
         regions.show_only_regions(sregs)
 
@@ -2802,7 +2950,7 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
 
         if NothingSelected():
 
-            if self.groupMode.get() == 'smooth' :
+            if self.group_mode == 'smooth' :
                 self.SmoothAndGroupOneStep()
             else :
                 self.GroupByConsOneStep()
@@ -2818,7 +2966,7 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
 
         regs = smod.selected_regions()
         if len(regs)==0 :
-            umsg ( "No regions selected" )
+            self.status ( "No regions selected" )
             return
         regs = regions.TopParentRegions(regs)
 
@@ -2831,7 +2979,7 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
         chimera.selection.setCurrent([jreg.surface_piece])
 
         self.ReportRegionCount(smod)
-        umsg ( "Grouped %d regions" % len(regs) )
+        self.status ( "Grouped %d regions" % len(regs) )
 
 
 
@@ -2840,30 +2988,30 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
 
         smod = self.CurrentSegmentation()
         if smod is None :
-            umsg ( "No segmentation selected..." )
+            self.status ( "No segmentation selected..." )
             return
 
         regs = smod.selected_regions()
         if len(regs)==0 :
-            umsg ( "Select one or more regions to delete" )
+            self.status ( "Select one or more regions to delete" )
             return
 
         smod.remove_regions ( regs, update_surfaces = True, remove_children = True )
 
         self.ReportRegionCount(smod)
-        umsg ( "Deleted %d regions" % len(regs) )
+        self.status ( "Deleted %d regions" % len(regs) )
 
 
     def DelExcSelRegs ( self ) :
 
         smod = self.CurrentSegmentation()
         if smod is None :
-            umsg ( "No segmentation selected..." )
+            self.status ( "No segmentation selected..." )
             return
 
         sel_regs = smod.selected_regions()
         if len(sel_regs)==0 :
-            umsg ( "No regions selected..." )
+            self.status ( "No regions selected..." )
             return
 
         dregs = [r for r in smod.regions
@@ -2872,7 +3020,7 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
         smod.remove_regions ( dregs, update_surfaces = True, remove_children = True )
 
         self.ReportRegionCount(smod)
-        umsg ( "Deleted %d regions" % len(dregs) )
+        self.status ( "Deleted %d regions" % len(dregs) )
 
 
     def Ungroup ( self ):
@@ -2905,15 +3053,15 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
 
 
         if nsurfs >= maxnr :
-            umsg('Ungrouped to %d regions, but did not show their surfaces, see Options' % len(rlist) )
+            self.status('Ungrouped to %d regions, but did not show their surfaces, see Options' % len(rlist) )
 
         else :
             canshow = maxnr - nsurfs
 
             if canshow < len(rlist) :
-                umsg('Ungrouped to %d regions, but did not show all surfaces, see Options' % len(rlist) )
+                self.status('Ungrouped to %d regions, but did not show all surfaces, see Options' % len(rlist) )
             else :
-                umsg('Ungrouped to %d regions' % len(rlist) )
+                self.status('Ungrouped to %d regions' % len(rlist) )
 
             from chimera import tasks, CancelOperation
             task = tasks.Task('Adding surfaces', modal = True)
@@ -2936,7 +3084,7 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
 
         sregs = smod.selected_regions()
         if len(sregs) == 0 :
-            umsg ( "No regions selected" )
+            self.status ( "No regions selected" )
             return
         sregs = regions.TopParentRegions(sregs)
 
@@ -2947,7 +3095,7 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
             else :
                 num += len(r.cregs)
 
-        umsg ( "selected regions have %d total sub regions" % num )
+        self.status ( "selected regions have %d total sub regions" % num )
 
 
 
@@ -2958,7 +3106,7 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
 
         sregs = smod.selected_regions()
         if len(sregs) == 0 :
-            umsg ( "No regions selected" )
+            self.status ( "No regions selected" )
             return
         sregs = regions.TopParentRegions(sregs)
 
@@ -3026,7 +3174,7 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
         if smod.adj_graph :
             graph.create_graph ( smod, smod.graph_links )
 
-        #umsg ( "Ungrouped to %.3g voxel smoothing, %d regions" % (smod.smoothing_level, len(smod.regions)) )
+        #self.status ( "Ungrouped to %.3g voxel smoothing, %d regions" % (smod.smoothing_level, len(smod.regions)) )
         self.ReportRegionCount(smod)
 
 
@@ -3064,7 +3212,7 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
             sregs = smod.regions
 
         if len(sregs) == 0 :
-            umsg ( "No regions found in %s" % smod.name )
+            self.status ( "No regions found in %s" % smod.name )
             return
 
         tvol = sum([reg.enclosed_volume() for reg in sregs])
@@ -3072,7 +3220,7 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
 
         rw = "region"
         if len(sregs) > 1 : rw = "regions"
-        umsg ( "Volume of %d %s: %.3g Angstroms^3, %d points" % ( len(sregs), rw, tvol, pcount ) )
+        self.status ( "Volume of %d %s: %.3g Angstroms^3, %d points" % ( len(sregs), rw, tvol, pcount ) )
 
     def RegionMeanAndSD ( self ) :
 
@@ -3081,19 +3229,19 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
 
         sregs = smod.selected_regions()
         if len(sregs) == 0 :
-            umsg ( "No regions selected in %s" % smod.name )
+            self.status ( "No regions selected in %s" % smod.name )
             return
 
         v = self.SegmentationMap()
         if v is None:
             v = smod.volume_data()
             if v is None:
-                umsg ( 'No map specified' )
+                self.status ( 'No map specified' )
                 return
 
         means, sdevs = regions.mean_and_sd(sregs, v)
         for r, m, sd in zip(sregs, means, sdevs):
-            umsg ( 'Region %d mean %.5g, SD %.5g' % (r.rid, m, sd) )
+            self.status ( 'Region %d mean %.5g, SD %.5g' % (r.rid, m, sd) )
 
 
     def Graph ( self ) :
@@ -3252,7 +3400,7 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
 
     def MapIndexesInMap ( self, ref_map, mask_map ) :
 
-        thr = mask_map.surface_levels[0]
+        thr = mask_map.minimum_surface_level
         mm = mask_map.data.matrix()
         mm = numpy.where ( mm > thr, mm, numpy.zeros_like(mm) )
 
@@ -3395,8 +3543,8 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
         if m is None:
             return
 
-        import _segment
-        b = _segment.region_bounds(m)
+        from chimerax.segment import region_bounds
+        b = region_bounds(m)
 
         rset = set()
         kmax, jmax, imax = [(s-1)-pad for s in m.shape]
@@ -3412,9 +3560,9 @@ class Volume_Segmentation_Dialog ( chimera.baseDialog.ModelessDialog ):
 
     def SelectNonPlacedRegions ( self ) :
 
-        if len(self.dmap.get()) == 0 : umsg ("Please select a density map"); return
+        if len(self.map_name) == 0 : self.status ("Please select a density map"); return
         dmap = self.SegmentationMap()
-        if dmap == None : umsg ( "%s is not open" % self.dmap.get() ); return
+        if dmap == None : self.status ( "%s is not open" % self.map_name ); return
 
         smod = self.CurrentSegmentation()
         if smod is None : return
@@ -3498,7 +3646,7 @@ def current_segmentation(warn = True):
     if d:
         return d.CurrentSegmentation(warn)
     elif warn:
-        umsg ( "No segmentation opened" )
+        d.status ( "No segmentation opened" )
     return None
 
 def segmentation_map():
@@ -3508,11 +3656,68 @@ def segmentation_map():
         return d.SegmentationMap()
     return None
 
+def entries_row(parent, *args):
+    from PyQt5.QtWidgets import QFrame, QHBoxLayout, QLabel
+    f = QFrame(parent)
+    parent.layout().addWidget(f)
+
+    layout = QHBoxLayout(f)
+    layout.setContentsMargins(0,0,0,0)
+    layout.setSpacing(10)
+
+    values = []
+    for a in args:
+        if isinstance(a, str):
+            l = QLabel(a, f)
+            layout.addWidget(l)
+        elif isinstance(a, bool):
+            cb = BooleanEntry(f, a)
+            layout.addWidget(cb.widget)
+            values.append(cb)
+        elif isinstance(a, int):
+            ie = IntegerEntry(f, a)
+            layout.addWidget(ie.widget)
+            values.append(ie)
+    layout.addStretch(1)    # Extra space at end
+
+    return values
+
+def radio_buttons(*check_boxes):
+    for cb in check_boxes:
+        cb.widget.stateChanged.connect(lambda state, cb=cb, others=check_boxes: _uncheck_others(cb, others))
+
+def _uncheck_others(check_box, other_check_boxes):
+    if check_box.value:
+        for ocb in other_check_boxes:
+            if ocb is not check_box:
+                ocb.value = False
+                
+class IntegerEntry:
+    def __init__(self, parent, value, pixel_width = 40):
+        from PyQt5.QtWidgets import QLineEdit
+        self._line_edit = le = QLineEdit('%d' % value, parent)
+        le.setMaximumWidth(pixel_width)
+    def _get_value(self):
+        return int(self._line_edit.text())
+    def _set_value(self, value):
+        self._line_edit.setText('%d' % value)
+    value = property(_get_value, _set_value)
+    @property
+    def widget(self):
+        return self._line_edit
 
 
+class BooleanEntry:
+    def __init__(self, parent, value):
+        from PyQt5.QtWidgets import QCheckBox
+        self._check_box = cb = QCheckBox(parent)
+        cb.setChecked(value)
+    def _get_value(self):
+        return self._check_box.isChecked()
+    def _set_value(self, value):
+        self._check_box.setChecked(value)
+    value = property(_get_value, _set_value)
+    @property
+    def widget(self):
+        return self._check_box
 
-# -----------------------------------------------------------------------------
-#
-from chimera import dialogs
-dialogs.register (Volume_Segmentation_Dialog.name, Volume_Segmentation_Dialog,
-                  replace = True)

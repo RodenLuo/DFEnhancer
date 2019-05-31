@@ -706,7 +706,7 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
         fmap, dmap, mat, corr, aI, bI, bC, hdo, regions = lfits[0]
         for mol in fmap.mols :
-            if mol.__destroyed__:
+            if mol.deleted:
                 umsg('Fit molecule was closed')
         else:
             self.place_molecule(fmap, mat, dmap)
@@ -3561,7 +3561,7 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
         for fmap, dmap, mat, corr, aI, bI, bC, bO, regions in lfits:
 
             for mol in fmap.mols :
-                if mol.__destroyed__:
+                if mol.deleted:
                     umsg('Fit molecule was closed - ')
                     return
 
@@ -3801,7 +3801,7 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
         for fmap, dmap, mat, corr, aI, bI, bC, bO, regions in lfits:
 
             for mol in fmap.mols :
-                if mol.__destroyed__:
+                if mol.deleted:
                     umsg('Fit molecule was closed - ')
                     return
 

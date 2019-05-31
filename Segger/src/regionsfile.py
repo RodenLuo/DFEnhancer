@@ -23,7 +23,7 @@ def ReadRegionsFile ( regions_file_path, dmap, smod = None) :
 
     if smod == None :
         regions_file = os.path.basename ( regions_file_path )
-        smod = regions.Segmentation(regions_file, dmap)
+        smod = regions.Segmentation(regions_file, dmap.session, dmap)
     else :
         print(" - found", smod.name)
         smod.remove_all_regions()

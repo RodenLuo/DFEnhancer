@@ -7,9 +7,9 @@ from time import clock
 from chimerax.core.models import Surface
 class Segmentation ( Surface ):
 
-    def __init__(self, name, volume = None, open = True):
+    def __init__(self, name, session, volume = None, open = True):
 
-        SurfaceModel.__init__(self)
+        Surface.__init__(self, name, session)
 
         self.name = name
         if volume is None:
@@ -36,16 +36,15 @@ class Segmentation ( Surface ):
         self.graph_links = "uniform"    # how to compute radii of links in graph
         self.regions_scale = 1.0        # for shrinking regions in the graph
 
-        from chimera import openModels as om
         if open:
-            om.add([self])
+            session.models.add([self])
             if not volume is None:
-                self.openState.xform = volume.openState.xform
+                self.position = volume.scene_position
 
     def volume_data(self):
 
         v = self.seg_map
-        if v and v.__destroyed__:
+        if v and v.deleted:
             v = self.seg_map = None
         return v
 
@@ -90,8 +89,8 @@ class Segmentation ( Surface ):
 
     def calculate_region_bounds(self):
 
-        import _segment
-        b = _segment.region_bounds(self.mask)
+        from chimerax.segment import region_bounds
+        b = region_bounds(self.mask)
         for r in self.childless_regions():
             i = r.rid
             npts = b[i,6]
@@ -106,9 +105,9 @@ class Segmentation ( Surface ):
     def region_contacts(self, task = None):
 
         if self.rcons is None:
-            import _segment
+            from chimerax.segment import region_contacts
             if timing: t0 = clock()
-            rcon = _segment.region_contacts(self.mask)
+            rcon = region_contacts(self.mask)
             if timing: t1 = clock()
             rcons = {}
             id2r = self.id_to_region
@@ -127,9 +126,9 @@ class Segmentation ( Surface ):
             if timing: t2 = clock()
             v = self.volume_data()
             if v:
-                import _segment
                 map = v.full_matrix()
-                ci, cf = _segment.interface_values(self.mask, map)
+                from chimerax.segment import interface_values
+                ci, cf = interface_values(self.mask, map)
                 id2r = self.id_to_region
                 for (r1id,r2id,nv), (dmax,dsum) in zip(ci,cf):
                     c = rcons[id2r[r1id]][id2r[r2id]]
@@ -211,6 +210,13 @@ class Segmentation ( Surface ):
             #dmap.show()
 
         return dmap
+
+    def add_region(self, name, vertices, normals, triangles, rgba):
+
+        d = self.new_drawing(name)
+        d.set_geometry(vertices, normals, triangles)
+        d.color = tuple(int(255*r) for r in rgba)
+        return d
 
 
     def remove_all_regions(self):
@@ -344,7 +350,7 @@ class Segmentation ( Surface ):
         nreg = Region ( self, rid, children = regs, max_point = max_point )
 
         if color is None:
-            lr = max([(r.point_count(),r) for r in regs])[1]
+            lr = max(regs, key = lambda r: r.point_count())
             color = lr.color
         nreg.color = color
 
@@ -468,16 +474,16 @@ class Segmentation ( Surface ):
         self.adj_graph = None
 
         m = mm.data.full_matrix()
-        import _segment
+        from chimerax.segment import watershed_regions, region_maxima
         if timing: t0 = clock()
         if task:
             task.updateStatus('Computing watershed regions for %s' % mm.name)
         from numpy import zeros, uint32
         self.mask = zeros(m.shape, uint32)
-        _segment.watershed_regions(m, thrD, self.mask)
+        watershed_regions(m, thrD, self.mask)
         self.map_level = thrD
         if timing: t1 = clock()
-        max_points, max_values = _segment.region_maxima(self.mask, m)
+        max_points, max_values = region_maxima(self.mask, m)
         if timing: t2 = clock()
         n = len(max_points)
         regions = []
@@ -554,8 +560,8 @@ class Segmentation ( Surface ):
         rlist = list(self.regions)
         pos = numpy.array([r.max_point for r in rlist], numpy.intc)
 
-        import _segment
-        _segment.find_local_maxima(m, pos)
+        from chimerax.segment import find_local_maxima
+        find_local_maxima(m, pos)
 
         rm = {}
         for reg, pt in zip(rlist, pos):
@@ -583,8 +589,8 @@ class Segmentation ( Surface ):
         rlist = list(self.regions)
         pos = numpy.array([r.max_point for r in rlist], numpy.intc)
 
-        import _segment
-        _segment.find_local_maxima(m, pos)
+        from chimerax.segment import find_local_maxima
+        find_local_maxima(m, pos)
 
         rm = {}
         for reg, pt in zip(rlist, pos):
@@ -736,7 +742,8 @@ class Segmentation ( Surface ):
         print((" -- showing ?", len(self.regions), "? regions"))
 
         rlist = list(self.regions)
-        rlist.sort(lambda r1,r2: cmp(r2.point_count(),r1.point_count()))
+        rlist.sort(key = lambda r: r.point_count())
+        rlist.reverse()
 
         self.style = style
 
@@ -997,8 +1004,8 @@ class Region:
             # it's a little hard to understand from the code...
             (imin, jmin, kmin), (imax, jmax, kmax) = self.bounds()
             m = self.segmentation.mask[kmin:kmax+1,jmin:jmax+1,imin:imax+1]
-            import _segment
-            p = _segment.region_points(m, self.rid)
+            from chimerax.segment import region_points
+            p = region_points(m, self.rid)
             p[:,0] += imin
             p[:,1] += jmin
             p[:,2] += kmin
@@ -1057,13 +1064,13 @@ class Region:
     def has_surface ( self ) :
 
         sp = self.surface_piece
-        return sp and not sp.__destroyed__
+        return sp and not sp.deleted
 
     # Does this region or any parent have a displayed surface?
     def visible ( self ) :
 
         sp = self.surface_piece
-        shown = sp and not sp.__destroyed__ and sp.display
+        shown = sp and not sp.deleted and sp.display
         if not shown and self.preg:
             shown = self.preg.visible()
         return shown
@@ -1089,6 +1096,7 @@ class Region:
 
         if vertices is None:
             seg = self.segmentation
+            '''
             from MultiScale.surface import surface_points
             vertices, triangles, normals = \
                 surface_points ( self.points(),
@@ -1096,6 +1104,13 @@ class Region:
                                  density_threshold = 0.1,
                                  smoothing_factor = .25,
                                  smoothing_iterations = 5 )
+            '''
+            pts = self.points()
+            from numpy import ones, float32
+            weights = ones(len(pts), float32)
+            res = 3*seg.surface_resolution
+            from chimerax.surface import gaussian_surface
+            vertices, normals, triangles, level = gaussian_surface(pts, weights, res, level = 0.1)
             tf = seg.point_transform()
 
             import numpy
@@ -1113,21 +1128,20 @@ class Region:
                 import Matrix
                 tf = Matrix.multiply_matrices( t_to_com, t_scale, t_0_com, tf )
 
-            import _contour
-            _contour.affine_transform_vertices ( vertices, tf )
+            tf.transform_points(vertices, in_place = True)
 
         rgba = self.top_parent().color
-        nsp = self.segmentation.addPiece ( vertices, triangles, rgba )
+        nsp = self.segmentation.add_region ('region', vertices, normals, triangles, rgba )
         # print(" - added piece with color", nsp.color)
 
         try : sidstr = ", sym # %d" % self.segmentation.rid_sid [ self.rid ]
         except : sidstr = ""
 
-        nsp.oslName = str(self.rid) + sidstr
+        nsp.name = str(self.rid) + sidstr
         nsp.region = self
         self.surface_piece = nsp
         return nsp
-
+    
     def remove_surface ( self, including_children = False ):
 
         p = self.surface_piece
@@ -1416,10 +1430,9 @@ def random_color(avoid_rgba = None, minimum_rgba_distance = 0.2):
     return c
 
 
-def segmentations():
+def segmentations(session):
 
-    from chimera import openModels as om
-    slist = om.list(modelTypes = [Segmentation])
+    slist = session.models.list(type = Segmentation)
     return slist
 
 
@@ -1433,8 +1446,9 @@ def group_by_contacts(smod, task = None):
 
     if task:
         task.updateStatus('Computing interface maxima')
-    import _segment
-    ci, cf = _segment.interface_values(smod.mask, map)
+
+    from chimerax.segment import interface_values
+    ci, cf = interface_values(smod.mask, map)
 
     if task:
         task.updateStatus('Computing drops')

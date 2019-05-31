@@ -4,8 +4,9 @@ class _SeggerAPI(BundleAPI):
 
     @staticmethod
     def start_tool(session, tool_name):
-        from .segment_dialog import Segger
-        return Segger.get_singleton(session)
+        from .segment_dialog import Volume_Segmentation_Dialog
+        d = Volume_Segmentation_Dialog.get_singleton(session, tool_name)
+        return d
 
     @staticmethod
     def register_command(command_name, logger):

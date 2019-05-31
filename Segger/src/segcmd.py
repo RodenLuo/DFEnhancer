@@ -104,7 +104,7 @@ def unbin_mask(segmentation, volume):
         raise CommandError('Map size %d,%d,%d is not compatible with segmentation size %d,%d,%d' % (tuple(ssize) + tuple(vsize)))
 
     name = segmentation.name + ' unbin'
-    seg = Segmentation(name, volume)
+    seg = Segmentation(name, volume.session, volume)
 
     # Copy mask
     b2, b1, b0 = bsize
