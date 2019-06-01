@@ -5,14 +5,14 @@
 #
 
 from . import regions
-from chimera.baseDialog import ModelessDialog
 
 import numpy
 int_types = (int, numpy.int8, numpy.int16, numpy.int32, numpy.int64,
              numpy.uint8, numpy.uint16, numpy.uint32, numpy.uint64)
 float_types = (float, numpy.float32, numpy.float64)
 
-class Attribute_Dialog(ModelessDialog):
+from chimerax.core.tools import ToolInstance
+class Attribute_Dialog(ToolInstance):
 
     title = 'Segmentation Region Attributes'
     name = 'segmentation region attributes'
@@ -468,8 +468,3 @@ def show_region_attributes_dialog ():
     # Avoid transient dialog resizing when created and mapped for first time.
 #    d.toplevel_widget.update_idletasks ()
     d.enter()
-
-# -----------------------------------------------------------------------------
-#
-from chimera import dialogs
-dialogs.register (Attribute_Dialog.name, Attribute_Dialog, replace = True)

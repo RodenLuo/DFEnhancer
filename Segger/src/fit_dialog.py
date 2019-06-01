@@ -1448,7 +1448,7 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
         if self.useLaplace.get() :
             umsg ("Generating Laplacian...")
-            from VolumeFilter import laplacian
+            from chimerax.map.filter import laplacian
             mvl = laplacian ( mv )
             chimera.openModels.close ( [mv] )
             mv = mvl
@@ -1534,7 +1534,7 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
         if self.useLaplace.get() :
             umsg ("Generating Laplacian...")
-            from VolumeFilter import laplacian
+            from chimerax.map.filter import laplacian
             mvl = laplacian ( mv )
             chimera.openModels.close ( [mv] )
             mv = mvl
@@ -1701,7 +1701,7 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
             if self.useLaplace.get () :
                 umsg ("Generating Laplace version of " + dmap.name)
-                from VolumeFilter import laplacian
+                from chimerax.map.filter import laplacian
                 to_map = laplacian ( dmap )
                 bCloseMap = True
 
@@ -2139,7 +2139,7 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
         if self.useLaplace.get () :
             umsg ("Generating Laplace version of " + dmap.name)
-            from VolumeFilter import laplacian
+            from chimerax.map.filter import laplacian
             to_map = laplacian ( dmap )
             bCloseMap = True
 
@@ -3400,7 +3400,7 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
         s2 = numpy.sqrt ( s*s + s*s + s*s )
         mdata = VolumeData.zone_masked_grid_data ( dmap.data, points, numpy.sqrt(s2) )
 
-        from VolumeFilter import gaussian
+        from chimerax.map.filter import gaussian
         gvm = gaussian.gaussian_convolution ( mdata.full_matrix(), (.1,.1,.1) )
         #gvm = gvol.full_matrix()
 

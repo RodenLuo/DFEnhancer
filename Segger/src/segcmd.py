@@ -270,16 +270,8 @@ def slice_view(**kw):
            }
     kw = dict([(n2n[k],v) if k in n2n else (k,v) for k,v in list(kw.items())])
 
-    from chimera import tasks, CancelOperation
-    task = tasks.Task('Slice images', modal = True)
-    kw['task'] = task
     from . import orthoview
-    try:
-        orthoview.make_orthoslice_images(**kw)
-    except CancelOperation:
-        pass
-    finally:
-        task.finished()
+    orthoview.make_orthoslice_images(**kw)
 
 # -----------------------------------------------------------------------------
 #

@@ -30,25 +30,16 @@ from . import regions
 from . import graph
 from . import dev_menus, timing, seggerVersion
 
-#dev_menus = False
 showDevTools = False
 
 
-
-
-#OML = chimera.openModels.list
-
 REG_OPACITY = 0.45
 
+def debug(*args):
+    from . import debug
+    if debug:
+        print(*args)
 
-def umsg ( txt ) :
-    print(txt)
-    status ( txt )
-
-def status ( txt ) :
-    txt = txt.rstrip('\n')
-    msg.configure(text = txt)
-    msg.update_idletasks()
 
 from chimerax.core.tools import ToolInstance
 class Volume_Segmentation_Dialog ( ToolInstance ):
@@ -67,17 +58,46 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
         self.tool_window = tw
         parent = tw.ui_area
 
-        from PyQt5.QtWidgets import QVBoxLayout, QHBoxLayout, QFrame, QCheckBox, QLabel, QPushButton, QLineEdit, QSlider
-        from PyQt5.QtCore import Qt
-
+        from PyQt5.QtWidgets import QVBoxLayout, QLabel
         layout = QVBoxLayout(parent)
         layout.setContentsMargins(0,0,0,0)
         layout.setSpacing(0)
         parent.setLayout(layout)
 
+        # File and Regions pull-down menus
+        mbar = self._create_menubar(parent)
+        layout.addWidget(mbar)
+        
         # Map menu
-        mf = QFrame(parent)
+        mf = self._create_map_menu(parent)
         layout.addWidget(mf)
+
+        # Segmentation menu
+        sf = self._create_segmentation_menu(parent)
+        layout.addWidget(sf)
+
+        # Options panel
+        options = self._create_options_gui(parent)
+        layout.addWidget(options)
+
+        # Segment, Group, Ungroup, ... buttons
+        bf = self._create_action_buttons(parent)
+        layout.addWidget(bf)
+
+        # Status line
+        self._status_label = sl = QLabel(parent)
+        layout.addWidget(sl)
+        
+        layout.addStretch(1)    # Extra space at end
+
+        tw.manage(placement="side")
+
+        session.triggers.add_handler('remove models', self.model_closed_cb)
+
+    def _create_map_menu(self, parent):
+        from PyQt5.QtWidgets import QFrame, QHBoxLayout, QLabel
+        
+        mf = QFrame(parent)
         mlayout = QHBoxLayout(mf)
         mlayout.setContentsMargins(0,0,0,0)
         mlayout.setSpacing(10)
@@ -86,77 +106,207 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
         mlayout.addWidget(sm)
         from chimerax.ui.widgets import ModelMenuButton
         from chimerax.map import Volume
-        self._map_menu = mm = ModelMenuButton(session, class_filter = Volume)
+        self._map_menu = mm = ModelMenuButton(self.session, class_filter = Volume)
         # mm.value_changed.connect(self._map_chosen_cb)
         mlayout.addWidget(mm)
         mlayout.addStretch(1)    # Extra space at end
 
-        # Segmentation menu
+        return mf
+
+    def _create_segmentation_menu(self, parent):
+        from PyQt5.QtWidgets import QFrame, QHBoxLayout, QLabel
+        
         sf = QFrame(parent)
-        layout.addWidget(sf)
         slayout = QHBoxLayout(sf)
         slayout.setContentsMargins(0,0,0,0)
         slayout.setSpacing(10)
         
-        self._seg_menu = cs = QLabel('Current segmentation', sf)
+        cs = QLabel('Current segmentation', sf)
         slayout.addWidget(cs)
         from chimerax.ui.widgets import ModelMenuButton
         from .regions import Segmentation
-        self._segmentation_menu = sm = ModelMenuButton(session, class_filter = Segmentation)
+        self._segmentation_menu = sm = ModelMenuButton(self.session, class_filter = Segmentation)
         # mm.value_changed.connect(self._map_chosen_cb)
         slayout.addWidget(sm)
         self._region_count = rc = QLabel('', sf)
         slayout.addWidget(rc)
 
         slayout.addStretch(1)    # Extra space at end
+
+        return sf
+    
+    def _create_menubar(self, parent):
+
+# Can't use QMenuBar since this takes over main window menu on Mac.
+#        from PyQt5.QtWidgets import QMenuBar
+#        mbar = QMenuBar(parent)
+#        mbar.setNativeMenuBar(False)	# On Mac keep menu in window, not top of screen.
+
+        from PyQt5.QtWidgets import QFrame, QHBoxLayout, QPushButton, QMenu
         
-        '''
-        sf = QFrame(parent)
-        layout.addWidget(sf)
+        mbar = QFrame(parent)
+        mbar.setStyleSheet('QFrame { background-color: white; }')
+        layout = QHBoxLayout(mbar)
+        layout.setContentsMargins(0,0,0,0)
+        layout.setSpacing(10)
+
+
+        file_menu_entries = (
+            ('Open segmentation...', self.OpenSegmentation),
+            ('Save segmentation', self.SaveSegmentation),
+            ('Save segmentation as...', self.SaveSegmentationAs),
+            ("Save selected regions to .mrc file...", self.WriteSelRegionsMRCFile),
+            ("Save all regions to .mrc file...", self.WriteAllRegionsMRCFile),
+            ("Save each region to .mrc file...", self.WriteEachRegionMRCFile),
+            ("Close segmentation", self.CloseSeg),
+            ("Close all segmentations except displayed", self.CloseHiddenSeg),
+            ("Close all segmentations", self.CloseAll),
+            ("Associate Selected", self.Associate),
+            )
+
+        fb = QPushButton('File', mbar)
+        button_style = 'QPushButton { border: none; } QPushButton::menu-indicator { image: none; }'
+        fb.setStyleSheet(button_style)
+        layout.addWidget(fb)
+        fmenu = QMenu(fb)
+        fb.setMenu(fmenu)
+        for text, func in file_menu_entries:
+            fmenu.addAction(text, func)
+
+        from . import attributes
+        regions_menu_entries = (
+            ('separator', None),
+            ("Show all", self.RegSurfsShowAll),
+            ("Show only selected", self.RegSurfsShowOnlySelected),
+            ("Show adjacent", self.RegSurfsShowAdjacent),
+            ('Show grouping', self.ShowUngroupedSurfaces),
+            ('Unshow grouping', self.ShowGroupSurfaces),
+            ("Hide", self.RegSurfsHide),
+            ("Make transparent", self.RegSurfsTransparent),
+            ("Make opaque", self.RegSurfsOpaque),
+            ('Color density map', self.ColorDensity),
+            ('separator', None),
+            ('Select groups', self.SelectGroups),
+            ('Select boundary regions', self.SelectBoundaryRegions),
+            ("Invert selection", self.Invert),
+            ("Regions overlapping current selection", self.Overlapping),
+            ('separator', None),
+            #("Group selected", self.JoinSelRegs),
+            #("Ungroup selected", self.UngroupSelRegs),
+            #("Smooth and group", self.SmoothAndGroupOneStep),
+            ("Delete selected regions", self.DelSelRegs),
+            ("Delete all except selected", self.DelExcSelRegs),
+            ("separator", None),
+            ("Enclosed volume", self.RegionsVolume),
+            ("Mean and SD", self.RegionMeanAndSD),
+            #("Mask map with selected", self.MaskMapWRegions),
+            #("Mask another map with selected (shrink map)", self.MaskAnotherMapWRegionsShrink),
+            #("Mask another map with selected (keep map dimensions)", self.MaskAnotherMapWRegions),
+            ("Extract densities...", self.ExtractDensities),
+            ("Subtract selected from map", self.SubtractRegionsFromMap),
+            ("Show axes for selected", self.ShowRegionAxesSelected),
+            ("Hide all axes", self.HideRegionAxes),
+            ("separator", None),
+            ("Attributes table...", attributes.show_region_attributes_dialog),
+            ("How many sub-regions", self.ShowNumSubRegs)
+            )
+
+        rb = QPushButton('Regions', mbar)
+        rb.setStyleSheet(button_style)
+        layout.addWidget(rb)
+        layout.addStretch(1)
+        rmenu = QMenu(rb)
+        rb.setMenu(rmenu)
+        for text, func in regions_menu_entries:
+            if text == 'separator':
+                rmenu.addSeparator()
+            else:
+                rmenu.addAction(text, func)
+
+        if dev_menus:
+            rmenu.add_separator()
+            for lbl, var, val, cmd in (
+                ("Surfaces around voxels", self.regsVisMode,
+                 'Voxel_Surfaces', self.RegsDispUpdate),
+                ("Map iso-surfaces", self.regsVisMode,
+                 'Iso_Surfaces', self.RegsDispUpdate),
+                #(" - delete files", self.deleteCloseFiles, 1, None),
+                ):
+                rmenu.add_radiobutton(label = lbl, variable = var, value = val,
+                                      command = cmd)
+            #rmenu.add_separator()
+            #for lbl, cmd in (#("Adjacency graph",self.RegionsAdjGraph),
+                #("Group connected", self.GroupConnectedRegs),
+                #("Select non-placed", self.SelectNonPlacedRegions),
+                #("Apply threshold", self.RegsDispThr),
+                #("Group connected", self.GroupConnectedRegs),
+                #("Group by contacts", self.GroupByContacts),
+                #("Group using all fits", self.GroupUsingFits),
+                #("Ungroup ALL", self.UngroupAllRegs),
+                #("Reduce map", self.ReduceMap),
+                #("Close", self.CloseRegions),
+                #):
+                #rmenu.add_command(label = lbl, command = cmd)
+            #self.deleteCloseFiles = Tkinter.IntVar()
+            #self.deleteCloseFiles.set ( 1 )
+
+            #rmenu.add_separator()
+            #for lbl, cmd in (
+            #    ("Mask map with selected (Cube Result)", self.MaskMapWRegionsCube),
+            #    ("Extract map cube around selected", self.ExtractMapWRegionsCube),
+            #    ):
+            #    rmenu.add_command(label = lbl, command = cmd)
+
+        if dev_menus:
+            graph_menu_entries = (
+                #('Save graph', self.SaveGraph),
+                #('Load graph', self.LoadGraph),
+                #'separator',
+                ('Create graph with uniform link radii', self.Graph),
+                #(' - Use maximum density between regions', self.GraphMaxD),
+                #(' - Use average density between regions', self.GraphAvgD),
+                (' - Use number of contacting voxel pairs', self.GraphN),
+                'separator',
+                ('Close graph', self.CloseGraph),
+                #('Break selected links', graph.break_selected_links),
+                #('Link selected', graph.link_selected),
+                #('Group regions using skeleton', self.GroupBySkeleton),
+                #('Join selected', self.GroupBySkeleton)
+                )
+            smenu = Hybrid.cascade_menu(menubar, 'Graph',
+                                        graph_menu_entries)
+
+        return mbar
+    
+    def _create_options_gui(self, parent):
         
-        slayout = QHBoxLayout(sf)
-        slayout.setContentsMargins(0,0,0,0)
-        slayout.setSpacing(10)
+        p = CollapsiblePanel(parent, 'Segmenting Options')
+        f = p.content_area
 
-        self._show_eraser = se = QCheckBox('Show map eraser sphere', sf)
-        se.setCheckState(Qt.Checked)
-        se.stateChanged.connect(self._show_eraser_cb)
-        slayout.addWidget(se)
-        from chimerax.ui.widgets import ColorButton
-        self._sphere_color = sc = ColorButton(sf, max_size = (16,16), has_alpha_channel = True)
-        sc.color = self._default_color
-        sc.color_changed.connect(self._change_color_cb)
-        slayout.addWidget(sc)
-        slayout.addStretch(1)    # Extra space at end
+        from PyQt5.QtWidgets import QVBoxLayout
+        layout = QVBoxLayout(f)
+        layout.setContentsMargins(30,0,0,0)
+        layout.setSpacing(0)
 
-        rf = QFrame(parent)
-        layout.addWidget(rf)
-        rlayout = QHBoxLayout(rf)
-        rlayout.setContentsMargins(0,0,0,0)
-        rlayout.setSpacing(4)
+        self._max_num_regions, self._surface_granularity = \
+            entries_row(f, 'Display at most', 60, 'regions, granularity', 1, 'voxels')
 
-        rl = QLabel('Radius', rf)
-        rlayout.addWidget(rl)
-        self._radius_entry = rv = QLineEdit('', rf)
-        rv.setMaximumWidth(40)
-        rv.returnPressed.connect(self._radius_changed_cb)
-        rlayout.addWidget(rv)
-        self._radius_slider = rs = QSlider(Qt.Horizontal, rf)
-        smax = self._max_slider_value
-        rs.setRange(0,smax)
-        rs.valueChanged.connect(self._radius_slider_moved_cb)
-        rlayout.addWidget(rs)
-
-        rv.setText('%.4g' % self._sphere_model.radius)
-        self._radius_changed_cb()
-
-        '''
-
-        options = self._create_options_gui(parent)
-        layout.addWidget(options)
+        self._min_region_size, self._min_contact_size = \
+            entries_row(f, 'Keep regions having at least', 1, 'voxels,', 0, 'contact voxels')
         
+        self._group_smooth, self._num_steps, self._step_size, self._target_num_regions = \
+            entries_row(f, False, 'Group by smoothing', 4, 'steps of size', 1.0, ', stop at', 1, 'regions')
+
+        self._group_con, self._num_steps_con, self._target_num_regions_con, self._group_by_con_only_visible = \
+            entries_row(f, True, 'Group by connectivity', 20, 'steps, stop at', 1, 'regions', False, 'only visible')
+
+        radio_buttons(self._group_smooth, self._group_con)
+        
+        return p
+
+    def _create_action_buttons(self, parent):
+        from PyQt5.QtWidgets import QFrame, QHBoxLayout, QPushButton
         bf = QFrame(parent)
-        layout.addWidget(bf)
         blayout = QHBoxLayout(bf)
         blayout.setContentsMargins(0,0,0,0)
         blayout.setSpacing(10)
@@ -175,40 +325,7 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
 
         blayout.addStretch(1)    # Extra space at end
 
-        self._status_label = sl = QLabel(parent)
-        layout.addWidget(sl)
-        
-        layout.addStretch(1)    # Extra space at end
-
-        tw.manage(placement="side")
-        
-    def _create_options_gui(self, parent):
-        
-        from PyQt5.QtWidgets import QFrame, QVBoxLayout, QLabel
-        f = QFrame(parent)
-
-        layout = QVBoxLayout(f)
-        layout.setContentsMargins(0,0,0,0)
-        layout.setSpacing(0)
-
-        ol = QLabel('<b>Segmenting Options</b>', parent)
-        layout.addWidget(ol)
-
-        self._max_num_regions, self._surface_granularity = \
-            entries_row(f, 'Display at most', 6000, 'regions, granularity', 1, 'voxels')
-
-        self._min_region_size, self._min_contact_size = \
-            entries_row(f, 'Keep regions having at least', 1, 'voxels,', 0, 'contact voxels')
-        
-        self._group_smooth, self._num_steps, self._step_size, self._target_num_regions = \
-            entries_row(f, False, 'Group by smoothing', 4, 'steps of size', 1, ', stop at', 1, 'regions')
-
-        self._group_con, self._num_steps_con, self._target_num_regions_con, self._group_by_con_only_visible = \
-            entries_row(f, True, 'Group by connectivity', 20, 'steps, stop at', 1, 'regions', False, 'only visible')
-
-        radio_buttons(self._group_smooth, self._group_con)
-        
-        return f
+        return bf
 
         
     @classmethod
@@ -224,10 +341,10 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
         self.Segment()
 
     def _group(self):
-        pass
+        self.Group()
 
     def _ungroup(self):
-        pass
+        self.Ungroup()
 
     @property
     def map_name(self):
@@ -240,9 +357,9 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
         return v
 
     def _get_chosen_segmentation(self):
-        return self._seg_menu.value
+        return self._segmentation_menu.value
     def _set_chosen_segmentation(self, seg):
-        self._seg_menu.value = seg
+        self._segmentation_menu.value = seg
     chosen_segmentation = property(_get_chosen_segmentation, _set_chosen_segmentation)
 
     @property
@@ -1045,7 +1162,7 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
 
     def Shortcuts (self) :
 
-        print("shortcuts")
+        debug("shortcuts")
         self.shortcutsPanelShownVar.set ( not self.shortcutsPanelShownVar.get() )
 
     def RSeg ( self ) :
@@ -1157,11 +1274,11 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
         from . import axes
         pts, weights = axes.map_points ( dmap )
         if len(pts) == 0 :
-            print(" - no pts at this threshold?")
+            debug(" - no pts at this threshold?")
             return
 
         COM, U, S, V = axes.prAxes ( pts )
-        print("com:", COM)
+        debug("com:", COM)
 
 
         #chimera.viewer.camera.center = chimera.Point ( COM[0], COM[1], COM[2] )
@@ -1184,51 +1301,39 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
 
     def OpenSegFiles(self, paths_and_types, open = True):
 
-        from chimera import tasks, CancelOperation
-        task = tasks.Task('Loading segmentation', modal = True)
         smods = []
-        try:
-            from . import segfile
-            importlib.reload (segfile)
-            for path, ftype in paths_and_types:
-                if ftype == 'Segmentation':
-                    try:
-                        smod = segfile.read_segmentation(path, open, task)
-                    except CancelOperation:
-                        break
-                elif ftype == 'Old regions file':
-                    dmap = self.SegmentationMap()
-                    if dmap is None:
-                        from chimera.replyobj import error
-                        from os.path import basename
-                        error('Segmentation map must be open before opening old-style segmentation file\n\n\t%s\n\nbecause file does not contain grid size and spacing.' % basename(path))
-                        return
-                    from . import regionsfile
-                    smod = regionsfile.ReadRegionsFile ( path, dmap )
-                smods.append(smod)
+        from . import segfile
+        importlib.reload (segfile)
+        for path, ftype in paths_and_types:
+            if ftype == 'Segmentation':
+                smod = segfile.read_segmentation(path, open)
+            elif ftype == 'Old regions file':
+                dmap = self.SegmentationMap()
+                if dmap is None:
+                    from os.path import basename
+                    self.session.logger.error(
+                        'Segmentation map must be open before opening old-style segmentation file\n\n\t%s\n\nbecause file does not contain grid size and spacing.' % basename(path))
+                    return
+                from . import regionsfile
+                smod = regionsfile.ReadRegionsFile ( path, dmap )
+            smods.append(smod)
 
-            if len(smods) == 0:
-                self.status ( "No segmentation was loaded." )
-                return
+        if len(smods) == 0:
+            self.status ( "No segmentation was loaded." )
+            return
 
-            for smod in smods:
-                smod.open_map()
+        for smod in smods:
+            smod.open_map()
 
-            # TODO: Can't control whether marker model is opened.
-            smod = smods[-1]
-            self.SetCurrentSegmentation(smod)
-            v = smod.volume_data()
-            if v:
-                self.SetMapMenu(v)
-            else :
-                self.status ( "Volume data not found" )
-            try:
-                self.RegsDispUpdate (task)
-            except CancelOperation:
-                pass
-
-        finally:
-            task.finished()
+        # TODO: Can't control whether marker model is opened.
+        smod = smods[-1]
+        self.SetCurrentSegmentation(smod)
+        v = smod.volume_data()
+        if v:
+            self.SetMapMenu(v)
+        else :
+            self.status ( "Volume data not found" )
+        self.RegsDispUpdate ()
 
         for s in smods:
             mname = os.path.basename(getattr(s, 'map_path', 'unknown'))
@@ -1274,7 +1379,7 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
             seg.name = os.path.basename(seg.path)
             self.chosen_segmentation.value = seg
 
-    def ModelClosed(self, trigger, n, mlist):
+    def model_closed_cb(self, trigger, mlist):
 
         # Clear menus that are showing closed models.
         if self.chosen_map in mlist:
@@ -1286,8 +1391,8 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
     def MapMenu ( self ) :
 
         self.mb.menu.delete ( 0, 'end' )        # Clear menu
-        from VolumeViewer import Volume
-        mlist = OML(modelTypes = [Volume])
+        from chimerax.map import Volume
+        mlist = self.session.models.list(type = Volume)
         for m in mlist :
             self.mb.menu.add_radiobutton ( label=m.name, variable=self.dmap,
                                            command=lambda m=m: self.MapSelected(m) )
@@ -1359,11 +1464,11 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
         if rmod is None:
             mm = self.SegmentationMap()
             if mm == None :
-                print(self.map_name, "not open");
+                debug(self.map_name, "not open");
                 return
             path = os.path.dirname(mm.data.path) + os.path.sep
             rfile = self.chosen_segmentation.name
-            print(" - opening seg file " + rfile + " for map " + mm.name)
+            debug(" - opening seg file " + rfile + " for map " + mm.name)
             rmod = self.OpenSegFiles ( [(path + rfile, 'Segmentation')] )[-1]
         else:
             rmod.display = True
@@ -1412,30 +1517,12 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
         if res <= 0:
             return
 
-        if smod.regions:
-            from chimera import tasks, CancelOperation
-            task = tasks.Task('Changing surface resolution', modal = True)
-            try:
-                smod.change_surface_resolution(res, task)
-            except CancelOperation:
-                pass
-            finally:
-                task.finished()
-        else:
-            smod.change_surface_resolution(res)
+        smod.change_surface_resolution(res)
 
 
     def NewMaxRegions ( self, event = None ):
 
-        from chimera import tasks, CancelOperation
-        task = tasks.Task('Redisplaying regions', modal = True)
-        try:
-            self.RegsDispUpdate (task)
-        except CancelOperation:
-            pass
-        finally:
-            task.finished()
-
+        self.RegsDispUpdate ()
 
     def CloseHiddenSeg ( self ) :
 
@@ -1490,7 +1577,7 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
         n2 = hj - lj + 1
         n3 = hk - lk + 1
 
-        print("Bounds - %d %d %d --> %d %d %d --> %d %d %d" % ( li, lj, lk, hi, hj, hk, n1,n2,n3 ))
+        debug("Bounds - %d %d %d --> %d %d %d --> %d %d %d" % ( li, lj, lk, hi, hj, hk, n1,n2,n3 ))
 
         self.status ( "Saving %d regions to mrc file..." % len(regs) )
 
@@ -1504,16 +1591,15 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
             nmat[k-lk,j-lj,i-li] = dmat[k,j,i]
 
         O = dmap.data.origin
-        print("origin:", O)
+        debug("origin:", O)
         nO = ( O[0] + float(li) * dmap.data.step[0],
                O[1] + float(lj) * dmap.data.step[1],
                O[2] + float(lk) * dmap.data.step[2] )
 
-        print("new origin:", nO)
+        debug("new origin:", nO)
 
         ndata = VolumeData.Array_Grid_Data ( nmat, nO, dmap.data.step, dmap.data.cell_angles )
-        try : nv = VolumeViewer.volume.add_data_set ( ndata, None )
-        except : nv = VolumeViewer.volume.volume_from_grid_data ( ndata )
+        nv = VolumeViewer.volume.volume_from_grid_data ( ndata )
 
         nv.name = os.path.basename ( path )
 
@@ -1592,7 +1678,7 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
             self.status ( "Must include '%d' in map file name for region number" )
             return
 
-        print("Saving each of %d regions to .mrc files" % len(regs))
+        debug("Saving each of %d regions to .mrc files" % len(regs))
 
         for reg in regs :
             self.SaveRegsToMRC ( [reg], dmap, path % (reg.rid,) )
@@ -1647,8 +1733,7 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
 
         sg = VolumeData.zone_masked_grid_data ( dmap.data, points, smod.seg_map.data.step[0] )
 
-        try : gv = VolumeViewer.volume.add_data_set ( sg, None )
-        except : gv = VolumeViewer.volume.volume_from_grid_data ( sg )
+        gv = VolumeViewer.volume.volume_from_grid_data ( sg )
         gv.openState.xform = dmap.openState.xform
         #chimera.openModels.add ( [gv] )
         gv.name = "Masked"
@@ -1705,7 +1790,7 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
 
         nze = numpy.nonzero ( regsm )
 
-        print(nze)
+        debug(nze)
 
         li = numpy.min ( nze[0] )
         lj = numpy.min ( nze[1] )
@@ -1723,16 +1808,16 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
         n2 = hj - lj + 1
         n3 = hk - lk + 1
 
-        print("Bounds - %d %d %d --> %d %d %d --> %d %d %d" % ( li, lj, lk, hi, hj, hk, n1,n2,n3 ))
+        debug("Bounds - %d %d %d --> %d %d %d --> %d %d %d" % ( li, lj, lk, hi, hj, hk, n1,n2,n3 ))
 
         self.status ( "Saving %d regions to mrc file..." % len(regs) )
 
         nmat = numpy.zeros ( (n1,n2,n3), numpy.float32 )
         #dmat = dmap.full_matrix()
 
-        print("map grid dim: ", numpy.shape ( dmap.full_matrix() ))
-        print("masked grid dim: ", numpy.shape ( regsm ))
-        print("new map grid dim: ", numpy.shape ( nmat ))
+        debug("map grid dim: ", numpy.shape ( dmap.full_matrix() ))
+        debug("masked grid dim: ", numpy.shape ( regsm ))
+        debug("new map grid dim: ", numpy.shape ( nmat ))
 
 
         #regs_name = ""
@@ -1742,16 +1827,15 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
             nmat[i-li,j-lj,k-lk] = regsm[i,j,k]
 
         O = dmap.data.origin
-        print("origin:", O)
+        debug("origin:", O)
         nO = ( O[0] + float(lk) * dmap.data.step[0],
                O[1] + float(lj) * dmap.data.step[1],
                O[2] + float(li) * dmap.data.step[2] )
 
-        print("new origin:", nO)
+        debug("new origin:", nO)
 
         ndata = VolumeData.Array_Grid_Data ( nmat, nO, dmap.data.step, dmap.data.cell_angles )
-        try : nv = VolumeViewer.volume.add_data_set ( ndata, None )
-        except : nv = VolumeViewer.volume.volume_from_grid_data ( ndata )
+        nv = VolumeViewer.volume.volume_from_grid_data ( ndata )
 
         nv.name = "Masked"
 
@@ -1783,7 +1867,7 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
 
         for rri, reg in enumerate ( regs ) :
 
-            print(" ---- Region %d/%d ---- " % (rri+1, len(regs)))
+            debug(" ---- Region %d/%d ---- " % (rri+1, len(regs)))
 
             points = reg.points().astype ( numpy.float32 )
 
@@ -1820,16 +1904,16 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
             li = ci - n2; lj = cj - n2; lk = ck - n2
             hi = ci + n2; hj = cj + n2; hk = ck + n2
 
-            print("Bounds - %d %d %d --> %d %d %d --> %d %d %d (%d)" % ( li, lj, lk, hi, hj, hk, n1, n2, n3, n ))
+            debug("Bounds - %d %d %d --> %d %d %d --> %d %d %d (%d)" % ( li, lj, lk, hi, hj, hk, n1, n2, n3, n ))
 
             self.status ( "Saving %d regions to mrc file..." % len(regs) )
 
             nmat = numpy.zeros ( (n,n,n), numpy.float32 )
             #dmat = dmap.full_matrix()
 
-            print("map grid dim: ", numpy.shape ( dmap.full_matrix() ))
-            print("masked grid dim: ", numpy.shape ( regsm ))
-            print("new map grid dim: ", numpy.shape ( nmat ))
+            debug("map grid dim: ", numpy.shape ( dmap.full_matrix() ))
+            debug("masked grid dim: ", numpy.shape ( regsm ))
+            debug("new map grid dim: ", numpy.shape ( nmat ))
 
 
             #regs_name = ""
@@ -1839,22 +1923,21 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
                 nmat[i-li,j-lj,k-lk] = mapVal
 
             O = dmap.data.origin
-            print("origin:", O)
+            debug("origin:", O)
             if 1 :
                 nO = ( O[0] + float(lk) * dmap.data.step[0],
                        O[1] + float(lj) * dmap.data.step[1],
                        O[2] + float(li) * dmap.data.step[2] )
-                print("new origin:", nO)
+                debug("new origin:", nO)
             else :
                 nO = ( -float(n2) * dmap.data.step[0],
                        -float(n2) * dmap.data.step[1],
                        -float(n2) * dmap.data.step[2] )
-                print("new origin:", nO)
+                debug("new origin:", nO)
 
 
             ndata = VolumeData.Array_Grid_Data ( nmat, nO, dmap.data.step, dmap.data.cell_angles )
-            try : nv = VolumeViewer.volume.add_data_set ( ndata, None )
-            except : nv = VolumeViewer.volume.volume_from_grid_data ( ndata )
+            nv = VolumeViewer.volume.volume_from_grid_data ( ndata )
 
             suff = "_CubeRid%d.mrc" % reg.rid
 
@@ -1908,7 +1991,7 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
             #li = li - bound; lj = lj - bound; lk = lk - bound
             #hi = hi + bound; hj = hj + bound; hk = hk + bound
 
-            print("Bounds - %d %d %d --> %d %d %d --> %d %d %d, %d" % ( li, lj, lk, hi, hj, hk, n1,n2,n3, n ))
+            debug("Bounds - %d %d %d --> %d %d %d --> %d %d %d, %d" % ( li, lj, lk, hi, hj, hk, n1,n2,n3, n ))
 
             self.status ( "Saving %d regions to mrc file..." % len(regs) )
 
@@ -1926,7 +2009,7 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
                             pass
 
             O = dmap.data.origin
-            print("origin:", O)
+            debug("origin:", O)
             nO = O
             if 1 :
                 nO = ( O[0] + float(li) * dmap.data.step[0],
@@ -1936,11 +2019,10 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
                 nO = ( -float(n2) * dmap.data.step[0],
                        -float(n2) * dmap.data.step[1],
                        -float(n2) * dmap.data.step[2] )
-                print("new origin:", nO)
+                debug("new origin:", nO)
 
             ndata = VolumeData.Array_Grid_Data ( nmat, nO, dmap.data.step, dmap.data.cell_angles )
-            try : nv = VolumeViewer.volume.add_data_set ( ndata, None )
-            except : nv = VolumeViewer.volume.volume_from_grid_data ( ndata )
+            nv = VolumeViewer.volume.volume_from_grid_data ( ndata )
 
             suff = "_MC_%d_%d_%d_%d.mrc" % (li, lj, lk, n)
 
@@ -1984,7 +2066,7 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
             self.status ( "Please select a map in the Segment Map dialog" )
             return []
 
-        print("Symmetry for", dmap.name)
+        debug("Symmetry for", dmap.name)
 
         from Measure.symmetry import find_point_symmetry
 
@@ -2036,8 +2118,8 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
 
         centers, syms = csyms
 
-        print("Showing %d symmetric copies..." % len(syms))
-        print("Centers:", centers)
+        debug("Showing %d symmetric copies..." % len(syms))
+        debug("Centers:", centers)
 
         com = centers[0]
         t_0_com = ( (1.0,0.0,0.0,-com[0]),
@@ -2080,7 +2162,7 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
 
 
         surf.name = "SymmetryRegionSurfs"
-        chimera.openModels.add ( [surf] )
+        self.session.models.add ( [surf] )
 
 
 
@@ -2088,11 +2170,11 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
 
         smod = self.CurrentSegmentation()
         if smod is None :
-            print(" - regs disp update - no smod")
+            debug(" - regs disp update - no smod")
             return
 
         if smod.volume_data() is None:
-            print(" - regs disp update - no smod")
+            debug(" - regs disp update - no smod")
             smod.set_volume_data(self.SegmentationMap())
 
         maxnr = self.MaximumRegionsToDisplay()
@@ -2131,11 +2213,11 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
         smod = self.CurrentSegmentation()
         if smod == None : return
 
-        print("%s - thresholding %d regions" % ( smod.name, len(smod.regions) ))
+        debug("%s - thresholding %d regions" % ( smod.name, len(smod.regions) ))
 
         dmap = self.SegmentationMap()
-        if dmap == None : print("Map %s not open" % self.map_name); return
-        print(" - using map:", dmap.name)
+        if dmap == None : debug("Map %s not open" % self.map_name); return
+        debug(" - using map:", dmap.name)
         dthr = dmap.minimum_surface_level
 
         for r in smod.regions : r.remove_surface()
@@ -2157,7 +2239,7 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
 
         for reg in smod.regions :
 
-            print("%d - %d %d %d" % ( reg.rid, reg.max_point[0], reg.max_point[1], reg.map_point[2] ))
+            debug("%d - %d %d %d" % ( reg.rid, reg.max_point[0], reg.max_point[1], reg.map_point[2] ))
 
 
     def ReduceMap ( self ) :
@@ -2178,7 +2260,7 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
         gv = VolumeViewer.volume.add_data_set ( ld, None )
         gv.name = mname + '_s2.mrc'
 
-        print("writing", path + gv.name)
+        debug("writing", path + gv.name)
         mod.write_file ( path + gv.name, "mrc" )
 
 
@@ -2201,7 +2283,7 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
                 self.status ( "Enter a symmetry string, e.g. D8" )
                 return [None, "No symmetry specified or found"]
 
-            print("Using symmetry:", sstring)
+            debug("Using symmetry:", sstring)
 
             from Measure.symmetry import centers_and_points
 
@@ -2215,12 +2297,12 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
             import Symmetry
 
             if sstring[0] == "D" :
-                print("Dihedral syms")
+                debug("Dihedral syms")
                 syms = Symmetry.dihedral_symmetry_matrices ( int(sstring[1]) )
                 csyms = [tcenters, syms]
 
             elif sstring[0] == "C" :
-                print("Cyclic syms")
+                debug("Cyclic syms")
                 syms = Symmetry.cyclic_symmetry_matrices ( int(sstring[1]) )
                 csyms = [tcenters, syms]
 
@@ -2241,11 +2323,11 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
         if self.chosen_map :
             from os.path import splitext
             mname, mext = splitext ( self.chosen_map.name )
-            print(" - current map: %s" % self.chosen_map.name)
+            debug(" - current map: %s" % self.chosen_map.name)
             remm = []
             for m in self.session.models.list() :
                 if ".seg" in m.name and mname in m.name :
-                    print(" - closing %s" % m.name)
+                    debug(" - closing %s" % m.name)
                     remm.append ( m )
             if len(remm) > 0 :
                 self.session.models.close ( remm )
@@ -2265,7 +2347,7 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
         if mm == None : self.status ( "%s is not open" % self.map_name ); return
 
         thrD = mm.minimum_surface_level
-        print("\n___________________________")
+        debug("\n___________________________")
         self.status ( "Segmenting %s, density threshold %f" % (mm.name, thrD) )
 
         csyms, sym_err = self.GetUseSymmetry ()
@@ -2311,7 +2393,7 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
 
         if timing :
             t4 = clock()
-            print("Time %.2f sec: watershed %.2f sec, small %.2f, group %.2f sec, display %.2f sec" % (t4-t0, t1-t0, t2-t1, t3-t2, t4-t3))
+            debug("Time %.2f sec: watershed %.2f sec, small %.2f, group %.2f sec, display %.2f sec" % (t4-t0, t1-t0, t2-t1, t3-t2, t4-t3))
 
         self.status ( '%d watershed regions, grouped to %d regions' % ( nwr, len(smod.regions)) )
 
@@ -2331,16 +2413,8 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
             return
 
         if task is None:
-            from chimera import tasks, CancelOperation
-            task = tasks.Task('Removing small regions', modal = True)
-            try:
-                smod.remove_small_regions(minsize, task)
-                self.RegsDispUpdate(task)
-            except CancelOperation:
-                self.status('Cancelled removing small regions')
-                return
-            finally:
-                task.finished()
+            smod.remove_small_regions(minsize)
+            self.RegsDispUpdate()
         else:
             smod.remove_small_regions(minsize, task)
             self.RegsDispUpdate(task)
@@ -2359,20 +2433,8 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
         if minsize <= 0:
             return
 
-        if task is None:
-            from chimera import tasks, CancelOperation
-            task = tasks.Task('Removing contact regions', modal = True)
-            try:
-                smod.remove_contact_regions(minsize, task)
-                self.RegsDispUpdate(task)
-            except CancelOperation:
-                self.status('Cancelled removing small regions')
-                return
-            finally:
-                task.finished()
-        else:
-            smod.remove_contact_regions(minsize, task)
-            self.RegsDispUpdate(task)
+        smod.remove_contact_regions(minsize)
+        self.RegsDispUpdate()
 
         self.ReportRegionCount(smod)
 
@@ -2396,12 +2458,11 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
             self.ReportRegionCount(smod)
             if regions:
                 from .regions import TopParentRegions
-                nsurfs = [r.surface_piece for r in TopParentRegions(regions)]
-                chimera.selection.setCurrent(nsurfs)
+                smod.select_regions(TopParentRegions(regions))
 
         else :
 
-            print(" - connection grouping step")
+            debug(" - connection grouping step")
 
 
     def GroupByContacts ( self ) :
@@ -2409,15 +2470,8 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
         smod = self.CurrentSegmentation()
         if smod == None : return
 
-        from chimera import tasks, CancelOperation
-        task = tasks.Task('Contact grouping', modal = True)
-        try:
-            regions.group_by_contacts(smod, task)
-            self.RegsDispUpdate(task)
-        except CancelOperation:
-            self.status('Cancelled contact grouping')
-        finally:
-            task.finished()
+        regions.group_by_contacts(smod)
+        self.RegsDispUpdate()
 
         self.SetColorLevelRange()
         self.ReportRegionCount(smod)
@@ -2433,7 +2487,7 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
             dmap.display = True
 
         for m in regions.segmentations ():
-            print('Closed', m.name)
+            debug('Closed', m.name)
             m.close()
 
         self.SetCurrentSegmentation ( None )
@@ -2444,10 +2498,10 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
 
         seg = self.CurrentSegmentation ()
         if seg :
-            print(" - seg: ", seg.name)
+            debug(" - seg: ", seg.name)
 
             if self.chosen_map :
-                print(" - map: " + self.chosen_map.name)
+                debug(" - map: " + self.chosen_map.name)
                 seg.set_volume_data ( self.chosen_map )
                 self.status ( "Map %s is now associated with %s" % (self.chosen_map.name, seg.name) )
             else :
@@ -2456,19 +2510,9 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
 
     def SmoothAndGroup ( self, smod, task = None ) :
 
-        try :
-            numit = int ( self.numSteps.get() )
-            sdev = float ( self.stepSize.get() )
-        except :
-            self.status ( "Enter an integer for # smoothing steps, float for step size" )
-            return
-
-        try :
-            targNRegs = int(self.targNRegions.get())
-        except :
-            self.status ( "Enter an integer for target # of regions" );
-            return
-
+        numit = self._num_steps.value
+        sdev =  self._step_size.value
+        targNRegs = self._target_num_regions.value
 
         csyms, sym_err = self.GetUseSymmetry ()
         if sym_err :
@@ -2503,7 +2547,7 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
             self.status ( "Enter an integer > 0 for target # of regions" )
             return
 
-        print(" - grouping %d steps, target %d" % (numit, targNRegs))
+        debug(" - grouping %d steps, target %d" % (numit, targNRegs))
 
         #smod.smooth_and_group(numit, sdev, targNRegs, csyms, task)
         smod.group_connected_n ( numit, targNRegs, None, csyms, task )
@@ -2535,7 +2579,7 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
             return
 
         regions = None
-        if  self.groupByConsOnlyVis.get() :
+        if  self._group_by_con_only_visible.value :
             regions = smod.visible_regions()
             if len(regions) == 0 :
                 self.status ("Grouping by connections: no visible regions found or they are from a different model" )
@@ -2544,18 +2588,8 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
             self.status ("Grouping by connections: applying only to %d regions visible" % len(regions) )
 
 
-        from chimera import tasks, CancelOperation
-        task = tasks.Task('Group by connections', modal = True)
-        try :
-
-            newRegs, removedRegs = smod.group_connected_n ( 1, 1, regions, csyms, task )
-            #self.RegsDispUpdate ( task )        # Display region surfaces
-
-        except CancelOperation :
-            self.status('Cancelled group by connections')
-            return
-        finally:
-            task.finished()
+        newRegs, removedRegs = smod.group_connected_n ( 1, 1, regions, csyms )
+        #self.RegsDispUpdate ( )        # Display region surfaces
 
         for r in newRegs : r.make_surface (None, None, smod.regions_scale)
         for r in removedRegs : r.remove_surface()
@@ -2582,11 +2616,7 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
             self.status ('%s has %d regions' % (smod.name, len(smod.regions)))
             return
 
-        try :
-            step = float ( self.stepSize.get() )
-        except :
-            self.status ( "Enter <float> for step size" )
-            return
+        step = self._step_size.value
 
         sdev = step + smod.smoothing_level
 
@@ -2600,25 +2630,16 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
             return
 
 
-        from chimera import tasks, CancelOperation
-        task = tasks.Task('Smooth and group', modal = True)
-        try:
-            while 1:
-                new_regs = len(smod.smooth_and_group(1, sdev, 1, csyms, task))
+        while 1:
+            new_regs = len(smod.smooth_and_group(1, sdev, 1, csyms))
 
-                # if symmetry is being used we should stop after one step
-                # since symmetry can block regions from joining indefinitely
-                if csyms or new_regs > 0 : break
+            # if symmetry is being used we should stop after one step
+            # since symmetry can block regions from joining indefinitely
+            if csyms or new_regs > 0 : break
 
-                self.status ('No new groups smoothing %.3g voxels' % sdev)
-                sdev += step
-            self.RegsDispUpdate ( task )         # Display region surfaces
-
-        except CancelOperation:
-            self.status('Cancelled smooth and group')
-            return
-        finally:
-            task.finished()
+            self.status ('No new groups smoothing %.3g voxels' % sdev)
+            sdev += step
+        self.RegsDispUpdate ( )         # Display region surfaces
 
         self.ReportRegionCount(smod)
 
@@ -2645,21 +2666,22 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
             self.status ( "No regions found in %s" % smod.name )
             return
 
-        selatoms = chimera.selection.currentAtoms()
+        from chimerax.atomic import selected_atoms
+        selatoms = selected_atoms(self.session)
         spoints = None
 
         if len ( selatoms ) > 0 :
             spoints = _multiscale.get_atom_coordinates ( selatoms, transformed = True )
 
         else :
-            mods = chimera.selection._currentSelection.models()
+            mods = self.session.selection.models()
             if len(mods) == 1 :
                 mod = mods[0]
-                print("Using for selection:", mod.name)
+                debug("Using for selection:", mod.name)
 
                 from . import axes
                 spoints, weights = axes.map_points ( mod, True )
-                print(" - map - got %d points in contour" % len (spoints))
+                debug(" - map - got %d points in contour" % len (spoints))
                 from _contour import affine_transform_vertices as transform_vertices
                 transform_vertices( spoints,  Matrix.xform_matrix( mod.openState.xform ) )
             else :
@@ -2673,7 +2695,7 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
             len(selatoms), len(smod.regions) ) )
 
         ovRatio = float ( self.overlappingPercentage.get() ) / 100.0
-        print(" - overlap ratio: %f" % ovRatio)
+        debug(" - overlap ratio: %f" % ovRatio)
 
         oregs = []
         for ri, r in enumerate ( smod.regions ) :
@@ -2696,17 +2718,17 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
     def GroupUsingFits ( self ) :
 
         dmap = self.SegmentationMap()
-        if dmap == None : print("Map %s not open" % self.map_name); return
+        if dmap == None : debug("Map %s not open" % self.map_name); return
 
         smod = self.CurrentSegmentation()
         if smod == None : return
 
-        if len(smod.regions) == 0 : print("No regions in", smod.name); return
+        if len(smod.regions) == 0 : debug("No regions in", smod.name); return
         try : dmap.fitted_mols
         except : dmap.fitted_mols = []
-        if len(dmap.fitted_mols) == 0 : print("No fits found for", dmap.name); return
+        if len(dmap.fitted_mols) == 0 : debug("No fits found for", dmap.name); return
 
-        print("Grouping %d regions by overlap to %d fitted structures" % (
+        debug("Grouping %d regions by overlap to %d fitted structures" % (
             len(smod.regions), len(dmap.fitted_mols) ))
 
         dmap.chain_maps = []
@@ -2737,14 +2759,7 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
         smod = self.CurrentSegmentation()
         if smod == None : return
 
-        from chimera import tasks, CancelOperation
-        task = tasks.Task('Showing all regions', modal = True)
-        try:
-            self.RegsDispUpdate(task)
-        except CancelOperation:
-            pass
-        finally:
-            task.finished()
+        self.RegsDispUpdate()
 
 
     def RegSurfsShowOnlySelected ( self ) :
@@ -2802,7 +2817,7 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
 
     def RegSurfsShowNotGrouped ( self ) :
 
-        print("Showing not-grouped regions...")
+        debug("Showing not-grouped regions...")
 
         smod = self.CurrentSegmentation()
         if smod == None : return
@@ -2819,44 +2834,28 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
 
     def SelectGrouped ( self ) :
 
-        print("Selecting grouped regions...")
+        debug("Selecting grouped regions...")
 
         smod = self.CurrentSegmentation()
         if smod == None : return
 
-        surfs = []
-        for reg in smod.regions :
-            if len(reg.cregs) > 0 :
-                if reg.surface_piece:
-                    surfs.append ( reg.surface_piece )
-
-        chimera.selection.clearCurrent ()
-        chimera.selection.addCurrent ( surfs )
-
-
+        smod.select_regions([reg for reg in smod.regions if len(reg.cregs) > 0], only = True)
 
 
     def SelectNotGrouped ( self ) :
 
-        print("Showing not-grouped regions...")
+        debug("Showing not-grouped regions...")
 
         smod = self.CurrentSegmentation()
         if smod == None : return
 
-        surfs = []
-        for reg in smod.regions :
-            if len(reg.cregs) == 0 :
-                if reg.surface_piece:
-                    surfs.append ( reg.surface_piece )
-
-        chimera.selection.clearCurrent ()
-        chimera.selection.addCurrent ( surfs )
+        smod.select_regions([reg for reg in smod.regions if len(reg.cregs) == 0], only = True)
 
 
 
     def RegSurfsShowGrouped ( self ) :
 
-        print("Showing grouped regions...")
+        debug("Showing grouped regions...")
 
         smod = self.CurrentSegmentation()
         if smod == None : return
@@ -2924,12 +2923,7 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
         smod = self.CurrentSegmentation()
         if smod == None : return
 
-        sel_regs = set ( smod.selected_regions() )
-        surfs = [r.surface_piece for r in smod.regions
-                 if 1]
-
-        chimera.selection.clearCurrent ()
-        chimera.selection.addCurrent ( surfs )
+        smod.select_regions(smod.regions)
 
 
     def Invert ( self ) :
@@ -2938,17 +2932,14 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
         if smod == None : return
 
         sel_regs = set ( smod.selected_regions() )
-        surfs = [r.surface_piece for r in smod.regions
-                 if not r in sel_regs and r.surface_piece]
 
-        chimera.selection.clearCurrent ()
-        chimera.selection.addCurrent ( surfs )
+        smod.select_regions([r for r in smod.regions if not r in sel_regs], only = True)
 
 
     def Group ( self ):
 
 
-        if NothingSelected():
+        if NothingSelected(self.session):
 
             if self.group_mode == 'smooth' :
                 self.SmoothAndGroupOneStep()
@@ -2976,7 +2967,7 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
         if smod.adj_graph :
             graph.create_graph ( smod, smod.graph_links )
 
-        chimera.selection.setCurrent([jreg.surface_piece])
+        smod.select_regions([jreg], only = True)
 
         self.ReportRegionCount(smod)
         self.status ( "Grouped %d regions" % len(regs) )
@@ -3025,12 +3016,11 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
 
     def Ungroup ( self ):
 
-        if NothingSelected():
-            self.UngroupLastSmoothing()
-        else:
+        smod = self.CurrentSegmentation()
+        if smod and smod.selected_regions():
             self.UngroupSelRegs()
-
-
+        else:
+            self.UngroupLastSmoothing()
 
 
     def SafeCreateSurfsForRegs ( self, smod, rlist, rregs ) :
@@ -3042,14 +3032,14 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
             if r.has_surface() :
                 nsurfs += 1
 
-        print(" - %d surfs have pieces before" % nsurfs)
+        debug(" - %d surfs have pieces before" % nsurfs)
 
         # surfs that will go away...
         for r in rregs :
             if r.has_surface() :
                 nsurfs -= 1
 
-        print(" - %d surfs will have pieces after removing selected" % nsurfs)
+        debug(" - %d surfs will have pieces after removing selected" % nsurfs)
 
 
         if nsurfs >= maxnr :
@@ -3063,17 +3053,10 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
             else :
                 self.status('Ungrouped to %d regions' % len(rlist) )
 
-            from chimera import tasks, CancelOperation
-            task = tasks.Task('Adding surfaces', modal = True)
-            try:
-                for ri, reg in enumerate ( rlist ) :
-                    if ri >= canshow :
-                        break
-                    reg.make_surface(None, None, smod.regions_scale)
-            except CancelOperation:
-                pass
-            finally:
-                task.finished()
+            for ri, reg in enumerate ( rlist ) :
+                if ri >= canshow :
+                    break
+                reg.make_surface(None, None, smod.regions_scale)
 
 
 
@@ -3110,18 +3093,18 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
             return
         sregs = regions.TopParentRegions(sregs)
 
-        chimera.selection.clearCurrent ()
+        smod.clear_selected_regions()
 
         [rlist, removedRegs] = smod.ungroup_regions ( sregs )
         self.SafeCreateSurfsForRegs ( smod, rlist, removedRegs )
         for r in removedRegs : r.remove_surface()
 
-        print(" - now %d regions" % len(smod.regions))
+        debug(" - now %d regions" % len(smod.regions))
 
         if smod.adj_graph :
             graph.create_graph ( smod, smod.graph_links )
 
-        chimera.selection.setCurrent ( [r.surface_piece for r in rlist if (hasattr(r,'surface_piece') and r.surface_piece != None)] )
+        smod.select_regions ( rlist )
 
         self.ReportRegionCount(smod)
 
@@ -3156,14 +3139,7 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
         rlist2 = []
         removedRegs = []
 
-        from chimera import tasks, CancelOperation
-        task = tasks.Task('Ungrouping', modal = True)
-        try:
-            [rlist2, removedRegs] = smod.ungroup_regions(rlev, task)
-        except CancelOperation:
-            pass
-        finally:
-            task.finished()
+        [rlist2, removedRegs] = smod.ungroup_regions(rlev)
 
         self.SafeCreateSurfsForRegs ( smod, rlist2, removedRegs )
         for r in removedRegs : r.remove_surface()
@@ -3183,7 +3159,7 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
         smod = self.CurrentSegmentation()
         if smod is None : return
 
-        chimera.openModels.remove ( smod )
+        self.session.models.close ( [smod] )
         self.SetCurrentSegmentation(None)
         self.ReportRegionCount(None)
 
@@ -3206,7 +3182,7 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
         if smod == None : return
 
         sregs = smod.selected_regions()
-        print("%d selected regions" % len(sregs))
+        debug("%d selected regions" % len(sregs))
 
         if len(sregs) == 0 :
             sregs = smod.regions
@@ -3312,7 +3288,7 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
             sp = r.surface_piece
             try :
                 sp.axes.display = True
-                chimera.openModels.close ( sp.axes )
+                self.session.models.close ( [sp.axes] )
             except :
                 pass
 
@@ -3351,26 +3327,26 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
         if smod == None : return
 
         sregs = smod.selected_regions()
-        if len(sregs)==0 : print("no selected regions found"); return
+        if len(sregs)==0 : debug("no selected regions found"); return
 
         self.ShowRegionsAxes ( sregs )
 
 
     def HideRegionAxes ( self ) :
 
-        print("hiding axes")
-        for m in OML() :
+        debug("hiding axes")
+        for m in self.session.models:
             t = m.name.split ("_")
             if t[0] == "region" and t[2] == "axes" :
-                print("- removing", m.name)
-                chimera.openModels.close( m )
+                debug("- removing", m.name)
+                self.session.models.close( [m] )
 
 
 
 
     def PointIndexesInMap ( self, points, ref_map ) :
 
-        print("Making map indices for %d points in %s" % ( len(points), ref_map.name ))
+        debug("Making map indices for %d points in %s" % ( len(points), ref_map.name ))
 
         _contour.affine_transform_vertices ( points, Matrix.xform_matrix ( ref_map.openState.xform.inverse() ) )
         _contour.affine_transform_vertices ( points, ref_map.data.xyz_to_ijk_transform )
@@ -3418,8 +3394,8 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
 
         #print points[0]
 
-        print("Making map indices for %s in %s" % ( mask_map.name, ref_map.name ))
-        print(" - %d points above %.3f" % ( len(points), thr ))
+        debug("Making map indices for %s in %s" % ( mask_map.name, ref_map.name ))
+        debug(" - %d points above %.3f" % ( len(points), thr ))
 
         # transform to index reference frame of ref_map
         f1 = mask_map.data.ijk_to_xyz_transform
@@ -3496,22 +3472,13 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
         if len(regs)==0 :
             regs = smod.regions
 
-        from chimera import tasks, CancelOperation
-        task = tasks.Task('Showing ungrouped surfaces', modal = True)
-        try:
-            for i, r in enumerate(regs):
-                if task and i % 100 == 0:
-                    task.updateStatus('region %d of %d' % (i, len(regs)))
-                if r.has_children():
-                    r.remove_surface()
-                    for c in r.childless_regions():
-                        c.make_surface()
-                else:
-                    r.make_surface()
-        except CancelOperation:
-            pass
-        finally:
-            task.finished()
+        for i, r in enumerate(regs):
+            if r.has_children():
+                r.remove_surface()
+                for c in r.childless_regions():
+                    c.make_surface()
+            else:
+                r.make_surface()
 
         if sregs:
             from .regions import all_regions
@@ -3567,16 +3534,15 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
         smod = self.CurrentSegmentation()
         if smod is None : return
 
-        nsel = 0
-        chimera.selection.clearCurrent ()
+        rlist = []
         for sp in smod.surfacePieces :
             try :
                 sp.region.placed
             except :
-                chimera.selection.addCurrent ( sp )
-                nsel = nsel + 1
+                rlist.append(sp.region)
+        smod.select_regions(rlist, only = True)
 
-        print("%d non-placed regions" % nsel)
+        debug("%d non-placed regions" % len(rlist))
 
 
     def mouse_group_cb(self):
@@ -3608,36 +3574,15 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
         return bspec
 
 
-def NothingSelected():
+def NothingSelected(session):
 
-    from chimera import selection
-    return selection.currentEmpty()
+    return session.selection.empty()
 
 
 def volume_segmentation_dialog ( create=False ) :
 
     from chimera import dialogs
     return dialogs.find ( Volume_Segmentation_Dialog.name, create=create )
-
-
-def show_volume_segmentation_dialog ():
-
-    from chimera import dialogs
-    d = volume_segmentation_dialog ( create = True )
-    # Avoid transient dialog resizing when created and mapped for first time.
-    d.toplevel_widget.update_idletasks ()
-    d.enter()
-
-    from Accelerators import add_accelerator
-    add_accelerator('gg', 'Group regions', d.JoinSelRegs )
-    add_accelerator('uu', 'Ungroup regions', d.UngroupSelRegs )
-    add_accelerator('rh', 'Hide regions', d.RegSurfsHide )
-    add_accelerator('rs', 'Show regions', d.RegSurfsShowOnlySelected )
-    add_accelerator('dd', 'Delete regions', d.DelSelRegs )
-    print("gg - groups regions")
-    print("uu - ungroup regions")
-
-    return d
 
 
 def current_segmentation(warn = True):
@@ -3678,6 +3623,10 @@ def entries_row(parent, *args):
             ie = IntegerEntry(f, a)
             layout.addWidget(ie.widget)
             values.append(ie)
+        elif isinstance(a, float):
+            fe = FloatEntry(f, a)
+            layout.addWidget(fe.widget)
+            values.append(fe)
     layout.addStretch(1)    # Extra space at end
 
     return values
@@ -3691,21 +3640,29 @@ def _uncheck_others(check_box, other_check_boxes):
         for ocb in other_check_boxes:
             if ocb is not check_box:
                 ocb.value = False
-                
-class IntegerEntry:
+
+class NumberEntry:
+    format = '%d'
+    string_to_value = int
     def __init__(self, parent, value, pixel_width = 40):
         from PyQt5.QtWidgets import QLineEdit
-        self._line_edit = le = QLineEdit('%d' % value, parent)
+        self._line_edit = le = QLineEdit(self.format % value, parent)
         le.setMaximumWidth(pixel_width)
     def _get_value(self):
-        return int(self._line_edit.text())
+        return self.string_to_value(self._line_edit.text())
     def _set_value(self, value):
-        self._line_edit.setText('%d' % value)
+        self._line_edit.setText(self.format % value)
     value = property(_get_value, _set_value)
     @property
     def widget(self):
         return self._line_edit
+                
+class IntegerEntry(NumberEntry):
+    pass
 
+class FloatEntry(NumberEntry):
+    format = '%.4g'
+    string_to_value = float
 
 class BooleanEntry:
     def __init__(self, parent, value):
@@ -3721,3 +3678,52 @@ class BooleanEntry:
     def widget(self):
         return self._check_box
 
+from PyQt5.QtWidgets import QWidget
+class CollapsiblePanel(QWidget):
+    def __init__(self, parent=None, title=''):
+        QWidget.__init__(self, parent=parent)
+
+        from PyQt5.QtWidgets import QFrame, QToolButton, QGridLayout, QSizePolicy
+        self.content_area = c = QFrame()
+        self.toggle_button = b = QToolButton()
+        self.main_layout = layout = QGridLayout()
+
+        from PyQt5.QtCore import Qt
+        b.setStyleSheet("QToolButton { border: none; font: 14px; }")
+        # TODO: Could not figure out a way to reduce left padding on disclosure arrow on Mac Qt 5.9
+#        b.setAttribute(Qt.WA_LayoutUsesWidgetRect)  # Avoid extra padding on Mac
+#        b.setStyleSheet("QToolButton { margin: 0; padding-left: 0px; border: none; font: 14px; }")
+#        b.setMaximumSize(20,10)
+#        b.setContentsMargins(0,0,0,0)
+        b.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+        b.setArrowType(Qt.RightArrow)
+        b.setText(str(title))
+        b.setCheckable(True)
+        b.setChecked(False)
+
+#        c.setStyleSheet("QFrame { background-color: white; border: none; }")
+        c.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        # start out collapsed
+        c.setMaximumHeight(0)
+        c.setMinimumHeight(0)
+
+        # don't waste space
+        layout.setVerticalSpacing(0)
+        layout.setContentsMargins(0, 0, 0, 0)
+        row = 0
+        layout.addWidget(b, row, 0, 1, 1, Qt.AlignLeft)
+        row += 1
+        layout.addWidget(c, row, 0, 1, 3)
+        self.setLayout(layout)
+
+
+        b.clicked.connect(self.toggle_panel_display)
+
+    def toggle_panel_display(self, checked):
+        from PyQt5.QtCore import Qt
+        arrow_type = Qt.DownArrow if checked else Qt.RightArrow
+        self.toggle_button.setArrowType(arrow_type)
+        c = self.content_area
+        h = c.sizeHint().height() if checked else 0
+        c.setMaximumHeight(h)
+        c.setMinimumHeight(h)
