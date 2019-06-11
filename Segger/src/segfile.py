@@ -46,7 +46,7 @@ def write_segmentation(seg, path = None):
         return
 
     import tables
-    h5file = tables.openFile(path, mode = 'w')
+    h5file = tables.open_file(path, mode = 'w')
 
     try:
 
@@ -59,36 +59,36 @@ def write_segmentation(seg, path = None):
         m = seg.mask
         atom = tables.Atom.from_dtype(m.dtype)
         filters = tables.Filters(complevel=5, complib='zlib')
-        ma = h5file.createCArray(root, 'mask', atom, m.shape, filters = filters)
+        ma = h5file.create_carray(root, 'mask', atom, m.shape, filters = filters)
         ma[:] = m
 
-        print(" - updating region colors...")
+        debug(" - updating region colors...")
         seg.region_colors ()
 
         from numpy import array, int32, float32
         rlist = list(seg.id_to_region.values())
-        rlist.sort(lambda r1,r2: cmp(r1.rid,r2.rid))
+        rlist.sort(key = lambda r: r.rid)
 
         rids = array([r.rid for r in rlist], int32)
-        h5file.createArray(root, 'region_ids', rids)
+        h5file.create_array(root, 'region_ids', rids)
 
         rcolors = array([r.color for r in rlist], float32)
-        h5file.createArray(root, 'region_colors', rcolors)
+        h5file.create_array(root, 'region_colors', rcolors)
 
         refpts = array([r.max_point for r in rlist], float32)
-        h5file.createArray(root, 'ref_points', refpts)
+        h5file.create_array(root, 'ref_points', refpts)
 
         slev = array([r.smoothing_level for r in rlist], float32)
-        h5file.createArray(root, 'smoothing_levels', slev)
+        h5file.create_array(root, 'smoothing_levels', slev)
 
         pids = array([(r.preg.rid if r.preg else 0) for r in rlist], int32)
-        h5file.createArray(root, 'parent_ids', pids)
+        h5file.create_array(root, 'parent_ids', pids)
 
         map = seg.volume_data()
         if map:
             d = map.data
             a.map_path = d.path
-            print(" - map path: ", d.path)
+            debug(" - map path: " + d.path)
             a.map_size = array(d.size, int32)
 
         if not seg.map_level is None:
@@ -97,7 +97,7 @@ def write_segmentation(seg, path = None):
         t = seg.point_transform()
         if t:
             from numpy import array, float32
-            a.ijk_to_xyz_transform = array(t, float32)
+            a.ijk_to_xyz_transform = array(t.matrix, float32)
 
         write_attributes(h5file, seg)
 
@@ -112,15 +112,52 @@ def write_segmentation(seg, path = None):
 
 # -----------------------------------------------------------------------------
 #
-def show_save_dialog(seg, saved_cb = None):
+def open_segmentation(session, path, name = None, **kw):
+    seg = read_segmentation(session, path, open = True)
+    if name is not None:
+        seg.name = name
 
-    def save ( okay, dialog, saved_cb = saved_cb ):
-        if okay:
-            paths = dialog.getPaths ( )
-            if paths:
-                write_segmentation ( seg, paths[0] )
-                if saved_cb:
-                    saved_cb(seg)
+    from .segment_dialog import Volume_Segmentation_Dialog
+    d = Volume_Segmentation_Dialog.get_singleton(session)
+    d.show_segmentation(seg)
+
+    return [seg], ''
+  
+# -----------------------------------------------------------------------------
+#
+def save_segmentation(session, path, format_name, models = None, **kw):
+    if models is None:
+        from chimerax.core.errors import UserError
+        raise UserError('Must specify segmentation model number to save')
+    elif len(models) != 1:
+        from chimerax.core.errors import UserError
+        raise UserError('Can only save 1 segmentation, got %d' % len(models))
+    seg = tuple(models)[0]
+    write_segmentation(seg, path)
+
+# -----------------------------------------------------------------------------
+#
+def register_segmentation_file_format(session):
+    from chimerax.core import io, toolshed
+    fmt = io.register_format('Segmentation', toolshed.VOLUME, ['.seg'], nicknames=['segger'],
+                             open_func=open_segmentation, export_func=save_segmentation)
+
+    # Register model menu option for save file dialog.
+    from chimerax.map.savemap import ModelSaveOptionsGUI
+    from .regions import Segmentation
+    ModelSaveOptionsGUI(session, fmt, Segmentation, 'Segmentation').register(session)
+
+# -----------------------------------------------------------------------------
+#
+def show_open_dialog(session, dir):
+
+    mw = session.ui.main_window
+    mw.show_file_open_dialog(session, format_name = 'Segmentation',
+                             initial_directory = dir)
+
+# -----------------------------------------------------------------------------
+#
+def show_save_dialog(seg, saved_cb = None):
 
     if hasattr(seg, 'path'):
         import os.path
@@ -129,10 +166,10 @@ def show_save_dialog(seg, saved_cb = None):
         idir = None
         ifile = seg.name
 
-    from OpenSave import SaveModeless
-    SaveModeless ( title = 'Save Segmentation %s' % seg.name,
-                   filters = [('Segmentation', '*.seg', '.seg')],
-                   initialdir = idir, initialfile = ifile, command = save )
+    mw = seg.session.ui.main_window
+    sd = mw.save_dialog
+    sd.display(mw, seg.session, format = 'Segmentation',
+               initial_directory = idir, initial_file = ifile, model = seg)
 
 # -----------------------------------------------------------------------------
 #
@@ -155,10 +192,10 @@ def write_attributes(h5file, seg):
     for (a,t), vals in list(aa.items()):
         gname = a.replace('/','_') + ' ' + t
         gnames.append(gname)
-        g = h5file.createGroup("/", gname, 'region attribute')
+        g = h5file.create_group("/", gname, 'region attribute')
         g._v_attrs.attribute_name = a
         rid = array([i for i,v in vals], uint32)
-        h5file.createArray(g, 'ids', rid, 'region id numbers')
+        h5file.create_array(g, 'ids', rid, 'region id numbers')
         if t == 'int':
             va = array([v for i,v in vals], int32)
         elif t == 'float':
@@ -167,11 +204,11 @@ def write_attributes(h5file, seg):
             va = [v for i,v in vals]
         elif t == 'image':
             va = [image_to_string(v) for i,v in vals]
-        h5file.createArray(g, 'values', va, 'attribute values')
+        h5file.create_array(g, 'values', va, 'attribute values')
         if t == 'image':
             g._v_attrs.value_type = 'PNG image'
 
-    h5file.createArray(h5file.root, 'attributes', gnames)
+    h5file.create_array(h5file.root, 'attributes', gnames)
 
 
 # -----------------------------------------------------------------------------
@@ -246,14 +283,14 @@ def write_skeleton(h5file, mset):
     import numpy
     skel = numpy.char.array(str(s.getvalue()), itemsize = 1)
     s.close()
-    h5file.createArray(h5file.root, 'skeleton', skel)
+    h5file.create_array(h5file.root, 'skeleton', skel)
 
 # -----------------------------------------------------------------------------
 #
-def read_segmentation(path, open = True, task = None):
+def read_segmentation(session, path, open = True, task = None):
 
     import tables
-    f = tables.openFile(path)
+    f = tables.open_file(path)
 
     try :
 
@@ -271,36 +308,34 @@ def read_segmentation(path, open = True, task = None):
         fname = os.path.basename(path)
 
         from .regions import Segmentation
-        s = Segmentation(fname, session, open = open)
+        s = Segmentation(fname, session)
 
         if 'map_path' in a:
             s.map_path = a.map_path
-            print(" - map path: " + s.map_path)
+            debug(" - map path: " + s.map_path)
         if 'map_level' in a:
             s.map_level = a.map_level
         if 'map_name' in a:
             s.map_name = a.map_name
-            print(" - map name: " + s.map_name)
+            debug(" - map name: " + s.map_name)
+
+        v = map_for_segmentation(session, s.map_path)
+        s.set_volume_data(v)
 
         if 'ijk_to_xyz_transform' in a:
-            s.ijk_to_xyz_transform = a.ijk_to_xyz_transform
+            from chimerax.core.geometry import Place
+            s.ijk_to_xyz_transform = Place(a.ijk_to_xyz_transform)
 
         s.mask = r.mask.read()
-        #print "mask:"pl
-        #print s.mask
         rids = r.region_ids.read()
-        #print "rids:"
-        #print rids
         rcolors = r.region_colors.read()
         refpts = r.ref_points.read()
         slevels = r.smoothing_levels.read() if hasattr(r, 'smoothing_levels') else None
         pids = r.parent_ids.read()
-        #print "pids:"
-        #print pids
 
         create_regions(s, rids, rcolors, refpts, slevels, pids, task)
 
-        print(" - created regions")
+        debug(" - created regions")
 
         read_attributes(f, s)
 
@@ -314,8 +349,32 @@ def read_segmentation(path, open = True, task = None):
 
     s.path = path
 
-    print(" - done reading seg file: " + path)
+    if open:
+        session.models.add([s])
+        
+    debug(" - done reading seg file: " + path)
     return s
+
+
+# -----------------------------------------------------------------------------
+#
+def map_for_segmentation(session, map_path):
+
+    from chimerax.map import Volume
+    for v in session.models.list(type = Volume):
+        if v.data.path == map_path:
+            return v
+
+    import os.path
+    if os.path.exists(map_path):
+        from chimerax.map.volume import open_map
+        mlist, msg = open_map(session, map_path)
+        if len(mlist) == 1:
+            v = mlist[0]
+            session.models.add([v])
+            return v
+
+    return None
 
 
 # -----------------------------------------------------------------------------
@@ -379,24 +438,6 @@ def depth_order(rids, id_to_child_ids, used):
 
 # -----------------------------------------------------------------------------
 #
-def show_open_dialog(dir, callback):
-
-    def open ( okay, dialog ):
-        if okay:
-            paths_types = dialog.getPathsAndTypes ( )
-            if paths_types:
-                callback ( paths_types )
-
-    from OpenSave import OpenModeless
-    OpenModeless ( title = 'Open Segmentation',
-                   initialdir = dir,
-                   filters = [('Segmentation', ['*.seg']),
-                              ('Old regions file', ['*_regions'])],
-                   defaultFilter = 'Segmentation',
-                   command = open )
-
-# -----------------------------------------------------------------------------
-#
 def read_skeleton(f, s):
 
     a = f.root
@@ -417,7 +458,7 @@ def read_skeleton(f, s):
         rid = int(m.extra_attributes['region_id'])
         m.region = id2r.get(rid, None)
         if m.region is None:
-            print('missing skeleton region', rid)
+            debug('missing skeleton region %d' % rid)
 
     s.adj_graph = skel
 
@@ -430,10 +471,10 @@ def read_patches(f, s):
     if not 'patches' in a :
         return
 
-    print(" - reading patches:")
+    debug(" - reading patches:")
 
     patches = list( a.patches )
-    print(patches)
+    debug(str(patches))
 
     import chimera
     from . import Mesh
@@ -443,29 +484,24 @@ def read_patches(f, s):
     for rg in patches:
 
         rgPath = rg._v_pathname
-        print(" - path: ", rgPath)
+        debug(" - path: %s" % rgPath)
         rid = rgPath [ len("/patches/"): ]
-        print("  - patch for region ", rid, " - type: ", rg._v_attrs["type"])
+        debug("  - patch for region %d - type: %s" % (rid, rg._v_attrs["type"]))
 
         if not 'verts' in rg or not 'tris' in rg :
-            print("  - tris or verts not found")
+            debug("  - tris or verts not found")
             continue
-
-        #print " - region ids:"
-        #print s.id_to_region
 
         try :
             reg = s.id_to_region[int(rid)]
         except :
-            print(" - did not find region for id")
+            debug(" - did not find region for id")
             continue
 
 
         verts = rg.verts.read()
         tris = rg.tris.read()
-        print("   - %d verts, %d tris" % (len(verts), len(tris)))
-        #print verts
-        #print tris
+        debug("   - %d verts, %d tris" % (len(verts), len(tris)))
 
         if mesh == None :
             mesh = Mesh.MeshFromVertsTris (verts, tris, color=reg.color, m=mesh)
@@ -473,3 +509,5 @@ def read_patches(f, s):
             chimera.openModels.add([mesh])
         else :
             mesh = Mesh.MeshFromVertsTris (verts, tris, color=reg.color, m=mesh)
+
+from .segment_dialog import debug

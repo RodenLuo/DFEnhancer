@@ -1,11 +1,16 @@
 from chimerax.core.toolshed import BundleAPI
 
 class _SeggerAPI(BundleAPI):
+    @staticmethod
+    def initialize(session, bundle_info):
+        """Register file formats, commands, and database fetch."""
+        from .segfile import register_segmentation_file_format
+        register_segmentation_file_format(session)
 
     @staticmethod
     def start_tool(session, tool_name):
         from .segment_dialog import Volume_Segmentation_Dialog
-        d = Volume_Segmentation_Dialog.get_singleton(session, tool_name)
+        d = Volume_Segmentation_Dialog.get_singleton(session)
         return d
 
     @staticmethod

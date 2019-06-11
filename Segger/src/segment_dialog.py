@@ -126,7 +126,7 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
         from chimerax.ui.widgets import ModelMenuButton
         from .regions import Segmentation
         self._segmentation_menu = sm = ModelMenuButton(self.session, class_filter = Segmentation)
-        # mm.value_changed.connect(self._map_chosen_cb)
+        sm.value_changed.connect(self._segmentation_menu_cb)
         slayout.addWidget(sm)
         self._region_count = rc = QLabel('', sf)
         slayout.addWidget(rc)
@@ -351,11 +351,12 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
         v = self._map_menu.value
         return v.name if v else ''
 
-    @property
-    def chosen_map(self):
-        v = self._map_menu.value
-        return v
-
+    def _get_chosen_map(self):
+        return self._map_menu.value
+    def _set_chosen_map(self, map):
+        self._map_menu.value = map
+    chosen_map = property(_get_chosen_map, _set_chosen_map)
+    
     def _get_chosen_segmentation(self):
         return self._segmentation_menu.value
     def _set_chosen_segmentation(self, seg):
@@ -1098,10 +1099,11 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
         cs, pairs = regions.connected_subsets(cg[:p])
 
         # Reset colors
+        from .regions import float_to_8bit_color
         for r in smod.regions:
             sp = r.surface_piece
             if sp:
-                sp.color = r.color
+                sp.color = float_to_8bit_color(r.color)
 
         # Color groups
         for rlist in cs:
@@ -1280,7 +1282,7 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
         dmap = self.SegmentationMap()
         dir = os.path.dirname(dmap.data.path) if dmap else None
         from . import segfile
-        segfile.show_open_dialog(dir, self.OpenSegFiles)
+        segfile.show_open_dialog(self.session, dir)
 
 
 
@@ -1290,7 +1292,7 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
         from . import segfile
         for path, ftype in paths_and_types:
             if ftype == 'Segmentation':
-                smod = segfile.read_segmentation(path, open)
+                smod = segfile.read_segmentation(self.session, path, open)
             elif ftype == 'Old regions file':
                 dmap = self.SegmentationMap()
                 if dmap is None:
@@ -1311,13 +1313,7 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
 
         # TODO: Can't control whether marker model is opened.
         smod = smods[-1]
-        self.SetCurrentSegmentation(smod)
-        v = smod.volume_data()
-        if v:
-            self.SetMapMenu(v)
-        else :
-            self.status ( "Volume data not found" )
-        self.RegsDispUpdate ()
+        self.show_segmentation(smod)
 
         for s in smods:
             mname = os.path.basename(getattr(s, 'map_path', 'unknown'))
@@ -1326,6 +1322,15 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
 
 
         return smods
+
+    def show_segmentation(self, smod):
+        self.SetCurrentSegmentation(smod)
+        v = smod.volume_data()
+        if v:
+            self.SetMapMenu(v)
+        else :
+            self.status ( "Volume data not found" )
+        self.RegsDispUpdate ()
 
 
     def SaveSegmentation(self):
@@ -1370,7 +1375,7 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
             self.SetMapMenu(None)
         if self.cur_seg in mlist:
             self.cur_seg = None
-            self.chosen_segmentation.value = None
+            self.chosen_segmentation = None
 
     def MapMenu ( self ) :
 
@@ -1383,7 +1388,7 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
 
     def SetMapMenu (self, dmap):
 
-        self.chosen_map.value = dmap
+        self.chosen_map = dmap
         self.cur_dmap = dmap
         #print "Set map menu to ", dmap.name
 
@@ -1441,7 +1446,11 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
             menu.add_radiobutton (
                 label=f, variable=self.regions_file, command=self.RFileSelected )
 
+    def _segmentation_menu_cb(self):
 
+        seg = self.chosen_segmentation
+        if seg:
+            self.RFileSelected(seg)
 
     def RFileSelected ( self, rmod = None ) :
 
@@ -1451,7 +1460,8 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
                 debug(self.map_name, "not open");
                 return
             path = os.path.dirname(mm.data.path) + os.path.sep
-            rfile = self.chosen_segmentation.name
+            seg = self.chosen_segmentation
+            rfile = seg.name
             debug(" - opening seg file " + rfile + " for map " + mm.name)
             rmod = self.OpenSegFiles ( [(path + rfile, 'Segmentation')] )[-1]
         else:
@@ -1470,7 +1480,7 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
         self.SetMapMenu(rmod.volume_data())
 
         self.status ( "Showing %s - %d regions, %d surfaces" %
-               (rfile, len(rmod.regions), len(rmod.surfacePieces)) )
+               (rfile, len(rmod.regions), len(rmod.child_drawings())) )
 
 
     def CurrentSegmentation ( self, warn = True ):
@@ -1513,7 +1523,7 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
         smod = self.CurrentSegmentation()
         if smod == None : return
 
-        for m in regions.segmentations () :
+        for m in regions.segmentations (self.session) :
             if not m.display:
                 self.status ( "Closed %s" % m.name )
                 m.close()
@@ -2355,6 +2365,7 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
             mend = '' if msp == -1 else msuf[msp:]
             segname = mbase + mend + '.seg'
             smod = regions.Segmentation(segname, mm.session, mm)
+            self.session.models.add([smod])
             self.SetSurfaceGranularity(smod)
             self.SetCurrentSegmentation(smod)
 
@@ -2479,7 +2490,7 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
         if dmap != None :
             dmap.display = True
 
-        for m in regions.segmentations ():
+        for m in regions.segmentations (self.session):
             debug('Closed', m.name)
             m.close()
 
@@ -2908,7 +2919,7 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
         for r in sregs :
             if r.has_surface():
                 cr,cg,cb = r.surface_piece.color[:3] #r.color[:3]
-                r.surface_piece.color = ( cr, cg, cb, 1.0 )
+                r.surface_piece.color = ( cr, cg, cb, 255 )
                 r.surface_piece.displayStyle = r.surface_piece.Mesh
                 r.surface_piece.lineThickness = 1.0
 

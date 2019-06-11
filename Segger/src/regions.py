@@ -9,7 +9,7 @@ from .segment_dialog import debug
 from chimerax.core.models import Surface
 class Segmentation ( Surface ):
 
-    def __init__(self, name, session, volume = None, open = True):
+    def __init__(self, name, session, volume = None):
 
         Surface.__init__(self, name, session)
 
@@ -29,18 +29,14 @@ class Segmentation ( Surface ):
         self.seg_map = volume           # Map being segmented.
         self.map_level = None           # Good contouring level.
         tf = None if volume is None else volume.data.ijk_to_xyz_transform
-        debug(" - ijk_to_xyz tr: ", tf.matrix)
+        if tf:
+            debug(" - ijk_to_xyz tr: ", tf.matrix)
         self.ijk_to_xyz_transform = tf  # mask to physical coords
         self.surface_resolution = 1     # voxels
 
         self.adj_graph = None           # graph with regions as nodes
         self.graph_links = "uniform"    # how to compute radii of links in graph
         self.regions_scale = 1.0        # for shrinking regions in the graph
-
-        if open:
-            session.models.add([self])
-            if not volume is None:
-                self.position = volume.scene_position
 
     def volume_data(self):
 
@@ -216,7 +212,7 @@ class Segmentation ( Surface ):
 
         d = self.new_drawing(name)
         d.set_geometry(vertices, normals, triangles)
-        d.color = tuple(int(255*r) for r in rgba)
+        d.color = float_to_8bit_color(rgba)
         return d
 
 
@@ -866,15 +862,15 @@ class Segmentation ( Surface ):
         colors = ones((nid,4), float32)
         for r in regions:
             for c in r.all_regions():
-                clr = ''
+                clr = None
                 if r.surface_piece == None :
                     continue
                 elif r.surface_piece.vertex_colors is not None :
                     #debug(" - v color 0 : ", r.surface_piece.vertex_colors[0])
-                    clr = r.surface_piece.vertex_colors[0]
+                    clr = float_from_8bit_color(r.surface_piece.vertex_colors[0])
                 else :
                     #debug(" - s color : ", r.surface_piece.color)
-                    clr = r.surface_piece.color
+                    clr = float_from_8bit_color(r.surface_piece.color)
                 colors[c.rid] = clr
                 r.color = clr
         return colors
@@ -978,7 +974,7 @@ class Region:
         self.max_point = None     # Position of local maximum
         self.surface_piece = None       # Displayed surface.
 
-        self.color = random_color()         # Surface color
+        self.color = random_color()         # Surface color, rgba 0-1 values
         self.placed = False
 
         if children:
@@ -1064,7 +1060,7 @@ class Region:
 
         self.color = color
         if self.surface_piece:
-            self.surface_piece.color = color
+            self.surface_piece.color = float_to_8bit_color(color)
 
     def surface ( self ) :
 
@@ -1878,3 +1874,8 @@ def childless_regions(regions):
     for r in regions:
         c.update(r.childless_regions())
     return c
+
+def float_to_8bit_color(rgba):
+    return tuple(int(255*r) for r in rgba)
+def float_from_8bit_color(rgba):
+    return tuple(r/255 for r in rgba)
