@@ -74,7 +74,7 @@ class Segmentation ( Surface ):
     def grid_step(self):
 
         tf = self.point_transform()
-        from Matrix import length
+        from chimerax.core.geometry import length
         step = [length([tf[r][c] for r in (0,1,2)]) for c in (0,1,2)]
         return step
 
@@ -359,7 +359,6 @@ class Segmentation ( Surface ):
 
     def find_sym_regions ( self, csyms, task=None ) :
 
-        import Matrix
         import _contour
         import numpy
 
@@ -423,7 +422,7 @@ class Segmentation ( Surface ):
 
                 # transform the region points using symmetry matrix
                 rpoints = r.points ().astype ( numpy.float32 )
-                tf = Matrix.multiply_matrices( t_to_com, smat, t_0_com )
+                tf = t_to_com * smat * t_0_com
                 _contour.affine_transform_vertices ( rpoints, tf )
 
                 # and get region ids from the map at the transformed points
@@ -801,7 +800,8 @@ class Segmentation ( Surface ):
                 surf_sp = None
                 surf_sp0 = None
                 for sp in dmap.surfaces :
-                    v, t = sp.geometry
+                    v = sp.vertices
+                    t = sp.triangles
                     #debug("- %d vertices, %d tris" % (len(v), len(t)))
                     if len(v) == 8 and len(t) == 12 :
                         continue
@@ -810,8 +810,8 @@ class Segmentation ( Surface ):
                     else :
                         surf_sp = sp
 
-                try : vt = surf_sp.geometry
-                except : vt = surf_sp0.geometry
+                try : v,t = surf_sp.vertices, surf_sp.triangles
+                except : vt = surf_sp0.vertices, surf_sp0.triangles
 
                 cmatrix[:,:,:] = init_mat[:,:,:]
                 dmap.data.values_changed()
@@ -836,8 +836,8 @@ class Segmentation ( Surface ):
             return
 
         if not regions is None and len(regions) == 0:
-            for p in d.surface_piece_list:
-                p.vertexColors = None
+            for p in d.surfaces:
+                p.vertex_colors = None
             return
 
         m = self.mask
@@ -851,7 +851,7 @@ class Segmentation ( Surface ):
         cmap = self.region_colors(regions)
         offset = max(d.data.step)
 
-        color_surface_pieces(d.surface_piece_list, m, ijk_to_xyz, offset, cmap)
+        color_surface_pieces(d.surfaces, m, ijk_to_xyz, offset, cmap)
 
         color_solid(d, m, cmap)
 
@@ -871,9 +871,9 @@ class Segmentation ( Surface ):
                 clr = ''
                 if r.surface_piece == None :
                     continue
-                elif r.surface_piece.vertexColors is not None :
-                    #debug(" - v color 0 : ", r.surface_piece.vertexColors[0])
-                    clr = r.surface_piece.vertexColors[0]
+                elif r.surface_piece.vertex_colors is not None :
+                    #debug(" - v color 0 : ", r.surface_piece.vertex_colors[0])
+                    clr = r.surface_piece.vertex_colors[0]
                 else :
                     #debug(" - s color : ", r.surface_piece.color)
                     clr = r.surface_piece.color
@@ -1139,8 +1139,7 @@ class Region:
                 t_scale = ( (scale,0.0,0.0,0.0),
                             (0.0,scale,0.0,0.0),
                             (0.0,0.0,scale,0.0) )
-                import Matrix
-                tf = Matrix.multiply_matrices( t_to_com, t_scale, t_0_com, tf )
+                tf = t_to_com * t_scale * t_0_com * tf
 
             tf.transform_points(vertices, in_place = True)
 
@@ -1811,25 +1810,22 @@ def show_only_regions(rlist):
 
 def color_surface_pieces(plist, mask, ijk_to_xyz, offset, colormap):
 
-    import Matrix
-    xyz_to_ijk = Matrix.invert_matrix(ijk_to_xyz)
+    xyz_to_ijk = ijk_to_xyz.inverse()
 
     for p in plist:
-        v, t = p.geometry
-        n = p.normals
+        v, n, t = p.vertices, p.normals, p.triangles
         xyz = v - offset*n
-        import _interpolate as i
-        rid, outside = i.interpolate_volume_data(xyz, xyz_to_ijk, mask,
-                                                 'nearest')
+        from chimerax.map.data import interpolate_volume_data
+        rid, outside = interpolate_volume_data(xyz, xyz_to_ijk, mask, 'nearest')
         rid = rid.astype(numpy.uint32)    # Interpolation gives float32
         colors = colormap[rid,:]
-        p.vertexColors = colors
+        p.vertex_colors = colors
 
 def color_solid(v, mask, colormap):
 
     icmap = numpy.empty(colormap.shape, numpy.uint8)
-    import _volume
-    _volume.colors_float_to_uint(colormap, icmap)
+    from chimerax.map import _map
+    _map.colors_float_to_uint(colormap, icmap)
 
     # Swap red and blue.  colormap is RGBA but need BGRA
     r = icmap[:,0].copy()
@@ -1843,14 +1839,13 @@ def color_solid(v, mask, colormap):
         ms = m[slice] if slice else m
         # Numpy is 20x slower than _volume C++ routine.
         # colors[...] *= cmap[mask]
-        import _volume
-        _volume.indices_to_colors(ms, cmap, colors, modulate = True)
+        _map.indices_to_colors(ms, cmap, colors, modulate = True)
 
     v.mask_colors = cm
 
     # Update display.
-    if v.shown() and v.representation == 'solid':
-        v.close_solid()
+    if v.shown() and v.image_shown:
+        v.close_image()
         v.show()
 
 def union_bounds(bounds):
