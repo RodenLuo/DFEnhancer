@@ -85,7 +85,7 @@ class Segmentation ( Surface ):
             return 1
 
         from numpy.linalg import det
-        v = det([r[:3] for r in t])
+        v = det([r[:3] for r in t.matrix])
         return v
 
     def calculate_region_bounds(self):
@@ -359,7 +359,6 @@ class Segmentation ( Surface ):
 
     def find_sym_regions ( self, csyms, task=None ) :
 
-        import _contour
         import numpy
 
         centers, syms = csyms
@@ -423,7 +422,7 @@ class Segmentation ( Surface ):
                 # transform the region points using symmetry matrix
                 rpoints = r.points ().astype ( numpy.float32 )
                 tf = t_to_com * smat * t_0_com
-                _contour.affine_transform_vertices ( rpoints, tf )
+                tf.transform_points ( rpoints, in_place = True )
 
                 # and get region ids from the map at the transformed points
                 ipoints = numpy.round (rpoints).astype(numpy.int)
@@ -767,9 +766,8 @@ class Segmentation ( Surface ):
                 rpts = numpy.array ( [r.max_point for r in r.childless_regions()], numpy.float32 )
                 import MultiScale
                 vt = MultiScale.surface.surface_points ( rpts, 1.0, 0.1, .25, 5 )
-                import _contour
 
-                _contour.affine_transform_vertices ( vt[0], self.point_transform() )
+                self.point_transform().transform_points ( vt[0], in_place = True )
                 reg.make_surface ( vt[0], vt[1] )
 
             elif style == 'Iso_Surfaces' :
@@ -782,16 +780,16 @@ class Segmentation ( Surface ):
                 tpoints = reg.map_points()
                 vt = None
                 debug(" - reg %d, %d voxels" % (reg.rid, len(tpoints)))
-                import VolumeData
-                sg = VolumeData.zone_masked_grid_data( dmap.data, tpoints, dmap.data.step[0] )
+                from chimerax.map.data import zone_masked_grid_data
+                sg = zone_masked_grid_data( dmap.data, tpoints, dmap.data.step[0] )
                 m = sg.full_matrix()
 
                 cmatrix = dmap.data.full_matrix()
                 cmatrix[:,:,:] = m[:,:,:]
                 dmap.surface_levels = [ dmap.surface_levels[0] ]
                 dmap.region = ( dmap.region[0], dmap.region[1], [1,1,1] )
-                from VolumeViewer.volume import Rendering_Options
-                ro = Rendering_Options()
+                from chimerax.map.volume import RenderingOptions
+                ro = RenderingOptions()
                 #ro.surface_smoothing = True
                 #ro.smoothing_factor = .2
                 #ro.smoothing_iterations = 5
@@ -954,8 +952,7 @@ class Segmentation ( Surface ):
 
     def close(self):
 
-        from chimera import openModels as om
-        om.close ( [self] )
+        self.session.models.close([self])
 
         if self.adj_graph :
             self.adj_graph.close()
@@ -1029,8 +1026,7 @@ class Region:
 
         tpoints = numpy.array(self.points(), numpy.float32)
         tf = self.segmentation.point_transform()
-        import _contour
-        _contour.affine_transform_vertices ( tpoints, tf )
+        tf.transform_points ( tpoints, in_place = True )
         return tpoints
 
 
@@ -1042,8 +1038,7 @@ class Region:
         com /= self.point_count()
         if transform:
             tf = self.segmentation.point_transform()
-            import _contour
-            _contour.affine_transform_vertices ( com.reshape((1,3)), tf )
+            tf.transform_points ( com.reshape((1,3)), in_place = True )
 
         return com
 
@@ -1640,9 +1635,8 @@ def mask_volume(regions, volume) :
     if mgrid == None :
         return None
 
-    import VolumeViewer
-    nv = VolumeViewer.volume_from_grid_data ( mgrid, show_data = False,
-                                              show_dialog = False )
+    from chimerax.map import volume_from_grid_data
+    nv = volume_from_grid_data ( mgrid, volume.session, show_dialog = False )
     nv.copy_settings_from(volume)
     nv.show()
     return nv
@@ -1669,8 +1663,8 @@ def mask_data(regions, volume) :
     import os.path
     name = os.path.splitext ( volume.name )[0] + "_masked"
     d = volume.data
-    from VolumeData import Array_Grid_Data
-    mgrid = Array_Grid_Data ( mmat, d.origin, d.step, d.cell_angles, name=name)
+    from chimerax.map.data import ArrayGridData
+    mgrid = ArrayGridData ( mmat, d.origin, d.step, d.cell_angles, name=name)
 
     #import VolumeViewer
     #nv = VolumeViewer.volume_from_grid_data ( mgrid, show_data = False,
@@ -1724,11 +1718,10 @@ def remove_mask_volume(regions, volume) :
     import os.path
     name = os.path.splitext ( volume.name )[0] + "_imasked"
     d = volume.data
-    from VolumeData import Array_Grid_Data
-    mgrid = Array_Grid_Data ( vmat, d.origin, d.step, d.cell_angles, name=name)
-    import VolumeViewer
-    nv = VolumeViewer.volume_from_grid_data ( mgrid, show_data = False,
-                                              show_dialog = False )
+    from chimerax.map.data import ArrayGridData
+    mgrid = ArrayGridData ( vmat, d.origin, d.step, d.cell_angles, name=name)
+    from chimerax.map import volume_from_grid_data
+    nv = volume_from_grid_data ( mgrid, volume.session, show_dialog = False )
     nv.copy_settings_from(volume)
     nv.show()
     return nv
@@ -1759,7 +1752,7 @@ def mask_matrix(regions, from_matrix, to_matrix, binned_mask = (1,1,1)):
 
 def bin_size(mask_size, map_size):
 
-    br = [(t/s, t%s) for s,t in zip(mask_size, map_size)]
+    br = [(t//s, t%s) for s,t in zip(mask_size, map_size)]
     for b,r in br:
         if b < 1 or r >= b:
             return None
@@ -1772,8 +1765,8 @@ def select_regions(regions, create_surfaces = True):
     if len(surfs) < len(regions) and create_surfaces:
         surfs += make_surfaces([r for r in regions if not r.has_surface()])
 
-    from chimera import selection
-    selection.setCurrent(surfs)
+    for s in surfs:
+        s.highlighted = True
 
 def SelectedRegions():
 

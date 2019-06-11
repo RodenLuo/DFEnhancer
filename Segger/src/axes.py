@@ -1,39 +1,33 @@
 import numpy
 
 def AxesMod ( COM=[0,0,0], U=None, Extents=[30,30,30], rad=1.0, f=1.0,
-              alignTo = None ) :
+              alignTo = None, session = None ) :
 
-    import _surface
-    mol = _surface.SurfaceModel()
-    chimera.openModels.add([mol], sameAs = alignTo)
+    from chimerax.core.models import Model
+    mol = Model('axes', session)
+    mol.position = alignTo.scene_position
+    session.models.add([mol])
 
     axes = AddAxes ( rad, Extents[0]*f, Extents[1]*f, Extents[2]*f, 1.0, mol )
     axes.name = "Axes"
 
-    if U != None :
-        R = numpy.array([
+    if U is not None :
+        from chimerax.core.geometry import Place
+        R = Place([
             [  U[0,0], U[0,1], U[0,2], 0.0    ],
             [  U[1,0], U[1,1], U[1,2], 0.0    ],
             [  U[2,0], U[2,1], U[2,2], 0.0    ]  ] )
 
-        T = numpy.array([
+        T = Place([
             [  1.0, 0.0, 0.0, COM[0]   ],
             [  0.0, 1.0, 0.0, COM[1]   ],
             [  0.0, 0.0, 1.0, COM[2]   ]  ] )
 
-        import Matrix
-        M = Matrix.multiply_matrices ( T, R )
+        M = T * R
 
         ps = []
-        for p in axes.surfacePieces :
-            v, t = numpy.copy(p.geometry[0]), numpy.copy(p.geometry[1])
-            ps.append ( [v,t,p.color] )
-            axes.removePiece ( p )
-
-        import _contour
-        for p in ps :
-            _contour.affine_transform_vertices( p[0], M )
-            axes.addPiece ( p[0], p[1], p[2] )
+        for p in axes.child_drawings() :
+            p.set_geometry(M.transform_points( p.vertices ), p.normals, p.triangles)
 
         from random import random as rand
         clr = ( rand()*.7, rand()*.7, rand()*.7, 1.0 )
@@ -56,10 +50,9 @@ def AxesMod1 ( COM=[0,0,0], U=None, length=10.0, exfac=10.0, rad=1.0,
         toaxes.name = "Axes"
 
     #axes = AddAxes ( rad, Extents[0]*f, Extents[1]*f, Extents[2]*f, 1.0, mol )
-    pos = chimera.Vector(0,0,0)
-    #mol = AddArrow2 ( pos, chimera.Vector(1,0,0), lX, (cF,0,0,1), rad, mol )
-    #mol = AddArrow2 ( pos, chimera.Vector(0,1,0), lY, (0,cF,0,1), rad, mol )
-    naxes = AddArrow3 ( pos, chimera.Vector(0,0,1), length, (0,0,1,1), rad, _surface.SurfaceModel() )
+    #mol = AddArrow2 ( (0,0,0), (1,0,0), lX, (cF,0,0,1), rad, mol )
+    #mol = AddArrow2 ( (0,0,0), (0,1,0), lY, (0,cF,0,1), rad, mol )
+    naxes = AddArrow3 ( (0,0,0), (0,0,1), length, (0,0,1,1), rad, _surface.SurfaceModel() )
 
     if U != None :
         S = numpy.array([
@@ -87,10 +80,9 @@ def AxesMod1 ( COM=[0,0,0], U=None, length=10.0, exfac=10.0, rad=1.0,
         M = Matrix.multiply_matrices ( M, P )
         M = Matrix.multiply_matrices ( M, S )
 
-        import _contour
         for p in naxes.surfacePieces :
             v, t = numpy.copy(p.geometry[0]), numpy.copy(p.geometry[1])
-            _contour.affine_transform_vertices( v, M )
+            M.transform_points( v, in_place = True )
             toaxes.addPiece ( v,t,p.color )
 
 
@@ -101,15 +93,16 @@ def AxesMod1 ( COM=[0,0,0], U=None, length=10.0, exfac=10.0, rad=1.0,
 def AddArrow2 ( pos, v, d, clr=(0,1,1,1), rad=0.2, mol=None ) :
 
     if mol == None :
-        import _surface
-        mol = _surface.SurfaceModel()
-        chimera.openModels.add ( [mol] ) # , sameAs = alignTo)
-        mol.name = "Box"
+        from chimerax.core.models import Model
+        mol = Model('axes', session)
+        session.models.add([mol])
+        #mol.name = "Box"
 
     xf = AlignXf ( pos, v )
     mol = CylinderMesh2 (rad, rad, d-(rad*2), 40, clr, xf, mol )
 
-    xf = AlignXf ( pos+(v*(d-(rad*3))), v )
+    from numpy import array, float32
+    xf = AlignXf ( pos+(array(v,float32)*(d-(rad*3))), v )
     mol = CylinderMesh2 (rad*2, 0.01, rad*2, 40, clr, xf, mol )
 
     return mol
@@ -166,10 +159,10 @@ def CylinderSurf ( pos, v, d, clr=(0,1,1,1), rad=0.2, mol=None ) :
 
 def AddAxes ( rad, lX, lY, lZ, cF, mol ) :
 
-    pos = chimera.Vector(0,0,0)
-    mol = AddArrow2 ( pos, chimera.Vector(1,0,0), lX, (cF,0,0,1), rad, mol )
-    mol = AddArrow2 ( pos, chimera.Vector(0,1,0), lY, (0,cF,0,1), rad, mol )
-    mol = AddArrow2 ( pos, chimera.Vector(0,0,1), lZ, (0,0,cF,1), rad, mol )
+    pos = (0,0,0)
+    mol = AddArrow2 ( pos, (1,0,0), lX, (cF,0,0,1), rad, mol )
+    mol = AddArrow2 ( pos, (0,1,0), lY, (0,cF,0,1), rad, mol )
+    mol = AddArrow2 ( pos, (0,0,1), lZ, (0,0,cF,1), rad, mol )
     mol.name = "XYZ (RGB) Axes"
 
     return mol
@@ -177,20 +170,17 @@ def AddAxes ( rad, lX, lY, lZ, cF, mol ) :
 
 
 def AlignXf ( pos, v ) :
-    Z = v
-    Z.normalize()
+    from chimerax.core.geometry import normalize_vector, cross_product, Place
+    Z = normalize_vector(v)
     from random import random as rand
-    dZ = chimera.Vector( rand(), rand(), rand() )
-    dZ.normalize()
-    X = chimera.cross ( Z, dZ )
-    X.normalize ()
-    Y = chimera.cross ( Z, X )
-    Y.normalize ()
+    dZ = normalize_vector(( rand(), rand(), rand() ))
+    X = normalize_vector(cross_product ( Z, dZ ))
+    Y = normalize_vector(cross_product ( Z, X ))
 
-    xf = chimera.Xform.xform (
-        X.x, Y.x, Z.x, pos[0],
-        X.y, Y.y, Z.y, pos[1],
-        X.z, Y.z, Z.z, pos[2] )
+    xf = Place ([
+        [X[0], Y[0], Z[0], pos[0]],
+        [X[1], Y[1], Z[1], pos[1]],
+        [X[2], Y[2], Z[2], pos[2]] ])
 
     #xf3 = chimera.Xform.xform (
     #    d, 0, 0, 0,
@@ -336,7 +326,8 @@ def TriangleMeshDiv ( p1, p2, p3, div, color, xf, mol ) :
 
 def CylMesh (r1, r2, Length, div, color, xf) :
 
-    v = None
+    v = []
+    n = []
     vi = []
 
     # print "CylinderMesh:", div
@@ -347,26 +338,24 @@ def CylMesh (r1, r2, Length, div, color, xf) :
         psi = float(psi_i) * 360.0/float(div)
 
         #print "%.0f(%d)(%d)" % (psi, at, at-l),
-        x1 = r1 * numpy.sin(psi * numpy.pi/180)
-        y1 = r1 * numpy.cos(psi * numpy.pi/180)
+        a = psi * numpy.pi/180
+        s, c = numpy.sin(a), numpy.cos(a)
+        x1 = r1 * s
+        y1 = r1 * c
 
-        x2 = r2 * numpy.sin(psi * numpy.pi/180)
-        y2 = r2 * numpy.cos(psi * numpy.pi/180)
+        x2 = r2 * s
+        y2 = r2 * c
 
-        p = chimera.Point ( x1,y1,0 );
-        if xf : p = xf.apply ( p )
+        p = ( x1,y1,0 )
+        if xf : p = xf * p
+        v.append(p)
+        n.append(xf.transform_vector((s,c,0)))
 
-        if psi_i == 0 :
-            v = numpy.array( [ [p[0], p[1], p[2]], ], numpy.float32 )
-        else :
-            pt1 = numpy.array( [ [p[0], p[1], p[2]], ], numpy.float32 )
-            v = numpy.concatenate ( [v, pt1] )
-
-        p = chimera.Point ( x2,y2,Length );
-        if xf : p = xf.apply ( p )
-        pt2 = numpy.array( [ [p[0], p[1], p[2]], ], numpy.float32 )
-        v = numpy.concatenate ( [v, pt2] )
-
+        p = ( x2,y2,Length )
+        if xf : p = xf * p
+        v.append(p)
+        n.append(xf.transform_vector((s,c,0)))
+        
         at = at + 2
 
         if psi_i == 0 :
@@ -380,24 +369,31 @@ def CylMesh (r1, r2, Length, div, color, xf) :
             vi.extend(tris)
 
 
-    p = chimera.Point ( 0,0,0 );
-    if xf : p = xf.apply ( p )
-    pt1 = numpy.array( [ [p[0], p[1], p[2]], ], numpy.float32 )
-    v = numpy.concatenate ( [v, pt1] )
+    p = ( 0,0,0 )
+    if xf : p = xf * p
+    v.append(p)
+    n.append(xf.transform_vector((0,0,-1)))
 
-    p = chimera.Point ( 0,0,Length );
-    if xf : p = xf.apply ( p )
-    pt1 = numpy.array( [ [p[0], p[1], p[2]], ], numpy.float32 )
-    v = numpy.concatenate ( [v, pt1] )
+    p = ( 0,0,Length )
+    if xf : p = xf * p
+    v.append(p)
+    n.append(xf.transform_vector((0,0,1)))
 
-    return v, vi
+    from numpy import array, int32, float32
+    va = array(v, float32)
+    na = array(n, float32)
+    ta = array(vi, int32)
+    
+    return va, na, ta
 
 
 
 def CylinderMesh2 (r1, r2, Length, div, color, xf, mol) :
 
-    v, vi = CylMesh ( r1, r2, Length, div, color, xf )
-    sph = mol.addPiece ( v, vi, color )
+    v, n, vi = CylMesh ( r1, r2, Length, div, color, xf )
+    sph = mol.new_drawing('cylinder')
+    sph.set_geometry(v, n, vi)
+    sph.color = [int(255*r) for r in color]
     return mol
 
 
@@ -621,8 +617,7 @@ def SphereMesh (r, div, color, pos, mol) :
 
 def prAxes ( points ) :
 
-    com = numpy.sum(points, axis=0) / len(points)
-    C = chimera.Vector ( com[0], com[1], com[2] )
+    com = numpy.mean(points, axis=0)
 
     comv = numpy.ones_like ( points ) * com
     points = points - comv
@@ -648,24 +643,22 @@ def prAxes ( points ) :
     #U[1,2] = U[1,2] * -1.0
     #U[2,2] = U[2,2] * -1.0
 
-    return [C, U, S, V]
+    return [com, U, S, V]
 
 
 
 def map_points (fmap, useThreshold = True):
 
-    from _contour import affine_transform_vertices as transform_vertices
-
     mat = fmap.data.full_matrix()
-    threshold = fmap.surface_levels[0]
+    threshold = fmap.minimum_surface_level
 
     if useThreshold == False :
         #threshold = -1e9
         threshold = 1e-5
         #print " - not using threshold"
 
-    import _volume
-    points = _volume.high_indices(mat, threshold)
+    from chimerax.map import _map
+    points = _map.high_indices(mat, threshold)
     fpoints = points.astype(numpy.single)
     fpoint_weights = mat[points[:,2],points[:,1],points[:,0]]
 
@@ -674,7 +667,7 @@ def map_points (fmap, useThreshold = True):
         fpoints = numpy.take( fpoints, nz, axis=0 )
         fpoint_weights = numpy.take(fpoint_weights, nz, axis=0)
 
-    transform_vertices( fpoints, fmap.data.ijk_to_xyz_transform )
+    fmap.data.ijk_to_xyz_transform.transform_points( fpoints, in_place = True )
 
     if 0 : print("FitPoints from %s with threshold %.4f, %d nonzero" % (
         fmap.name, threshold, len(nz) ))
@@ -690,8 +683,7 @@ def AxesModOffset ( COM=[0,0,0], U=None, Extents=[30,30,30], rad=1.0, f=1.0,
     mol = _surface.SurfaceModel()
     chimera.openModels.add([mol], sameAs = alignTo)
 
-    pos = chimera.Vector(0,0,0)
-    axes = AddArrow2 ( pos, chimera.Vector(0,1,0), lY, (cF,.3,.3,1), rad, mol )
+    axes = AddArrow2 ( (0,0,0) , (0,1,0), lY, (cF,.3,.3,1), rad, mol )
 
     axes.name = "Riboarrow"
 
@@ -721,9 +713,8 @@ def AxesModOffset ( COM=[0,0,0], U=None, Extents=[30,30,30], rad=1.0, f=1.0,
             ps.append ( [v,t,p.color] )
             axes.removePiece ( p )
 
-        import _contour
         for p in ps :
-            _contour.affine_transform_vertices( p[0], M )
+            M.transform_points( p[0], in_place = True )
             axes.addPiece ( p[0], p[1], p[2] )
 
         from random import random as rand

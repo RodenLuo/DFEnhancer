@@ -1166,52 +1166,44 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
         self.shortcutsPanelShownVar.set ( not self.shortcutsPanelShownVar.get() )
 
     def RSeg ( self ) :
-        import Segger.rseg_dialog
-        importlib.reload ( Segger.rseg_dialog )
-        Segger.rseg_dialog.show_dialog()
+        from . import rseg_dialog
+        rseg_dialog.show_dialog()
 
     def ISeg ( self ) :
-        import Segger.iseg_dialog
-        importlib.reload ( Segger.iseg_dialog )
-        Segger.iseg_dialog.show_dialog()
+        from . import iseg_dialog
+        iseg_dialog.show_dialog()
 
     def SSE ( self ) :
         # self.ssePanelShownVar.set ( not self.ssePanelShownVar.get() )
-        import Segger.sse_dialog
-        importlib.reload ( Segger.sse_dialog )
-        Segger.sse_dialog.show_sse_dialog()
+        from . import sse_dialog
+        sse_dialog.show_sse_dialog()
 
     def SegLoop ( self ) :
         # self.ssePanelShownVar.set ( not self.ssePanelShownVar.get() )
-        import Segger.segloop_dialog
-        importlib.reload ( Segger.segloop_dialog )
-        Segger.segloop_dialog.show_dialog()
+        from . import segloop_dialog
+        segloop_dialog.show_dialog()
 
     def SegMod ( self ) :
         # self.ssePanelShownVar.set ( not self.ssePanelShownVar.get() )
-        import Segger.segmod_dialog
-        importlib.reload ( Segger.segmod_dialog )
-        Segger.segmod_dialog.show_dialog()
+        from . import segmod_dialog
+        segmod_dialog.show_dialog()
 
     def SegNA ( self ) :
         # self.ssePanelShownVar.set ( not self.ssePanelShownVar.get() )
-        import Segger.segna_dialog
-        importlib.reload ( Segger.segna_dialog )
-        Segger.segna_dialog.show_dialog()
+        from . import segna_dialog
+        segna_dialog.show_dialog()
 
 
     def Ar ( self ) :
         # self.ssePanelShownVar.set ( not self.ssePanelShownVar.get() )
-        import Segger.ar_dialog
-        importlib.reload ( Segger.ar_dialog )
-        Segger.ar_dialog.show_dialog()
+        from . import ar_dialog
+        ar_dialog.show_dialog()
 
 
     def Vr ( self ) :
         # self.ssePanelShownVar.set ( not self.ssePanelShownVar.get() )
-        import Segger.vr_dialog
-        importlib.reload ( Segger.vr_dialog )
-        Segger.vr_dialog.show_dialog()
+        from . import vr_dialog
+        vr_dialog.show_dialog()
 
 
     def CamMono ( self ) :
@@ -1223,49 +1215,42 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
 
     def ProMod ( self ) :
         # self.ssePanelShownVar.set ( not self.ssePanelShownVar.get() )
-        import Segger.promod_dialog
-        importlib.reload ( Segger.promod_dialog )
-        Segger.promod_dialog.show_dialog()
+        from . import promod_dialog
+        promod_dialog.show_dialog()
 
 
     def ModelZ ( self ) :
         # self.ssePanelShownVar.set ( not self.ssePanelShownVar.get() )
-        import Segger.modelz
-        importlib.reload ( Segger.modelz )
-        Segger.modelz.show_dialog()
+        from . import modelz
+        modelz.show_dialog()
 
     def MapQ ( self ) :
         # self.ssePanelShownVar.set ( not self.ssePanelShownVar.get() )
-        import Segger.mapq
-        importlib.reload ( Segger.mapq )
-        Segger.mapq.show_dialog()
+        from . import mapq
+        mapq.show_dialog()
 
 
     def Animate ( self ) :
         # self.ssePanelShownVar.set ( not self.ssePanelShownVar.get() )
-        import Segger.animate_dialog
-        importlib.reload ( Segger.animate_dialog )
-        Segger.animate_dialog.close_animate_dialog ()
-        Segger.animate_dialog.show_dialog()
+        from . import animate_dialog
+        animate_dialog.close_animate_dialog ()
+        animate_dialog.show_dialog()
 
     def FlexFit ( self ) :
         # self.ssePanelShownVar.set ( not self.ssePanelShownVar.get() )
-        import Segger.flexfit_dialog
-        importlib.reload ( Segger.flexfit_dialog )
-        Segger.flexfit_dialog.show_dialog()
+        from . import flexfit_dialog
+        flexfit_dialog.show_dialog()
 
 
     def Tomolog ( self ) :
         # self.ssePanelShownVar.set ( not self.ssePanelShownVar.get() )
-        import Segger.tomolog_dialog
-        importlib.reload ( Segger.tomolog_dialog )
-        Segger.tomolog_dialog.show_dialog()
+        from . import tomolog_dialog
+        tomolog_dialog.show_dialog()
 
     def GeoSeg ( self ) :
         # self.ssePanelShownVar.set ( not self.ssePanelShownVar.get() )
-        import Segger.geoseg_dialog
-        importlib.reload ( Segger.geoseg_dialog )
-        Segger.geoseg_dialog.show_dialog()
+        from . import geoseg_dialog
+        geoseg_dialog.show_dialog()
 
     def MapCOM ( self ) :
 
@@ -1303,7 +1288,6 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
 
         smods = []
         from . import segfile
-        importlib.reload (segfile)
         for path, ftype in paths_and_types:
             if ftype == 'Segmentation':
                 smod = segfile.read_segmentation(path, open)
@@ -1541,12 +1525,12 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
         segs = set([r.segmentation for r in regs])
         for s in segs:
             if tuple(s.grid_size()) != tuple(dmap.data.size):
-                from chimera import replyobj
-                replyobj.error('Cannot mask map.\n\n'
-                               'Map %s grid size (%d,%d,%d) does not match '
-                               'segmentation %s grid size (%d,%d,%d).'
-                               % ((dmap.name,) + tuple(dmap.data.size) +
-                                  (s.name,) + tuple(s.grid_size())))
+                msg = ('Cannot mask map.\n\n'
+                       'Map %s grid size (%d,%d,%d) does not match '
+                       'segmentation %s grid size (%d,%d,%d).'
+                       % ((dmap.name,) + tuple(dmap.data.size) +
+                          (s.name,) + tuple(s.grid_size())))
+                self.session.logger.error(msg)
                 return
 
         if path is None:
@@ -1598,12 +1582,14 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
 
         debug("new origin:", nO)
 
-        ndata = VolumeData.Array_Grid_Data ( nmat, nO, dmap.data.step, dmap.data.cell_angles )
-        nv = VolumeViewer.volume.volume_from_grid_data ( ndata )
+        from chimerax.map.data import ArrayGridData
+        ndata = ArrayGridData ( nmat, nO, dmap.data.step, dmap.data.cell_angles )
+        from chimerax.map import volume_from_grid_data
+        nv = volume_from_grid_data ( ndata, dmap.session )
 
         nv.name = os.path.basename ( path )
 
-        nv.openState.xform = dmap.openState.xform
+        nv.position = dmap.scene_position
 
         nv.write_file ( path, "mrc" )
 
@@ -1727,13 +1713,16 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
             npoints = r.points().astype ( numpy.float32 )
             points = numpy.concatenate ( [points, npoints], axis=0 )
 
-        _contour.affine_transform_vertices ( points, smod.seg_map.data.ijk_to_xyz_transform )
-        _contour.affine_transform_vertices ( points, Matrix.xform_matrix( smod.openState.xform ) )
-        _contour.affine_transform_vertices ( points, Matrix.xform_matrix( dmap.openState.xform.inverse() ) )
+        tf = (dmap.scene_position.inverse() *
+              smod.scene_position *
+              smod.seg_map.data.ijk_to_xyz_transform)
+        tf.transform_points ( points, in_place = True )
 
-        sg = VolumeData.zone_masked_grid_data ( dmap.data, points, smod.seg_map.data.step[0] )
+        from chimerax.map.data import zone_masked_grid_data
+        sg = zone_masked_grid_data ( dmap.data, points, smod.seg_map.data.step[0] )
 
-        gv = VolumeViewer.volume.volume_from_grid_data ( sg )
+        from chimerax.map import volume_from_grid_data
+        gv = volume_from_grid_data ( sg, dmap.session )
         gv.openState.xform = dmap.openState.xform
         #chimera.openModels.add ( [gv] )
         gv.name = "Masked"
@@ -1741,25 +1730,21 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
 
     def ExtractDensities ( self ) :
 
-        import Segger.extract_region_dialog
-        importlib.reload ( Segger.extract_region_dialog )
-
-        Segger.extract_region_dialog.show_extract_region_dialog()
+        from . import extract_region_dialog
+        extract_region_dialog.show_extract_region_dialog()
 
 
     def FitDialog ( self ) :
 
-        import Segger.fit_dialog
-        Segger.fit_dialog.close_fit_segments_dialog();
-        importlib.reload(Segger.fit_dialog);
-        Segger.fit_dialog.new_fit_segments_dialog()
+        from . import fit_dialog
+        fit_dialog.close_fit_segments_dialog();
+        fit_dialog.new_fit_segments_dialog()
 
 
     def GeoSegDialog ( self ) :
 
-        import Segger.geoseg;
-        importlib.reload(Segger.geoseg);
-        Segger.geoseg.show_dialog();
+        from . import geoseg;
+        geoseg.show_dialog();
 
 
     def MaskAnotherMapWRegionsShrink ( self ) :
@@ -1781,9 +1766,10 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
             npoints = r.points().astype ( numpy.float32 )
             points = numpy.concatenate ( [points, npoints], axis=0 )
 
-        _contour.affine_transform_vertices ( points, smod.seg_map.data.ijk_to_xyz_transform )
-        _contour.affine_transform_vertices ( points, Matrix.xform_matrix( smod.openState.xform ) )
-        _contour.affine_transform_vertices ( points, Matrix.xform_matrix( dmap.openState.xform.inverse() ) )
+        tf = (dmap.scene_position.inverse() *
+              smod.scene_position *
+              smod.seg_map.data.ijk_to_xyz_transform)
+        tf.transform_points ( points, in_place = True )
 
         sg = VolumeData.zone_masked_grid_data ( dmap.data, points, smod.seg_map.data.step[0] )
         regsm = sg.matrix()
@@ -1834,8 +1820,10 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
 
         debug("new origin:", nO)
 
-        ndata = VolumeData.Array_Grid_Data ( nmat, nO, dmap.data.step, dmap.data.cell_angles )
-        nv = VolumeViewer.volume.volume_from_grid_data ( ndata )
+        from chimerax.map.data import ArrayGridData
+        ndata = ArrayGridData ( nmat, nO, dmap.data.step, dmap.data.cell_angles )
+        from chimerax.map import volume_from_grid_data
+        nv = volume_from_grid_data ( ndata, dmap.session )
 
         nv.name = "Masked"
 
@@ -1871,9 +1859,10 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
 
             points = reg.points().astype ( numpy.float32 )
 
-            _contour.affine_transform_vertices ( points, smod.seg_map.data.ijk_to_xyz_transform )
-            _contour.affine_transform_vertices ( points, Matrix.xform_matrix( smod.openState.xform ) )
-            _contour.affine_transform_vertices ( points, Matrix.xform_matrix( dmap.openState.xform.inverse() ) )
+            tf = (dmap.scene_position.inverse() *
+                  smod.scene_position *
+                  smod.seg_map.data.ijk_to_xyz_transform)
+            tf.transform_points ( points, in_place = True )
 
             sg = VolumeData.zone_masked_grid_data ( dmap.data, points, smod.seg_map.data.step[0] )
             regsm = sg.matrix()
@@ -1936,8 +1925,10 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
                 debug("new origin:", nO)
 
 
-            ndata = VolumeData.Array_Grid_Data ( nmat, nO, dmap.data.step, dmap.data.cell_angles )
-            nv = VolumeViewer.volume.volume_from_grid_data ( ndata )
+            from chimerax.map.data import ArrayGridData
+            ndata = ArrayGridData ( nmat, nO, dmap.data.step, dmap.data.cell_angles )
+            from chimerax.map import volume_from_grid_data
+            nv = volume_from_grid_data ( ndata, dmap.session )
 
             suff = "_CubeRid%d.mrc" % reg.rid
 
@@ -2021,8 +2012,10 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
                        -float(n2) * dmap.data.step[2] )
                 debug("new origin:", nO)
 
-            ndata = VolumeData.Array_Grid_Data ( nmat, nO, dmap.data.step, dmap.data.cell_angles )
-            nv = VolumeViewer.volume.volume_from_grid_data ( ndata )
+            from chimerax.map.data import ArrayGridData
+            ndata = ArrayGridData ( nmat, nO, dmap.data.step, dmap.data.cell_angles )
+            from chimerax.map import volume_from_grid_data
+            nv = volume_from_grid_data ( ndata, dmap.session )
 
             suff = "_MC_%d_%d_%d_%d.mrc" % (li, lj, lk, n)
 
@@ -2142,7 +2135,7 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
                 tf = Matrix.multiply_matrices( t_to_com, smat, t_0_com )
 
                 points = numpy.array ( reg.points(), numpy.float32 )
-                _contour.affine_transform_vertices ( points, tf )
+                tf.transform_points ( points, in_place = True )
                 #print points
 
                 from MultiScale.surface import surface_points
@@ -2153,7 +2146,7 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
                                      smoothing_factor = .25,
                                      smoothing_iterations = 5 )
 
-                _contour.affine_transform_vertices ( vertices, ptf )
+                ptf.transform_points ( vertices, in_place = True )
 
                 nsp = surf.addPiece ( vertices, triangles, reg.color )
                 nsp.oslName = "Reg_%d_sym_%d" % (reg.rid, si)
@@ -2671,10 +2664,12 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
         spoints = None
 
         if len ( selatoms ) > 0 :
-            spoints = _multiscale.get_atom_coordinates ( selatoms, transformed = True )
+            spoints = selatoms.scene_coords
 
         else :
-            mods = self.session.selection.models()
+            
+            from chimerax.map import Volume
+            mods = [v for v in self.session.selection.models() if isinstance(v, Volume)]
             if len(mods) == 1 :
                 mod = mods[0]
                 debug("Using for selection:", mod.name)
@@ -2682,10 +2677,9 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
                 from . import axes
                 spoints, weights = axes.map_points ( mod, True )
                 debug(" - map - got %d points in contour" % len (spoints))
-                from _contour import affine_transform_vertices as transform_vertices
-                transform_vertices( spoints,  Matrix.xform_matrix( mod.openState.xform ) )
+                mod.scene_position.transform_points( spoints, in_place = True )
             else :
-                self.status ("0 or more than 1 model selected")
+                self.status ("0 or more than 1 volume model selected")
                 return
 
 
@@ -2694,7 +2688,9 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
         self.status ( "Overlapping %d atoms with %d regions" % (
             len(selatoms), len(smod.regions) ) )
 
-        ovRatio = float ( self.overlappingPercentage.get() ) / 100.0
+        #ovp = float ( self.overlappingPercentage.get() )
+        ovp = 50.0
+        ovRatio = ovp / 100.0
         debug(" - overlap ratio: %f" % ovRatio)
 
         oregs = []
@@ -3307,15 +3303,16 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
             sp.Extents[2] += 5.0
 
             from . import axes
-            importlib.reload (axes)
 
             if 0 :
             # for ribosome direction
                 sp.Extents[1] = sp.Extents[1] * float(self.axesFactor.get())
 
-                sp.axes = axes.AxesMod ( sp.COM, sp.U, sp.Extents, 6, 1.0, alignTo = sp.model )
+                sp.axes = axes.AxesMod ( sp.COM, sp.U, sp.Extents, 6, 1.0, alignTo = sp,
+                                         session = self.session )
             else :
-                sp.axes = axes.AxesMod ( sp.COM, sp.U, sp.Extents, 1.0, 1.1, alignTo = sp.model )
+                sp.axes = axes.AxesMod ( sp.COM, sp.U, sp.Extents, 1.0, 1.1, alignTo = sp,
+                                         session = self.session )
 
             sp.axes.name = "region_%d_axes" % r.rid
 
@@ -3335,11 +3332,14 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
     def HideRegionAxes ( self ) :
 
         debug("hiding axes")
+        mclose = []
         for m in self.session.models:
             t = m.name.split ("_")
             if t[0] == "region" and t[2] == "axes" :
                 debug("- removing", m.name)
-                self.session.models.close( [m] )
+                mclose.append(m)
+                
+        self.session.models.close( mclose )
 
 
 
@@ -3348,8 +3348,8 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
 
         debug("Making map indices for %d points in %s" % ( len(points), ref_map.name ))
 
-        _contour.affine_transform_vertices ( points, Matrix.xform_matrix ( ref_map.openState.xform.inverse() ) )
-        _contour.affine_transform_vertices ( points, ref_map.data.xyz_to_ijk_transform )
+        tf = ref_map.data.xyz_to_ijk_transform * ref_map.scene_position.inverse()
+        tf.transform_points ( points, in_place = True )
 
         imap = {}
         for fi, fj, fk in points :
@@ -3399,14 +3399,12 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
 
         # transform to index reference frame of ref_map
         f1 = mask_map.data.ijk_to_xyz_transform
-        f2 = Matrix.xform_matrix ( mask_map.openState.xform )
-        f3 = Matrix.xform_matrix ( ref_map.openState.xform.inverse() )
+        f2 = mask_map.scene_position
+        f3 = ref_map.scene_position.inverse()
         f4 = ref_map.data.xyz_to_ijk_transform
 
-        tf = Matrix.multiply_matrices( f2, f1 )
-        tf = Matrix.multiply_matrices( f3, tf )
-        tf = Matrix.multiply_matrices( f4, tf )
-        _contour.affine_transform_vertices ( points, tf )
+        tf = f4 * f3 * f2 * f1
+        tf.transform_points ( points, in_place = True )
 
         #_contour.affine_transform_vertices ( points, f1 )
         #_contour.affine_transform_vertices ( points, f2 )
@@ -3457,9 +3455,8 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
 
         if sregs:
             surfs = [r.surface() for r in regs if r.has_surface()]
-            from chimera import selection
-            selection.setCurrent(surfs)
-
+            for s in surfs:
+                s.highlighted = True
 
 
     def ShowUngroupedSurfaces ( self ) :
@@ -3483,8 +3480,8 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
         if sregs:
             from .regions import all_regions
             surfs = [r.surface() for r in all_regions(regs) if r.has_surface()]
-            from chimera import selection
-            selection.setCurrent(surfs)
+            for s in surfs:
+                s.highlighted = True
 
 
     def SelectGroups ( self ) :
