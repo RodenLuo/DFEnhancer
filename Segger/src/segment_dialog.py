@@ -3495,9 +3495,8 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
         rlist = [r for r in smod.regions if r.has_children()]
         from .regions import all_regions
         surfs = [r.surface() for r in all_regions(rlist) if r.has_surface()]
-        from chimera import selection
-        selection.setCurrent(surfs)
-
+        for s in surfs:
+            s.highlighted = True
 
 
     # Regions that have voxels on the mask boundary.
