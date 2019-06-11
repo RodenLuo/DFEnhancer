@@ -2882,7 +2882,7 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
         for r in sregs :
             if r.has_surface():
                 cr,cg,cb = r.surface_piece.color[:3] #r.color[:3]
-                r.surface_piece.color = ( cr, cg, cb, REG_OPACITY )
+                r.surface_piece.color = ( cr, cg, cb, int(255*REG_OPACITY) )
                 r.surface_piece.displayStyle = r.surface_piece.Solid
 
 
@@ -2897,7 +2897,7 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
         for r in sregs :
             if r.has_surface():
                 cr,cg,cb = r.surface_piece.color[:3] #r.color[:3]
-                r.surface_piece.color = ( cr, cg, cb, 1.0 )
+                r.surface_piece.color = ( cr, cg, cb, 255 )
                 r.surface_piece.displayStyle = r.surface_piece.Solid
 
 
