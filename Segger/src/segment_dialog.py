@@ -80,6 +80,10 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
         options = self._create_options_gui(parent)
         layout.addWidget(options)
 
+        # Shortcuts panel
+        shortcuts = self._create_shortcuts_gui(parent)
+        layout.addWidget(shortcuts)
+
         # Segment, Group, Ungroup, ... buttons
         bf = self._create_action_buttons(parent)
         layout.addWidget(bf)
@@ -94,6 +98,9 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
 
         session.triggers.add_handler('remove models', self.model_closed_cb)
 
+        from PyQt5.QtCore import QTimer
+        QTimer.singleShot(1000, self._help_line)
+        
     def _create_map_menu(self, parent):
         from PyQt5.QtWidgets import QFrame, QHBoxLayout, QLabel
         
@@ -221,7 +228,9 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
             if text == 'separator':
                 rmenu.addSeparator()
             else:
-                rmenu.addAction(text, func)
+                a = rmenu.addAction(text, func)
+                if text in ('Extract densities...', 'Attributes table...'):
+                    a.setEnabled(False)	# These are not ported to ChimeraX yet.
 
         if dev_menus:
             rmenu.add_separator()
@@ -303,6 +312,51 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
         radio_buttons(self._group_smooth, self._group_con)
         
         return p
+    
+    def _create_shortcuts_gui(self, parent):
+        
+        p = CollapsiblePanel(parent, 'Shortcuts Options')
+        f = p.content_area
+
+        from PyQt5.QtWidgets import QVBoxLayout
+        layout = QVBoxLayout(f)
+        layout.setContentsMargins(30,0,0,0)
+        layout.setSpacing(0)
+
+        rows = [('Select regions:', (('All', self.SelectAllRegions),
+                                     ("Over Sel. Atoms", self.Overlapping),
+                                     ("Invert", self.Invert),
+                                     ("Not-Grp", self.SelectNotGrouped),
+                                     ("Grouped", self.SelectGrouped))),
+                ('Selected regions:', (#("Group", self.Group),
+                                       #("Ungroup", self.Ungroup),
+                                       ("Hide", self.RegSurfsHide),
+                                       ("Show", self.RegSurfsShow),
+                                       ("Delete", self.DelSelRegs),
+                                       ("Tr.", self.RegSurfsTransparent),
+                                       ("Opaque", self.RegSurfsOpaque),
+                                       ("Mesh", self.RegSurfsMesh))),
+                ('Show regions: ', (("None", self.RegSurfsShowNone),
+                                    ("All", self.RegSurfsShowAll),
+                                    ("Only Sel.", self.RegSurfsShowOnlySelected),
+                                    ("Adj.", self.RegSurfsShowAdjacent),
+                                    ("Not-Grp", self.RegSurfsShowNotGrouped),
+                                    ("Grouped", self.RegSurfsShowGrouped))),
+
+                ('Other tools: ', (("Fit", None), #self.FitDialog),
+                                   ("Extract", None), #self.ExtractDensities),
+                                   ("iSeg", None), #self.ISeg),
+                                   #("SegLoop", self.SegLoop),
+                                   ("ProMod", None), #self.ProMod),
+                                   ("ModelZ", None), #self.ModelZ),
+                )),
+                ]
+        for title, buttons in rows:
+            r = button_row(f, title, buttons)
+            layout.addWidget(r)
+        layout.addStretch(1)
+        
+        return p
 
     def _create_action_buttons(self, parent):
         from PyQt5.QtWidgets import QFrame, QHBoxLayout, QPushButton
@@ -322,6 +376,10 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
         ugb = QPushButton('Ungroup', bf)
         ugb.clicked.connect(self._ungroup)
         blayout.addWidget(ugb)
+        
+        hb = QPushButton('Help', bf)
+        hb.clicked.connect(self._help)
+        blayout.addWidget(hb)
 
         blayout.addStretch(1)    # Extra space at end
 
@@ -333,9 +391,10 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
         from chimerax.core import tools
         return tools.get_singleton(session, Volume_Segmentation_Dialog, 'Segment Map', create=create)
 
-    def status(self, message):
+    def status(self, message, log = True):
         self._status_label.setText(message)
-        self.session.logger.info(message)
+        if log:
+            self.session.logger.info(message)
         
     def _segment(self):
         self.Segment()
@@ -346,6 +405,13 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
     def _ungroup(self):
         self.Ungroup()
 
+    def _help(self):
+        from chimerax.help_viewer import show_url
+        show_url(self.session, self.help)
+
+    def _help_line(self):
+        self.status('<font color=blue>To cite Segger or learn more about it press the Help button</font>', log = False)
+            
     @property
     def map_name(self):
         v = self._map_menu.value
@@ -374,70 +440,6 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
     def fillInUI(self, parent):
 
         self.group_mouse_mode = None
-
-        tw = parent.winfo_toplevel()
-        self.toplevel_widget = tw
-        tw.withdraw()
-
-        parent.columnconfigure(0, weight = 1)
-
-        row = 1
-
-        menubar = tkinter.Menu(parent, type = 'menubar', tearoff = False)
-        tw.config(menu = menubar)
-
-        file_menu_entries = (
-            ('Open segmentation...', self.OpenSegmentation),
-            ('Save segmentation', self.SaveSegmentation),
-            ('Save segmentation as...', self.SaveSegmentationAs),
-            ("Save selected regions to .mrc file...", self.WriteSelRegionsMRCFile),
-            ("Save all regions to .mrc file...", self.WriteAllRegionsMRCFile),
-            ("Save each region to .mrc file...", self.WriteEachRegionMRCFile),
-            ("Close segmentation", self.CloseSeg),
-            ("Close all segmentations except displayed", self.CloseHiddenSeg),
-            ("Close all segmentations", self.CloseAll),
-            ("Associate Selected", self.Associate),
-            )
-
-        fmenu = Hybrid.cascade_menu(menubar, 'File', file_menu_entries)
-
-        from . import attributes
-        regions_menu_entries = (
-            'separator',
-            ("Show all", self.RegSurfsShowAll),
-            ("Show only selected", self.RegSurfsShowOnlySelected),
-            ("Show adjacent", self.RegSurfsShowAdjacent),
-            ('Show grouping', self.ShowUngroupedSurfaces),
-            ('Unshow grouping', self.ShowGroupSurfaces),
-            ("Hide", self.RegSurfsHide),
-            ("Make transparent", self.RegSurfsTransparent),
-            ("Make opaque", self.RegSurfsOpaque),
-            ('Color density map', self.ColorDensity),
-            'separator',
-            ('Select groups', self.SelectGroups),
-            ('Select boundary regions', self.SelectBoundaryRegions),
-            ("Invert selection", self.Invert),
-            ("Regions overlapping current selection", self.Overlapping),
-            'separator',
-            #("Group selected", self.JoinSelRegs),
-            #("Ungroup selected", self.UngroupSelRegs),
-            #("Smooth and group", self.SmoothAndGroupOneStep),
-            ("Delete selected regions", self.DelSelRegs),
-            ("Delete all except selected", self.DelExcSelRegs),
-            "separator",
-            ("Enclosed volume", self.RegionsVolume),
-            ("Mean and SD", self.RegionMeanAndSD),
-            #("Mask map with selected", self.MaskMapWRegions),
-            #("Mask another map with selected (shrink map)", self.MaskAnotherMapWRegionsShrink),
-            #("Mask another map with selected (keep map dimensions)", self.MaskAnotherMapWRegions),
-            ("Extract densities...", self.ExtractDensities),
-            ("Subtract selected from map", self.SubtractRegionsFromMap),
-            ("Show axes for selected", self.ShowRegionAxesSelected),
-            ("Hide all axes", self.HideRegionAxes),
-            "separator",
-            ("Attributes table...", attributes.show_region_attributes_dialog),
-            ("How many sub-regions", self.ShowNumSubRegs)
-            )
 
         self.regsVisMode = tkinter.StringVar()
         self.regsVisMode.set ( 'Voxel_Surfaces' )
@@ -500,51 +502,9 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
         self.UseAllMods = tkinter.IntVar()
         self.UseAllMods.set ( 0 )
 
-        from chimera.tkgui import aquaMenuBar
-        aquaMenuBar(menubar, parent, row = 0, columnspan=3)
-
-        #self.status ( '')
-        f = tkinter.Frame(parent)
-        f.grid(column=0, row=row, sticky='ew')
-        row += 1
-
-        l = tkinter.Label(f, text='Segment map')
-        l.grid(column=0, row=0, sticky='w')
-
-        self.cur_dmap = None
-        self.dmap = tkinter.StringVar(parent)
-
-        self.mb  = tkinter.Menubutton ( f, textvariable=self.dmap, relief=tkinter.RAISED )
-        self.mb.grid (column=1, row=0, sticky='we', padx=5)
-        self.mb.menu  =  tkinter.Menu ( self.mb, tearoff=0, postcommand=self.MapMenu )
-        self.mb["menu"]  =  self.mb.menu
-
         if dev_menus:
             b = tkinter.Button(f, text="Ctr Rot", command=self.MapCOM)
             b.grid (column=6, row=0, sticky='w', padx=5)
-
-
-        f = tkinter.Frame(parent)
-        f.grid(column=0, row=row, sticky='ew')
-        row += 1
-
-        l = tkinter.Label(f, text='Current segmentation')
-        l.grid(column=0, row=0, sticky='w')
-
-        self.cur_seg = None
-        self.regions_file = tkinter.StringVar(parent)
-
-        rmb  = tkinter.Menubutton ( f, textvariable=self.regions_file,
-                                    relief=tkinter.RAISED )
-        rmb.grid (column=1, row=0, sticky='we', padx=5)
-        rmb.menu  =  tkinter.Menu ( rmb, tearoff=0,
-                                    postcommand=self.FillSegmentationMenu )
-        self.mbSegmentationMenu = rmb.menu
-        rmb["menu"]  = rmb.menu
-
-        rc = tkinter.Label(f, text='')
-        rc.grid(column=2, row=0, sticky='w')
-        self.regionCount = rc
 
 
         if dev_menus:
@@ -578,33 +538,6 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
 
         # --- Options Frame ----------------------------------------------------------------------
 
-        op = Hybrid.Popup_Panel(parent)
-        opf = op.frame
-        opf.grid(row = row, column = 0, sticky = 'news')
-        opf.grid_remove()
-        opf.columnconfigure(0, weight=1)
-        self.optionsPanel = op.panel_shown_variable
-        row += 1
-        orow = 0
-
-        dummyFrame = tkinter.Frame(opf, relief='groove', borderwidth=1)
-        tkinter.Frame(dummyFrame).pack()
-        dummyFrame.grid(row=orow,column=0,columnspan=7, pady=1, sticky='we')
-        orow += 1
-
-        cb = op.make_close_button(opf)
-        cb.grid(row = orow, column = 1, sticky = 'e')
-
-        l = tkinter.Label(opf, text='Segmenting Options', font = 'TkCaptionFont')
-        l.grid(column=0, row=orow, sticky='w', pady=5)
-        orow += 1
-
-        sopt = tkinter.Frame(opf)
-        sopt.grid(column=0, row=orow, sticky='ew', padx=10)
-        orow += 1
-
-        sorow = 0
-
         oft = Hybrid.Checkbutton(f, 'Use symmetry:', False )
         #oft.button.grid(row = 0, column = 0, sticky = 'w')
         self.useSymmetry = oft.variable
@@ -624,134 +557,6 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
             #b.grid (column=3, row=0, sticky='w', padx=5)
 
             #sorow += 1
-
-        if 1 :
-            f = tkinter.Frame(sopt)
-            f.grid(column=0, row=sorow, sticky='w')
-            sorow += 1
-
-            l = tkinter.Label(f, text='Display at most')
-            l.grid(column=0, row=0, sticky='w')
-
-            self.maxNumRegions = tkinter.StringVar(sopt)
-            self.maxNumRegions.set ( '6000' )
-            e = tkinter.Entry(f, width=5, textvariable=self.maxNumRegions)
-            e.grid(column=1, row=0, sticky='w', padx=5)
-            e.bind('<KeyPress-Return>', self.NewMaxRegions)
-
-            l = tkinter.Label(f, text='regions, granularity')
-            l.grid(column=2, row=0, sticky='w')
-
-
-            self.surfaceGranularity = tkinter.StringVar(sopt)
-            self.surfaceGranularity.set ( '1' )
-            e = tkinter.Entry(f, width=5, textvariable=self.surfaceGranularity)
-            e.bind('<KeyPress-Return>', self.NewSurfaceResolution)
-            e.grid(column=3, row=0, sticky='w', padx=5)
-
-            l = tkinter.Label(f, text='voxels')
-            l.grid(column=4, row=0, sticky='w')
-
-
-
-        if 1 :
-
-            f = tkinter.Frame(sopt)
-            f.grid(column=0, row=sorow, sticky='w')
-            sorow += 1
-
-            l = tkinter.Label(f, text="Keep regions having at least")
-            l.grid(column=0, row=0, sticky='w')
-
-            self.minRegionSize = tkinter.StringVar(parent)
-            self.minRegionSize.set ( '1' )
-            e = tkinter.Entry(f, width=5, textvariable=self.minRegionSize)
-            e.grid(column=1, row=0, sticky='w', padx=5)
-            e.bind('<KeyPress-Return>', lambda e: self.RemoveSmallRegions())
-
-            l = tkinter.Label(f, text='voxels')
-            l.grid(column=2, row=0, sticky='w')
-
-            l = tkinter.Label(f, text=', ')
-            l.grid(column=4, row=0, sticky='w')
-
-            self.minContactSize = tkinter.StringVar(parent)
-            self.minContactSize.set ( '0' )
-            e = tkinter.Entry(f, width=5, textvariable=self.minContactSize)
-            e.grid(column=5, row=0, sticky='w', padx=5)
-            e.bind('<KeyPress-Return>', lambda e: self.RemoveContactRegions())
-
-            l = tkinter.Label(f, text='contact voxels')
-            l.grid(column=6, row=0, sticky='w')
-
-
-        if 1 :
-
-            f = tkinter.Frame(sopt)
-            f.grid(column=0, row=sorow, sticky='w')
-            sorow += 1
-
-            self.groupMode = tkinter.StringVar()
-            self.groupMode.set ( 'cons' )
-
-
-            c = tkinter.Radiobutton(f, text="Group by Smoothing", variable=self.groupMode, value = 'smooth')
-            c.grid (column=0, row=0, sticky='w')
-
-            self.numSteps = tkinter.StringVar(sopt)
-            self.numSteps.set ( '4' )
-            e = tkinter.Entry(f, width=5, textvariable=self.numSteps)
-            e.grid(column=1, row=0, sticky='w', padx=5)
-
-            l = tkinter.Label(f, text='steps of size')
-            l.grid(column=2, row=0, sticky='w')
-
-            self.stepSize = ss = tkinter.StringVar(sopt)
-            ss.set('1')
-            e = tkinter.Entry(f, width=2, textvariable=self.stepSize)
-            e.grid(column=3, row=0, sticky='w', padx=5)
-
-            l = tkinter.Label(f, text=', stop at')
-            l.grid(column=4, row=0, sticky='w')
-
-            self.targNRegions = tkinter.StringVar(sopt)
-            self.targNRegions.set ( '1' )
-            e = tkinter.Entry(f, width=2, textvariable=self.targNRegions)
-            e.grid(column=5, row=0, sticky='w', padx=5)
-
-            l = tkinter.Label(f, text='regions')
-            l.grid(column=6, row=0, sticky='w')
-
-
-        if 1 :
-
-            f = tkinter.Frame(sopt)
-            f.grid(column=0, row=sorow, sticky='w')
-            sorow += 1
-
-            c = tkinter.Radiobutton(f, text="Group by Connectivity", variable=self.groupMode, value = 'cons')
-            c.grid (column=0, row=0, sticky='w')
-
-            self.numStepsCon = tkinter.StringVar(sopt)
-            self.numStepsCon.set ( '20' )
-            e = tkinter.Entry(f, width=5, textvariable=self.numStepsCon)
-            e.grid(column=1, row=0, sticky='w', padx=5)
-
-            l = tkinter.Label(f, text='steps, stop at')
-            l.grid(column=4, row=0, sticky='w')
-
-            self.targNRegionsCon = tkinter.StringVar(sopt)
-            self.targNRegionsCon.set ( '1' )
-            e = tkinter.Entry(f, width=2, textvariable=self.targNRegionsCon)
-            e.grid(column=5, row=0, sticky='w', padx=5)
-
-            l = tkinter.Label(f, text='regions')
-            l.grid(column=6, row=0, sticky='w')
-
-            oft = Hybrid.Checkbutton(f, 'only visible', False )
-            oft.button.grid(column=7, row=0, sticky='w')
-            self.groupByConsOnlyVis = oft.variable
-
 
 
 
@@ -2886,7 +2691,7 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
             if r.has_surface():
                 cr,cg,cb = r.surface_piece.color[:3] #r.color[:3]
                 r.surface_piece.color = ( cr, cg, cb, int(255*REG_OPACITY) )
-                r.surface_piece.displayStyle = r.surface_piece.Solid
+                r.surface_piece.display_style = r.surface_piece.Solid
 
 
     def RegSurfsOpaque ( self ) :
@@ -2901,7 +2706,7 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
             if r.has_surface():
                 cr,cg,cb = r.surface_piece.color[:3] #r.color[:3]
                 r.surface_piece.color = ( cr, cg, cb, 255 )
-                r.surface_piece.displayStyle = r.surface_piece.Solid
+                r.surface_piece.display_style = r.surface_piece.Solid
 
 
     def RegSurfsMesh ( self ) :
@@ -2916,8 +2721,8 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
             if r.has_surface():
                 cr,cg,cb = r.surface_piece.color[:3] #r.color[:3]
                 r.surface_piece.color = ( cr, cg, cb, 255 )
-                r.surface_piece.displayStyle = r.surface_piece.Mesh
-                r.surface_piece.lineThickness = 1.0
+                r.surface_piece.display_style = r.surface_piece.Mesh
+                #r.surface_piece.lineThickness = 1.0
 
 
 
@@ -3603,6 +3408,37 @@ def segmentation_map():
     if d:
         return d.SegmentationMap()
     return None
+
+def button_row(parent, title, name_and_callback_list, hspacing = 3):
+    from PyQt5.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton
+    f = QFrame(parent)
+#    f.setStyleSheet('QFrame { background-color: pink; padding-top: 0px; padding-bottom: 0px;}')
+    parent.layout().addWidget(f)
+
+    layout = QHBoxLayout(f)
+    layout.setContentsMargins(0,0,0,0)
+    layout.setSpacing(hspacing)
+
+    l = QLabel(title, f)
+    layout.addWidget(l)
+#    l.setStyleSheet('QLabel { background-color: pink;}')
+    
+    from PyQt5.QtCore import Qt
+    for name, callback in name_and_callback_list:
+        b = QPushButton(name, f)
+#        b.setMaximumSize(100,25)
+#        b.setStyleSheet('QPushButton { background-color: pink;}')
+#        b.setAttribute(Qt.WA_LayoutUsesWidgetRect) # Avoid extra padding on Mac
+        b.setStyleSheet('QPushButton { padding-left: 15px; padding-right: 15px; padding-top: 5px; padding-bottom: 2px;}')
+        if callback is None:
+            b.setEnabled(False)
+        else:
+            b.clicked.connect(callback)
+        layout.addWidget(b)
+
+    layout.addStretch(1)
+
+    return f
 
 def entries_row(parent, *args):
     from PyQt5.QtWidgets import QFrame, QHBoxLayout, QLabel
