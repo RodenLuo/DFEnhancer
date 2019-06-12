@@ -897,15 +897,15 @@ class Segmentation ( Surface ):
 
     def selected_regions ( self ) :
 
-        regions = [p.region for p in self.child_drawings()
+        regions = [p.region for p in self.region_surfaces
                    if hasattr(p, 'region') and p.region.segmentation is self and p.highlighted]
         return regions
 
 
     def clear_selected_regions ( self ) :
 
-        for p in self.child_drawings():
-            if hasattr(p, 'region') and p.region.segmentation is self and p.highlighted:
+        for p in self.region_surfaces:
+            if p.region.segmentation is self and p.highlighted:
                 p.highlighted = False
 
 
@@ -946,6 +946,10 @@ class Segmentation ( Surface ):
                 sp.display = display
                 sp.color = color
 
+    @property
+    def region_surfaces(self):
+        return [r.surface_piece for r in self.regions if r.surface_piece is not None]
+    
     def close(self):
 
         self.session.models.close([self])
@@ -1791,7 +1795,7 @@ def show_only_regions(rlist):
 
     segs = [r.segmentation for r in rlist]
     for s in segs:
-        for p in s.child_drawings():
+        for p in s.region_surfaces:
             p.display = False
         s.display = True
     for r in rlist:

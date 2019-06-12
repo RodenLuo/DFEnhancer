@@ -1480,7 +1480,7 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
         self.SetMapMenu(rmod.volume_data())
 
         self.status ( "Showing %s - %d regions, %d surfaces" %
-               (rfile, len(rmod.regions), len(rmod.child_drawings())) )
+               (rfile, len(rmod.regions), len(rmod.region_surfaces)) )
 
 
     def CurrentSegmentation ( self, warn = True ):
@@ -1551,14 +1551,12 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
             else :
                 fname = fprefix + "_%d_regions.mrc" % len(regs)
             dir = os.path.dirname ( dmap.data.path )
-            import OpenSave
-            d = OpenSave.SaveModal ( title = "Save Masked Map",
-                                     initialdir = dir, initialfile = fname,
-                                     filters = [('MRC map', '*.mrc', '.mrc')] )
-            paths_and_types = d.run ( self.toplevel_widget )
-            if paths_and_types:
-                path = paths_and_types[0][0]
-            else:
+            ipath = os.path.join(dir, fname)
+            from PyQt5.QtWidgets import QFileDialog
+            path, type = QFileDialog.getSaveFileName(caption = "Save Masked Map",
+                                                     directory = ipath,
+                                                     filter = 'MRC map (*.mrc)')
+            if not path:
                 return
 
         (li,lj,lk), (hi,hj,hk) = regions.region_bounds(regs)
@@ -1592,12 +1590,13 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
 
         debug("new origin:", nO)
 
+        name = os.path.basename ( path )
         from chimerax.map.data import ArrayGridData
-        ndata = ArrayGridData ( nmat, nO, dmap.data.step, dmap.data.cell_angles )
+        ndata = ArrayGridData ( nmat, nO, step = dmap.data.step,
+                                cell_angles = dmap.data.cell_angles, name = name )
         from chimerax.map import volume_from_grid_data
         nv = volume_from_grid_data ( ndata, dmap.session )
 
-        nv.name = os.path.basename ( path )
 
         nv.position = dmap.scene_position
 
@@ -1636,8 +1635,7 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
         smod = self.CurrentSegmentation()
         if smod == None : return
 
-        regs = [ sp.region for sp in smod.surfacePieces
-                 if hasattr(sp, 'region')]
+        regs = [ sp.region for sp in smod.region_surfaces ]
 
         self.SaveRegsToMRC ( regs, dmap )
 
@@ -1661,14 +1659,12 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
         dir = os.path.dirname ( dmap.data.path )
         fprefix = os.path.splitext ( dmap.name ) [0]
         fname = fprefix + "_region_%d.mrc"
-        import OpenSave
-        d = OpenSave.SaveModal ( title = "Save Masked Map",
-                                 initialdir = dir, initialfile = fname,
-                                 filters = [('MRC map', '*.mrc', '.mrc')] )
-        paths_and_types = d.run ( self.toplevel_widget )
-        if paths_and_types:
-            path = paths_and_types[0][0]
-        else:
+        ipath = os.path.join(dir, fname)
+        from PyQt5.QtWidgets import QFileDialog
+        path, type = QFileDialog.getSaveFileName(caption = "Save Masked Maps",
+                                                 directory = ipath,
+                                                 filter = 'MRC map (*.mrc)')
+        if not path:
             return
         if not '%d' in path:
             self.status ( "Must include '%d' in map file name for region number" )
@@ -2228,9 +2224,9 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
         maxnr = self.MaximumRegionsToDisplay()
         for reg in smod.regions :
 
-            if maxnr > 0 and len(smod.surfacePieces) >= maxnr  :
+            if maxnr > 0 and len(smod.region_surfaces) >= maxnr  :
                 self.status('Only showing %d of %d regions.' %
-                     (len(smod.surfacePieces), len(smod.regions)))
+                     (len(smod.region_surfaces), len(smod.regions)))
                 break
             reg.make_surface()
 
@@ -3542,7 +3538,7 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
         if smod is None : return
 
         rlist = []
-        for sp in smod.surfacePieces :
+        for sp in smod.region_surfaces :
             try :
                 sp.region.placed
             except :
