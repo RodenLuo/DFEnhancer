@@ -1739,9 +1739,9 @@ class Segloop_Dialog ( chimera.baseDialog.ModelessDialog ):
             # for ribosome direction
                 sp.Extents[1] = sp.Extents[1] * float(self.axesFactor.get())
 
-                sp.axes = axes.AxesMod ( sp.COM, sp.U, sp.Extents, 6, 1.0,alignTo = sp.model )
+                sp.axes = axes.AxesMod ( smod.session, sp.COM, sp.U, sp.Extents, 6, 1.0,alignTo = sp.model )
             else :
-                sp.axes = axes.AxesMod ( sp.COM, sp.U, sp.Extents, 1.0, 1.1, alignTo = sp.model )
+                sp.axes = axes.AxesMod ( smod.session, sp.COM, sp.U, sp.Extents, 1.0, 1.1, alignTo = sp.model )
 
             sp.axes.name = "region_%d_axes" % r.rid
 

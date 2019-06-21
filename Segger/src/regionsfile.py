@@ -163,17 +163,14 @@ def WriteRegionsFile ( smod, fname = None ) :
 
     if fname is None:
         # Show save-file dialog.
-        def save ( okay, dialog ):
-            if okay:
-                paths = dialog.getPaths ( )
-                if paths:
-                    WriteRegionsFile ( smod, paths[0] )
+        def save ( path, smod=smod ):
+            WriteRegionsFile ( smod, path )
 
         bname = smod.name [ 0 : smod.name.rfind ('_regions') ]
         prefix = smod.path + bname + "_regions_save_%d"
         uupath = unusedFile ( prefix )
-        from OpenSave import SaveModeless
-        d = SaveModeless ( title = 'Save Regions',
+        from .opensave import SaveFileDialog
+        d = SaveFileDialog ( title = 'Save Regions',
                            initialdir = smod.path,
                            initialfile = os.path.basename(uupath),
                            command = save )

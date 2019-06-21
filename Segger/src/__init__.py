@@ -9,8 +9,12 @@ class _SeggerAPI(BundleAPI):
 
     @staticmethod
     def start_tool(session, tool_name):
-        from .segment_dialog import Volume_Segmentation_Dialog
-        d = Volume_Segmentation_Dialog.get_singleton(session)
+        if tool_name == 'Segment Map':
+            from .segment_dialog import Volume_Segmentation_Dialog
+            d = Volume_Segmentation_Dialog.get_singleton(session)
+        elif tool_name == 'Fit to Segments':
+            from .fit_dialog import Fit_Segments_Dialog
+            d = Fit_Segments_Dialog.get_singleton(session)
         return d
 
     @staticmethod

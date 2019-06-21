@@ -19,33 +19,19 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-import chimera
 import os
 import os.path
 import numpy
 
-from VolumeData import grid_indices, zone_masked_grid_data, interpolate_volume_data
-from _multiscale import get_atom_coordinates
-from _contour import affine_transform_vertices as transform_vertices
-from Matrix import xform_matrix, multiply_matrices, chimera_xform, identity_matrix, invert_matrix, shift_and_angle
-from VolumeViewer import volume_from_grid_data
-from VolumeViewer.volume import Rendering_Options
 from time import clock
 from random import random as rand
-import FitMap
-import VolumeViewer
-import Segger.quaternion
-import Matrix
-import VolumeData
 
 from .axes import prAxes
 from .regions import mask_volume, regions_radius
 
-from .segment_dialog import current_segmentation, segmentation_map
-from Segger import dev_menus, timing, seggerVersion
-import importlib
+from . import dev_menus, timing, seggerVersion
 
-OML = chimera.openModels.list
+from .segment_dialog import debug
 
 SAF_DVOL = 0.75
 SAF_DBRAD = 0.3
@@ -56,28 +42,270 @@ REG_OPACITY = 0.45
 MAX_NUM_GROUPS = 1000
 
 
-
-def umsg ( txt ) :
-    print(txt)
-    status ( txt )
-
-
-def status ( txt ) :
-    txt = txt.rstrip('\n')
-    msg.configure(text = txt)
-    msg.update_idletasks()
-
-
 from .fit_devel import Fit_Devel
 
-class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
+from chimerax.core.tools import ToolInstance
+class Fit_Segments_Dialog ( ToolInstance, Fit_Devel ):
 
     title = "Fit to Segments (Segger v" + seggerVersion + ")"
     name = "fit segments"
-    #buttons = ( 'SMS', 'Scores', 'Fit', 'Options', "Close")
-    #buttons = ( 'Place', 'Fit', 'Options', "Close")
     buttons = ( 'Fit', 'Stop', 'Options', "Close")
     help = 'https://cryoem.slac.stanford.edu/ncmi/resources/software/segger'
+
+    def __init__(self, session, tool_name):
+
+        ToolInstance.__init__(self, session, tool_name)
+
+        from chimerax.ui import MainToolWindow
+        tw = MainToolWindow(self)
+        self.tool_window = tw
+        parent = tw.ui_area
+
+        from PyQt5.QtWidgets import QVBoxLayout, QLabel
+        layout = QVBoxLayout(parent)
+        layout.setContentsMargins(0,0,0,0)
+        layout.setSpacing(0)
+        parent.setLayout(layout)
+
+        # Fit pull-down menus
+        mbar = self._create_menubar(parent)
+        layout.addWidget(mbar)
+        
+        # Fit model menu
+        mf = self._create_fit_model_menu(parent)
+        layout.addWidget(mf)
+
+        # Fit list
+        fl = self._create_fit_list(parent)
+        layout.addWidget(fl)
+        
+        # Options panel
+        options = self._create_options_gui(parent)
+        layout.addWidget(options)
+
+        # Fit, Help buttons
+        bf = self._create_action_buttons(parent)
+        layout.addWidget(bf)
+
+        # Status line
+        self._status_label = sl = QLabel(parent)
+        layout.addWidget(sl)
+        
+        layout.addStretch(1)    # Extra space at end
+
+        tw.manage(placement="side")
+
+#        session.triggers.add_handler('remove models', self.model_closed_cb)
+
+        from PyQt5.QtCore import QTimer
+        QTimer.singleShot(1000, self._help_line)
+    
+    def _create_menubar(self, parent):
+
+# Can't use QMenuBar since this takes over main window menu on Mac.
+#        from PyQt5.QtWidgets import QMenuBar
+#        mbar = QMenuBar(parent)
+#        mbar.setNativeMenuBar(False)	# On Mac keep menu in window, not top of screen.
+
+        from PyQt5.QtWidgets import QFrame, QHBoxLayout, QPushButton, QMenu
+        
+        mbar = QFrame(parent)
+        mbar.setStyleSheet('QFrame { background-color: white; }')
+        layout = QHBoxLayout(mbar)
+        layout.setContentsMargins(0,0,0,0)
+        layout.setSpacing(10)
+
+        fit_menu_entries = [
+            ('Delete selected fits from list', self.delete_fit_cb),
+            ('Delete ALL fits from list', self.delete_all_fit_cb),
+
+            ('separator', None),
+            ('Place molecule copies', self.place_copies_cb),
+            ('Place map copies', self.place_map_copies_cb),
+            #('Cube map', self.extractCubeMap),
+            ('Close placed copies', self.close_copies_cb),
+
+            ('separator', None),
+            ("Save chosen fit molecules", self.SaveStrucFit),
+
+            ('separator', None),
+            ('Save fit map relative to segmented map', self.save_map_resample),
+
+            ('separator', None),
+            ('Group regions by visible (Molecule) models', self.GroupRegionsByMols),
+            ('Group regions by chains in visible (Molecule) models', self.GroupRegionsByChains),
+
+            ('separator', None),
+            ("Show molecule axes", self.StrucShowAxes),
+            ("Hide molecule axes", self.StrucHideAxes),
+            ("Show overlapping regions", self.ShowOverlappingRegions),
+
+            ('separator', None),
+            ("Export fit scores", self.ExportFitScores),
+            ("Plot fit scores", self.PlotFitScores),
+            ("Inter-molecule clash scores", self.VisiScores )
+            ]
+
+        fb = QPushButton('Fit', mbar)
+        button_style = 'QPushButton { border: none; } QPushButton::menu-indicator { image: none; }'
+        fb.setStyleSheet(button_style)
+        layout.addWidget(fb)
+        fmenu = QMenu(fb)
+        fb.setMenu(fmenu)
+        for text, func in fit_menu_entries:
+            if text == 'separator':
+                fmenu.addSeparator()
+            else:
+                fmenu.addAction(text, func)
+
+        layout.addStretch(1)
+                
+        return mbar
+    
+    def _create_fit_model_menu(self, parent):
+        from PyQt5.QtWidgets import QFrame, QHBoxLayout, QLabel
+        
+        mf = QFrame(parent)
+        mlayout = QHBoxLayout(mf)
+        mlayout.setContentsMargins(0,0,0,0)
+        mlayout.setSpacing(10)
+        
+        sm = QLabel('Structure or map to fit', mf)
+        mlayout.addWidget(sm)
+        from chimerax.ui.widgets import ModelMenuButton
+        from chimerax.map import Volume
+        from chimerax.atomic import Structure
+        self._fit_model_menu = mm = ModelMenuButton(self.session, class_filter = (Volume, Structure))
+        slist = self.session.models.list(type = Structure)
+        mlist = self.session.models.list(type = Volume)
+        if slist or mlist:
+            mm.value = slist[0] if slist else mlist[0]
+        # mm.value_changed.connect(self._map_chosen_cb)
+        mlayout.addWidget(mm)
+        mlayout.addStretch(1)    # Extra space at end
+
+        return mf
+    
+    def _create_options_gui(self, parent):
+
+        from .segment_dialog import CollapsiblePanel
+        p = CollapsiblePanel(parent, 'Options')
+        f = p.content_area
+
+        from PyQt5.QtWidgets import QVBoxLayout
+        layout = QVBoxLayout(f)
+        layout.setContentsMargins(30,0,0,0)
+        layout.setSpacing(0)
+
+        from .segment_dialog import entries_row, radio_buttons
+        self._lump_subids, = entries_row(f, False, 'Treat all sub-models as one structure')
+
+        self._sim_res, self._sim_grid_sp = \
+            entries_row(f, 'Density map resolution:', 0, 'grid spacing:', 0, ('Calculate Map', self.GenStrucMap))
+        
+        self._combined_selected_regions, self._each_selected_region, self._around_selected, self._all_groups = \
+            entries_row(f, 'Which regions to use for fitting:\n',
+                        '    ', True, 'Combined selected regions\n',
+                        '    ', False, 'Each selected region\n',
+                        '    ', False, 'Groups of regions inculding selected region(s)\n',
+                        '    ', False, 'Groups of regions including all regions')
+        radio_buttons(self._combined_selected_regions, self._each_selected_region, self._around_selected, self._all_groups)
+        
+        self._prin_axes_search, self._rota_search, self._rota_search_num = \
+            entries_row(f, 'Alignment method:\n',
+                        '    ', True, "Align principal axes (faster - only 4 fits will be tried)\n",
+                        '    ', False, "Rotational search (try", 100, 'evenly rotated fits)')
+        radio_buttons(self._prin_axes_search, self._rota_search)
+
+        self._mask_map_when_fitting, = entries_row(f, False, 'Mask map with region(s) to prevent large drifts')
+        self._use_laplace, = entries_row(f, False, 'Use Laplacian filter')
+        self._optimize_fits, = entries_row(f, True, 'Optimize fits')
+        
+        self._do_cluster_fits, self._position_tol, self._angle_tol = \
+            entries_row(f, True, 'Cluster fits that are <', 5.0, 'Angstroms and <', 3.0, 'degrees apart')
+
+        self._num_fits_to_add, = entries_row(f, 'Add top', 1, 'fit(s) to list (empty to add all fits to list)')
+
+        self._calc_symmetry_clashes, self._symmetry = \
+            entries_row(f, False, 'Clashes with copies from symmetry:', '',
+                        ('Detect', self.DetectSym), ('Show', self.PlaceSym))
+        
+        return p
+
+    def _create_fit_list(self, parent):
+        
+        self.list_fits = []
+
+        from PyQt5.QtWidgets import QFrame, QVBoxLayout, QLabel, QListWidget
+
+        f = QFrame(parent)
+        layout = QVBoxLayout(f)
+        layout.setContentsMargins(0,0,0,0)
+        layout.setSpacing(0)
+
+        # Use a fixed width font so columns line up.
+        from PyQt5.QtGui import QFontDatabase
+        font = QFontDatabase.systemFont(QFontDatabase.FixedFont)
+        h = ('%8s %8s %8s %8s %8s %15s %15s %10s'
+             % ('Corr', 'Atoms', 'Backbone', 'Clash', 'Occupied', 'Molecule', 'Map', 'Region'))
+        ll = QLabel(h, f)
+        ll.setFont(font)
+        layout.addWidget(ll)
+        class FitList(QListWidget):
+            def keyPressEvent(self, event):
+                from PyQt5.QtCore import Qt
+                if event.key() == Qt.Key_Delete:
+                    self.delete_fit()
+                else:
+                    QListWidget.keyPressEvent(self, event)
+        self._fit_listbox = lb = FitList(f)
+        lb.setFont(font)
+        lb.setSelectionMode(lb.ExtendedSelection)
+        lb.delete_fit = self.delete_fit_cb
+        lb.itemSelectionChanged.connect(self.fit_selection_cb)
+        layout.addWidget(lb)
+        layout.addStretch(1)    # Extra space at end
+
+        return f
+
+    def _create_action_buttons(self, parent):
+        from PyQt5.QtWidgets import QFrame, QHBoxLayout, QPushButton
+        bf = QFrame(parent)
+        blayout = QHBoxLayout(bf)
+        blayout.setContentsMargins(0,0,0,0)
+        blayout.setSpacing(10)
+
+        sb = QPushButton('Fit', bf)
+        sb.clicked.connect(self._fit)
+        blayout.addWidget(sb)
+        
+        hb = QPushButton('Help', bf)
+        hb.clicked.connect(self._help)
+        blayout.addWidget(hb)
+
+        blayout.addStretch(1)    # Extra space at end
+
+        return bf
+        
+    def _fit(self):
+        self.Fit()
+
+    def _help(self):
+        from chimerax.help_viewer import show_url
+        show_url(self.session, self.help)
+
+    def _help_line(self):
+        self.status('<font color=blue>To cite Segger or learn more about it press the Help button</font>', log = False)
+
+    @classmethod
+    def get_singleton(self, session, create=True):
+        from chimerax.core import tools
+        return tools.get_singleton(session, Fit_Segments_Dialog, 'Fit to Segments', create=create)
+
+    def status(self, message, log = True):
+        self._status_label.setText(message)
+        if log:
+            self.session.logger.info(message)
 
     def fillInUI(self, parent):
 
@@ -406,8 +634,6 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
         self.msg = msg
         row += 1
 
-        umsg ( 'To cite Segger in your paper, please press the Help button for more information.')
-
         self.SetResolution()
 
         chimera.openModels.addRemoveHandler(self.ModelClosed, None)
@@ -431,10 +657,10 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
         # self.list_fits.append((fmap, dmap, fmap.M, corr, atomI, bbI, bbC, hdo, regions))
 
-        print("Plotting %d fits:" % len ( self.list_fits ))
+        debug("Plotting %d fits:" % len ( self.list_fits ))
 
         if len ( self.list_fits ) == 0 :
-            umsg ( "No fits in list to plot" )
+            self.status ( "No fits in list to plot" )
             return
 
 
@@ -444,7 +670,7 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
             if maxCorr < corr : maxCorr = corr
             if minCorr > corr : minCorr = corr
 
-        print(" - maxCorr: %.3f minCorr: %.3f" % (maxCorr, minCorr))
+        debug(" - maxCorr: %.3f minCorr: %.3f" % (maxCorr, minCorr))
 
         minCorr, maxCorr = 0, 1
 
@@ -486,26 +712,22 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
             lineClr = ( int(rand()*255.0), int(rand()*255.0), int(rand()*255.0) )
             draw.rectangle((x1, yTop, x2, yBot), fill=lineClr, outline=lineClr)
 
-            print("x:%d barW %.2f cor %.2f height %.3f yTop %d yBot %d" % ( xAt, barWidth, corr, chartH, yTop, yBot ))
+            debug("x:%d barW %.2f cor %.2f height %.3f yTop %d yBot %d" % ( xAt, barWidth, corr, chartH, yTop, yBot ))
 
             xAt = xAt + barWidth
 
 
         #im.save ( "plot.png", 'PNG' )
 
-        def save ( okay, dialog ):
-            if okay:
-                paths = dialog.getPaths ( )
-                if paths:
-                    path = paths[0]
-                    umsg ( "Saved to " + path )
-                    im.save ( path, 'PNG' )
+        def save ( path ):
+            self.status ( "Saved to " + path )
+            im.save ( path, 'PNG' )
 
         idir = None
         ifile = None
 
-        from OpenSave import SaveModeless
-        SaveModeless ( title = 'Save Plot',
+        from .opensave import SaveFileDialog
+        SaveFileDialog ( title = 'Save Plot',
                        filters = [('PNG', '*.png', '.png')],
                        initialdir = idir, initialfile = ifile, command = save )
 
@@ -516,22 +738,22 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
     def PlotFitScores_Experimental ( self ) :
 
-        print("Plotting fits:")
+        debug("Plotting fits:")
 
-        N = int ( self.numFitsToAdd.get() )
+        N = self._num_fits_to_add.value
 
         totAngles = 0
         minCorr = 1e9
         maxCorr = 0
         for corr, M, regions, stats in self.cfits [0 : N-1] :
-            print(" - #fits:%d maxAngle:%.1f maxShift:%.2f maxHeight:%.2f" % ( stats['numFits'], stats['maxAngle'], stats['maxShift'], stats['maxHeight'] ))
+            debug(" - #fits:%d maxAngle:%.1f maxShift:%.2f maxHeight:%.2f" % ( stats['numFits'], stats['maxAngle'], stats['maxShift'], stats['maxHeight'] ))
             totAngles = totAngles + stats['maxAngle']
             if maxCorr < corr : maxCorr = corr
             if minCorr > corr-stats['maxHeight'] : minCorr = corr-stats['maxHeight']
 
         minCorr, maxCorr = 0, 1
 
-        print(" - totAngles: %.2f, maxCorr: %.3f minCorr: %.3f" % (totAngles, maxCorr, minCorr))
+        debug(" - totAngles: %.2f, maxCorr: %.3f minCorr: %.3f" % (totAngles, maxCorr, minCorr))
 
         w = 600
         h = 400
@@ -571,26 +793,22 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
             lineClr = ( int(rand()*255.0), int(rand()*255.0), int(rand()*255.0) )
             draw.rectangle((x1, yTop, x2, yBot), fill=lineClr, outline=lineClr)
 
-            print("maxA %.2f x:%d barW %.2f cor %.2f height %.3f yTop %d yBot %d" % ( stats['maxAngle'], xAt, barWidth, corr, stats['maxHeight'], yTop, yBot ))
+            debug("maxA %.2f x:%d barW %.2f cor %.2f height %.3f yTop %d yBot %d" % ( stats['maxAngle'], xAt, barWidth, corr, stats['maxHeight'], yTop, yBot ))
 
             xAt = xAt + barWidth
 
 
         #im.save ( "plot.png", 'PNG' )
 
-        def save ( okay, dialog, lfits = lfits ):
-            if okay:
-                paths = dialog.getPaths ( )
-                if paths:
-                    path = paths[0]
-                    umsg ( "Saved to " + path )
-                    im.save ( path, 'PNG' )
+        def save ( path, lfits = lfits ):
+            self.status ( "Saved to " + path )
+            im.save ( path, 'PNG' )
 
         idir = None
         ifile = None
 
-        from OpenSave import SaveModeless
-        SaveModeless ( title = 'Save Plot',
+        from .opensave import SaveFileDialog
+        SaveFileDialog ( title = 'Save Plot',
                        filters = [('PNG', '*.png', '.png')],
                        initialdir = idir, initialfile = ifile, command = save )
 
@@ -599,9 +817,9 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
     def ExportFitScores ( self ) :
 
-        num = self.fit_listbox.size()
+        num = len(self.list_fits)
         if num == 0 :
-            umsg ( "No fits to export" )
+            self.status ( "No fits to export" )
             return
 
         scores = []
@@ -613,7 +831,7 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
         def ZZ ( scs ) :
             if len(scs) < 3 :
-                return 0.0
+                return (0.0, 0, 0, 0)
 
             best_score = scs[0]
             other_scores = scs[1:14]
@@ -621,40 +839,36 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
             stdev = numpy.std ( other_scores )
             return [(best_score - avg) / stdev, best_score, avg, stdev]
 
-        def save ( okay, dialog, scores = scores ):
-            if okay:
-                paths = dialog.getPaths ( )
-                if paths:
-                    path = paths[0]
-                    f = open ( path, "a" )
+        def save ( path, scores = scores ):
+            f = open ( path, "a" )
 
-                    f.write ( "%s\t%s\t%s\t%s\t%s\n" % (
-                        "Cross-correlation",
-                        "Atom Inclusion",
-                        "Backbone-Atom Inclusion",
-                        "Clash score",
-                        "Density occupancy" ) )
+            f.write ( "%s\t%s\t%s\t%s\t%s\n" % (
+                "Cross-correlation",
+                "Atom Inclusion",
+                "Backbone-Atom Inclusion",
+                "Clash score",
+                "Density occupancy" ) )
 
-                    s1, s2, s3, s4, s5 = [], [], [], [], []
-                    for s in scores :
-                        f.write ( "%f\t%f\t%f\t%f\t%f\n" % (s[0], s[1], s[2], s[3], s[4]) )
-                        s1.append ( s[0] )
-                        s2.append ( s[1] )
-                        s3.append ( s[2] )
-                        s4.append ( s[3] )
-                        s5.append ( s[4] )
+            s1, s2, s3, s4, s5 = [], [], [], [], []
+            for s in scores :
+                f.write ( "%f\t%f\t%f\t%f\t%f\n" % (s[0], s[1], s[2], s[3], s[4]) )
+                s1.append ( s[0] )
+                s2.append ( s[1] )
+                s3.append ( s[2] )
+                s4.append ( s[3] )
+                s5.append ( s[4] )
 
-                    Z1, Z2, Z3, Z4, Z5 = ZZ(s1), ZZ(s2), ZZ(s3), ZZ(s4), ZZ(s5)
-                    #f.write ( "Zscores: %f\t%f\t%f\t%f\t%f\n" % (Z1[0], Z2[0], Z3[0], Z4[0], Z5[0]) )
-                    f.write ( "Score\tZ-score\tTop score\tMean\tSTDev\n" )
-                    f.write ( "Cross-correlation:\t%f\t%f\t%f\t%f\n" % (Z1[0], Z1[1], Z1[2], Z1[3]) )
-                    f.write ( "Atom Inclusion:\t%f\t%f\t%f\t%f\n" % (Z2[0], Z2[1], Z2[2], Z2[3]) )
-                    f.write ( "Density occupancy:\t%f\t%f\t%f\t%f\n" % (Z5[0], Z5[1], Z5[2], Z5[3]) )
-                    f.write ( "Clash score:\t%f\t%f\t%f\t%f\n" % (Z4[0], Z4[1], Z4[2], Z4[3]) )
+            Z1, Z2, Z3, Z4, Z5 = ZZ(s1), ZZ(s2), ZZ(s3), ZZ(s4), ZZ(s5)
+            #f.write ( "Zscores: %f\t%f\t%f\t%f\t%f\n" % (Z1[0], Z2[0], Z3[0], Z4[0], Z5[0]) )
+            f.write ( "Score\tZ-score\tTop score\tMean\tSTDev\n" )
+            f.write ( "Cross-correlation:\t%f\t%f\t%f\t%f\n" % (Z1[0], Z1[1], Z1[2], Z1[3]) )
+            f.write ( "Atom Inclusion:\t%f\t%f\t%f\t%f\n" % (Z2[0], Z2[1], Z2[2], Z2[3]) )
+            f.write ( "Density occupancy:\t%f\t%f\t%f\t%f\n" % (Z5[0], Z5[1], Z5[2], Z5[3]) )
+            f.write ( "Clash score:\t%f\t%f\t%f\t%f\n" % (Z4[0], Z4[1], Z4[2], Z4[3]) )
 
 
-                    f.close ()
-                    umsg ( "Wrote %d fits to %s" % ( len(scores), path ) )
+            f.close ()
+            self.status ( "Wrote %d fits to %s" % ( len(scores), path ) )
 
 
         idir = None
@@ -678,8 +892,8 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
         for r in regions :
             ifile = ifile + ("_%d" % r.rid)
 
-        from OpenSave import SaveModeless
-        SaveModeless ( title = 'Save Fit Scores',
+        from .opensave import SaveFileDialog
+        SaveFileDialog ( title = 'Save Fit Scores',
                        filters = [('TXT', '*.txt', '.txt')],
                        initialdir = idir, initialfile = ifile, command = save )
 
@@ -694,11 +908,12 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
         hdo = fmap.hdoScore
 
         ids = ','.join(['%d' % r.rid for r in regions])
-        line = '%8.4f %8.4f %8.4f %8.4f %8.4f %20s %20s %20s' % (corr, atomI, bbI, bbC, hdo, fmap.struc_name, dmap.name, ids)
+        line = '%8.4f %8.4f %8.4f %8.4f %8.4f %15s %15s %10s' % (corr, atomI, bbI, bbC, hdo, fmap.struc_name, dmap.name, ids)
         self.list_fits.append((fmap, dmap, fmap.M, corr, atomI, bbI, bbC, hdo, regions))
-        self.fit_listbox.insert('end', line)
 
-    def fit_selection_cb (self, event) :
+        self._fit_listbox.addItem(line)
+
+    def fit_selection_cb (self) :
 
         lfits = self.selected_listbox_fits()
         if len(lfits) == 0:
@@ -707,7 +922,7 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
         fmap, dmap, mat, corr, aI, bI, bC, hdo, regions = lfits[0]
         for mol in fmap.mols :
             if mol.deleted:
-                umsg('Fit molecule was closed')
+                self.status('Fit molecule was closed')
         else:
             self.place_molecule(fmap, mat, dmap)
         self.make_regions_transparent(regions)
@@ -715,81 +930,71 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
     def place_molecule(self, fmap, mat, dmap):
 
-        import numpy
-        tf = numpy.array(mat[:3,:])
-        try :
-            xf = dmap.openState.xform
-        except :
-            print("Reference map no longer open")
+        if dmap.deleted:
+            debug("Reference map no longer open")
             return
 
-        com = chimera_xform(tf).getTranslation()
-        q = Segger.quaternion.Quaternion()
-        q.fromXform ( chimera_xform(tf) )
-
-        print("COM: ", com, "Q: %.6f" % q.s, q.v)
-
-        xf.multiply(chimera_xform(tf))
-
-        try :
-            fmap.openState.xform = xf
-        except :
-            print("Fitted map no longer open")
+        if fmap.deleted:
+            debug("Fitted map no longer open")
             return
 
+#        com = mat.origin()
+#        q = Segger.quaternion.Quaternion()
+#        q.fromXform ( mat )
+#        debug("COM: ", com, "Q: %.6f" % q.s, q.v)
+
+        xf = dmap.scene_position * mat
+        fmap.scene_position = xf
         fmap.M = mat
 
         for mol in fmap.mols :
-            mol.openState.xform = xf
+            mol.scene_position = xf
 
     def make_regions_transparent(self, regions):
 
         for r in regions:
-            if r.has_surface():
-                c = r.color
-                r.surface().color = ( c[0], c[1], c[2], REG_OPACITY )
+            r.show_transparent( REG_OPACITY )
 
+    def selected_listbox_rows(self):
+
+        lb = self._fit_listbox
+        return [lb.row(i) for i in lb.selectedItems()]
+    
     def selected_listbox_fits(self):
 
-        return [self.list_fits[int(i)] for i in self.fit_listbox.curselection()]
-
+        lf = self.list_fits
+        return [lf[r] for r in self.selected_listbox_rows()]
 
     def delete_all_fit_cb ( self ) :
 
-        num = self.fit_listbox.size()
-        indices = list(range( num))
-        indices.reverse()
-
-        for i in indices:
-            self.fit_listbox.delete(i)
-            del self.list_fits[i]
-
+        self._fit_listbox.clear()
+        self.list_fits = []
 
     def delete_fit_cb(self):
 
-        indices = [int(i) for i in self.fit_listbox.curselection()]
-        if len(indices) == 0:
-            status('No fits chosen from list')
+        rows = self.selected_listbox_rows()
+        if len(rows) == 0:
+            self.status('No fits chosen from list')
             return
-        indices.sort()
-        indices.reverse()
-        for i in indices:
-            self.fit_listbox.delete(i)
-            del self.list_fits[i]
+        rows.sort(reverse = True)
+        lb = self._fit_listbox
+        for r in rows:
+            lb.takeItem(r)
+            del self.list_fits[r]
 
-        status('Deleted %d fits' % len(indices))
+        self.status('Deleted %d fits' % len(rows))
 
 
     def place_copies_cb(self):
 
         lfits = self.selected_listbox_fits()
         if len(lfits) == 0:
-            status('No fits chosen from list')
+            self.status('No fits chosen from list')
             return
 
 
         fmap, dmap = lfits[0][0], lfits[0][1]
-        dmapM = xf_2_MM ( dmap.openState.xform )
+        dmapM = dmap.scene_position
 
         nPlaced = 0
         for fmap, dmap, mat, corr, aI, bI, bC, bO, regions in lfits:
@@ -797,7 +1002,7 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
                 self.PlaceCopy(fmap.mols, mat, dmap, (rand(),rand(),rand(),1) )
                 nPlaced += 1
 
-        status('Placed %d models' % nPlaced)
+        self.status('Placed %d models' % nPlaced)
 
 
 
@@ -806,11 +1011,11 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
         lfits = self.selected_listbox_fits()
         if len(lfits) == 0 :
-            status('No fits chosen from list')
+            self.status('No fits chosen from list')
             return
 
         fmap, dmap = lfits[0][0], lfits[0][1]
-        dmapM = xf_2_MM ( dmap.openState.xform )
+        dmapM = dmap.scene_position
 
         for fmap, dmap, mat, corr, aI, bI, bC, bO, regions in lfits:
             self.place_molecule(fmap, mat, dmap)
@@ -823,23 +1028,24 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
                 self.fitted_mols = [pmap]
 
 
-        status('Placed %d models' % len(lfits))
+        self.status('Placed %d models' % len(lfits))
 
 
     def save_map_resample ( self ) :
 
-        dmap = segmentation_map()
-        if dmap == None : umsg ( "%s is not open" % self.dmap.get() ); return
+        dmap = self.segmentation_map
+        if dmap == None : self.status ( "%s is not open" % self.dmap.get() ); return
 
         fmap = self.StructuresToFit ()
         if len(fmap) == 0 :
-            print("Select the map to save")
+            debug("Select the map to save")
             return
 
         fmap = fmap[0]
 
-        if type(fmap) != VolumeViewer.volume.Volume :
-            umsg ( "Please select a map to save (molecule is selected)" )
+        from chimerax.map import Volume
+        if not isinstance(fmap, Volume) :
+            self.status ( "Please select a map to save (molecule is selected)" )
 
         else :
             place_map_resample ( fmap, dmap, "_F2Rid.mrc" )
@@ -847,34 +1053,35 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
     def extractCubeMap ( self ) :
 
-        dmap = segmentation_map()
-        if dmap == None : umsg ( "%s is not open" % self.dmap.get() ); return
+        dmap = self.segmentation_map
+        if dmap == None : self.status ( "%s is not open" % self.dmap.get() ); return
 
         fmap = self.StructuresToFit ()
 
         if len(fmap) == 0 :
-            print("Select the map to save")
+            debug("Select the map to save")
             return
 
         fmap = fmap[0]
-        print("Saving ", fmap.name)
+        debug("Saving ", fmap.name)
 
-
+        from chimerax.map.data import grid_indices
         npoints = grid_indices ( dmap.data.size, numpy.single)  # i,j,k indices
-        transform_vertices ( npoints, dmap.data.ijk_to_xyz_transform )
+        dmap.data.ijk_to_xyz_transform.transform_points ( npoints, in_place = True )
 
-        dvals = fmap.interpolated_values ( npoints, dmap.openState.xform )
+        dvals = fmap.interpolated_values ( npoints, dmap.scene_position )
         #dvals = numpy.where ( dvals > threshold, dvals, numpy.zeros_like(dvals) )
         #nze = numpy.nonzero ( dvals )
 
         nmat = dvals.reshape( dmap.data.size )
         #f_mat = fmap.data.full_matrix()
-        #f_mask = numpy.where ( f_mat > fmap.surface_levels[0], numpy.ones_like(f_mat), numpy.zeros_like(f_mat) )
+        #f_mask = numpy.where ( f_mat > fmap.minimum_surface_level, numpy.ones_like(f_mat), numpy.zeros_like(f_mat) )
         #df_mat = df_mat * f_mask
 
-        ndata = VolumeData.Array_Grid_Data ( nmat, dmap.data.origin, dmap.data.step, dmap.data.cell_angles )
-        try : nv = VolumeViewer.volume.add_data_set ( ndata, None )
-        except : nv = VolumeViewer.volume.volume_from_grid_data ( ndata )
+        from chimerax.map.data import ArrayGridData
+        ndata = ArrayGridData ( nmat, dmap.data.origin, dmap.data.step, dmap.data.cell_angles )
+        from chimerax.map import volume_from_grid_data
+        nv = volume_from_grid_data ( ndata, self.session )
 
         fmap_base = os.path.splitext (fmap.name)[0]
         dmap_base = os.path.splitext (dmap.name)[0]
@@ -882,7 +1089,7 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
         dmap_path = os.path.splitext (dmap.data.path)[0]
 
         nv.name = "emd_1093_62.mrc"
-        nv.openState.xform = dmap.openState.xform
+        nv.scene_position = dmap.scene_position
 
 
 
@@ -892,10 +1099,10 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
         try :
             len ( self.fitted_mols )
         except :
-            umsg ( "No fitted molecules found" )
+            self.status ( "No fitted molecules found" )
             return
 
-        chimera.openModels.close ( self.fitted_mols )
+        self.session.models.close ( self.fitted_mols )
 
 
 
@@ -904,28 +1111,25 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
         self.optionsPanel.set(not self.optionsPanel.get())
 
 
-    def ModelClosed(self, trigger, n, mlist):
-
-        # Clear molecule menu if selected molecule is closed.
-        mvar = self.struc
-        if len( mvar.get() ) > 0 and len( self.StructuresToFit() ) == 0:
-            mvar.set('')
-
-
     def SetResolution ( self ):
 
-        dmap = segmentation_map()
+        dmap = self.segmentation_map
         if dmap == None : return
 
-        if len ( self.simRes.get() ) == 0:
+        if self._sim_res.value == 0:
             res = min(dmap.data.step) * 3
-            self.simRes.set ( '%.3g' % res )
-            self.simGridSp.set ( '%.3g' % (res/3.0) )
+            self._sim_res.value = res
+            self._sim_grid_sp.value = res/3.0
+
+    @property
+    def _sim_res_and_grid(self):
+        return self._sim_res.value, self._sim_grid_sp.value
 
 
     def CurrentSegmentation ( self, warn = True ):
 
-        return current_segmentation(warn)
+        from .segment_dialog import current_segmentation
+        return current_segmentation(self.session, warn)
 
 
     def StrucMenu ( self ) :
@@ -937,19 +1141,21 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
         id_struc = {}
         open_mols = {}
+        from chimerax.map import Volume
+        from chimerax.atomic import Structure
         for m in OML() :
-            if type(m) == chimera.Molecule or type(m) == VolumeViewer.volume.Volume:
+            if isinstance(m, (Volume, Structure)):
                 try : id_struc [ m.id ].append ( m )
                 except : id_struc [ m.id ] = [m]
                 open_mols[m.name] = True
             else :
-                #print type(m)
+                #debug type(m)
                 pass
 
         cur_sel_found = False
         for mid, mols in id_struc.items() :
 
-            if len(mols) == 1 or self.lump_subids.get () :
+            if len(mols) == 1 or self._lump_subids.enabled :
                 mol = mols[0]
                 label = self.menu_name(mol)
                 self.strucMB.menu.add_radiobutton ( label= label,
@@ -971,7 +1177,7 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
         if not cur_sel_found :
             self.struc.set ( "" )
 
-        dmap = segmentation_map()
+        dmap = self.segmentation_map
         if dmap == None : return
 
         path = os.path.dirname ( dmap.data.path ) + os.path.sep
@@ -997,29 +1203,29 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
         # Check if selected entry is an existing open molecule.
         mlist = self.StructuresToFit()
         if mlist:
-            print("selected structure found:", mlist[0].name)
+            debug("selected structure found:", mlist[0].name)
 
             try :
                 natoms = sum([len(m.atoms) for m in mlist])
-                print("%d molecules, %d atoms" % (len(mlist), natoms))
+                debug("%d molecules, %d atoms" % (len(mlist), natoms))
             except :
-                print("%d map" % (len(mlist)))
+                debug("%d map" % (len(mlist)))
             return
 
         # otherwise look for selection as a pdb file to be loaded...
 
-        dmap = segmentation_map()
-        if dmap == None : print(" - no map selected"); return
+        dmap = self.segmentation_map
+        if dmap == None : debug(" - no map selected"); return
 
         path = os.path.dirname(dmap.data.path) + os.path.sep
 
         label = self.struc.get()
         fmol = chimera.openModels.open ( path + label )[0]
-        print(" - opened")
+        debug(" - opened")
 
-        sel_str = "#%d" % fmol.id
+        sel_str = "#%s" % fmol.id_string
         try : mols = chimera.selection.OSLSelection ( sel_str ).molecules()
-        except : umsg ("Structure not opened sucessfully"); return
+        except : self.status ("Structure not opened sucessfully"); return
 
         mol = mols[0]
         label = self.menu_name(mol)
@@ -1029,14 +1235,18 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
     def StructuresToFit ( self ) :
 
-        t = self.struc.get()
-        return [m for m in OML() if self.menu_name(m) == t]
+        return [self._struct_to_fit]
 
+    @property
+    def segmentation_map(self):
 
+        from . import segment_dialog
+        return segment_dialog.segmentation_map( self.session )
+    
     def menu_name(self, mol):
 
-        show_subid = not self.lump_subids.get() and mol.subid != 0
-        id =  '%d.%d' % (mol.id, mol.subid) if show_subid else '%d' % mol.id
+        show_subid = not self._lump_subids.enabled and mol.subid != 0
+        id =  '%s' % mol.id_string if show_subid else '%d' % mol.id[0]
         mname = "%s (%s)" % (mol.name, id)
         return mname
 
@@ -1046,135 +1256,116 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
         self.save_map_resample ();
 
 
+    @property
+    def _struct_to_fit(self):
+
+        return self._fit_model_menu.value
+
     def Fit ( self ) :
 
         self.doStop = False
 
-        dmap = segmentation_map()
+        dmap = self.segmentation_map
         if dmap == None :
-            umsg ( "Density map not found or not selected" )
+            self.status ( "Density map not found or not selected" )
             return
 
-        label = self.struc.get()
-
-        if len(label) == 0 :
-            umsg ( "No structure selected" )
+        fmol = self._struct_to_fit
+        if fmol is None:
             return
 
-        mod_num = label [ label.rfind("(")+1 : label.rfind(")") ]
 
-        if len(mod_num) == 0 :
-            # this isn't possible given a (#) is added to each name...
-            umsg ( "An internal error that shouldn't happen did." )
-            return
-
-        sel_str = "#" + mod_num
-
-        fmol = None
-        try :
-            fmol = chimera.selection.OSLSelection ( sel_str ).molecules()[0]
-        except :
-            print ( "Model is not a molecule, will try to fit as map..." )
-
-        if fmol :
+        from chimerax.map import Volume
+        from chimerax.atomic import Structure
+        if isinstance(fmol, Structure):
             # this property added to self will indicate to functions called
             # below whether we are fitting a map instead of a molecule
             self.map_to_fit = None
 
-            if fmol.openState is dmap.openState :
-                umsg('Molecule cannot be moved relative to map\nbecause they have the same model id number.')
-                return
-
-        else :
-            # looks like we are fitting a map, not a molecule
-            try :
-                fmap = chimera.selection.OSLSelection ( sel_str ).models()[0]
-            except :
-                umsg ("Internal error, selecting model to be fit didn't return a map nor a molecule")
-                return
-
+            #if fmol.openState is dmap.openState :
+            #    self.status('Molecule cannot be moved relative to map\nbecause they have the same model id number.')
+            #    return
+        elif isinstance(fmol, Volume):
+            
+            fmap = fmol
             self.map_to_fit = fmap
             fmap.mols = []
             fmap.struc_name = fmap.name
 
             points, weights = fit_points ( fmap )
-            # print "Points : ", points
+            # debug "Points : ", points
 
             fmap.COM, fmap.U, fmap.S, fmap.V = prAxes ( points )
-            print("COM : ", fmap.COM)
-            print("U : ", fmap.U)
+            debug("COM : ", fmap.COM)
+            debug("U : ", fmap.U)
 
-            toCOM = numpy.matrix ( [
+            from chimerax.core.geometry import Place
+            toCOM = Place ( [
                 [ 1, 0, 0, -fmap.COM[0] ],
                 [ 0, 1, 0, -fmap.COM[1] ],
-                [ 0, 0, 1, -fmap.COM[2] ],
-                [ 0, 0, 0,      1 ]  ] )
+                [ 0, 0, 1, -fmap.COM[2] ] ] )
 
-            mR = numpy.matrix ( [
+            mR = Place ( [
                 [ fmap.V[0,0], fmap.V[0,1], fmap.V[0,2], 0 ],
                 [ fmap.V[1,0], fmap.V[1,1], fmap.V[1,2], 0 ],
-                [ fmap.V[2,0], fmap.V[2,1], fmap.V[2,2], 0 ],
-                [            0,            0,            0, 1 ] ] )
+                [ fmap.V[2,0], fmap.V[2,1], fmap.V[2,2], 0 ] ] )
 
             # this matrix centers the map and aligns its principal axes
             # to the x-y-z axes
             fmap.preM = mR * toCOM
 
 
-        alignTo = self.alignTo.get()
+        if self._combined_selected_regions.enabled :
+            descrip, func = ("Fitting to combined selected regions...", self.FitMapToSelRGroup)
+        elif self._each_selected_region.enabled :
+            descrip, func = ("Fitting to each selected region...", self.FitToEachRegion)
+        elif self._around_selected.enabled :
+            descrip, func = ("Fitting groups around selected...", self.FitMapToRegionsAroundSel)
+        elif self._all_groups.enabled :
+            descrip, func = ( "Fitting to all groups...", self.FitMapToRGroups)
+        else:
+            self.status('No alignment method chosen')
+            return
 
-        methods = {
-         'combined_selected_regions' :
-           ("Fitting to combined selected regions...", self.FitMapToSelRGroup),
-         'each_selected_region' :
-           ("Fitting to each selected region...", self.FitToEachRegion),
-         'around_selected' :
-           ("Fitting groups around selected...", self.FitMapToRegionsAroundSel),
-         'all_groups' :
-             ( "Fitting to all groups...", self.FitMapToRGroups)
-         }
-
-        if alignTo in methods:
-            descrip, func = methods[alignTo]
-            print(descrip)
-            func()
-            dmap = segmentation_map()
-            if dmap:
-                dmap.display = False
+        debug(descrip)
+        func()
+        dmap = self.segmentation_map
+        if dmap:
+            dmap.display = False
 
 
     def Stop (self) :
-        print("will stop...")
+        debug("will stop...")
         self.doStop = True
 
 
 
     def DetectSym ( self ) :
 
-        dmap = segmentation_map()
+        dmap = self.segmentation_map
 
         if dmap == None:
-            umsg ( "Please select a map in the Segment Map dialog" )
+            self.status ( "Please select a map in the Segment Map dialog" )
             return []
 
-        print("Symmetry for", dmap.name)
+        debug("Symmetry for", dmap.name)
 
         from Measure.symmetry import find_point_symmetry
 
         syms, msg = find_point_symmetry ( dmap, nMax=8 )
 
         if syms is None :
-            umsg ( "No symmetry detected for %s" % dmap.name )
-            self.symmetryString.set ( "No symmetry detected" )
+            self.status ( "No symmetry detected for %s" % dmap.name )
+            self._symmetry.value =  "No symmetry detected" 
             return []
 
-        umsg ( msg )
+        self.status ( msg )
         start = msg.find(': ')+2
         end = msg.find (', center')
-        self.symmetryString.set ( msg [start : end] )
+        self._symmetry.value = msg [start : end]
 
         for i, sym in enumerate ( syms ) :
-            #print i, " -> ", sym
+            #debug i, " -> ", sym
             pass
 
         return syms
@@ -1183,57 +1374,54 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
     def PlaceSym ( self ) :
 
         fmap = self.MoleculeMap()
-        dmap = segmentation_map()
+        dmap = self.segmentation_map
 
         if fmap == None or dmap == None:
-            umsg ( "Please select an open structure to fit" )
+            self.status ( "Please select an open structure to fit" )
             return
 
         from Measure.symmetry import centers_and_points
 
         syms = []
-        esym = self.symmetryString.get()
+        esym = self._symmetry.value
         if 1 or len (esym) == 0 :
             syms = self.DetectSym ()
         else :
-            print("Custom sym:", esym)
+            debug("Custom sym:", esym)
             if ( esym == "C3" ) :
 
-                print(" - dmap: ", dmap.name)
+                debug(" - dmap: ", dmap.name)
                 mpoints, mpoint_weights = fit_points(dmap)
                 COM, U, S, V = prAxes ( mpoints )
-                print("COM: ", COM)
-                print("U: ", U)
-                print("S: ", S)
+                debug("COM: ", COM)
+                debug("U: ", U)
+                debug("S: ", S)
 
-                ax = chimera.Vector ( 0, 1, 0 )
-                #ax = dmap.openState.xform.inverse().apply ( ax )
+                ax = ( 0, 1, 0 )
+                #ax = dmap.scene_position.inverse().apply ( ax )
 
-                syms.append ( Matrix.identity_matrix () )
+                from chimerax.core.geometry import Place
+                syms.append ( Place () )
                 rm1 = Matrix.rotation_transform ( (ax.x,ax.y,ax.z), 360.0/3.0, COM )
-                print(rm1)
+                debug(rm1)
                 syms.append ( rm1 )
                 #syms.append ( Matrix.rotation_transform ( (1.0,0.0,0.0), 2.0*360.0/3.0 ) )
 
                 #centers, xyz, w = centers_and_points(dmap)
-                #print " - center:", centers
+                #debug " - center:", centers
                 #ctf = Matrix.translation_matrix([-x for x in COM[0]])
                 #syms = Matrix.coordinate_transform_list(syms, ctf)
 
 
         smols = []
 
+        from chimerax.core.geometry import Place
         for si, sym in enumerate ( syms [1 : ] ) :
 
-            T = numpy.array ( sym )
-            #print "\nSym %d\n" % si, T
-
-            xf = chimera.Xform.xform ( T[0,0], T[0,1], T[0,2], T[0,3], T[1,0], T[1,1], T[1,2], T[1,3], T[2,0], T[2,1], T[2,2], T[2,3] )
-            M = xf_2_MM ( xf )
-
+            M = sym
             #mols = self.PlaceCopy (fmap.mols, M*fmap.M, dmap, (0,0,0,1) )
             mols = self.PlaceCopy (fmap.mols, M*fmap.M, dmap, (.4, .8, .4, 1) )
-            for m in mols : m.openState.xform = dmap.openState.xform
+            for m in mols : m.scene_position = dmap.scene_position
             smols = smols + mols
 
         return smols
@@ -1242,82 +1430,84 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
     def PlaceSymOld ( self ) :
 
         fmap = self.MoleculeMap()
-        dmap = segmentation_map()
+        dmap = self.segmentation_map
 
         if fmap == None or dmap == None:
-            print("Fit or segmentation map not found")
+            debug("Fit or segmentation map not found")
             return
 
+        from chimerax.map.data import grid_indices
         fpoints = grid_indices(dmap.data.size, numpy.single)  # i,j,k indices
-        transform_vertices( fpoints, dmap.data.ijk_to_xyz_transform )
+        dmap.data.ijk_to_xyz_transform.transform_points( fpoints, in_place = True )
         mat = dmap.data.full_matrix()
         fpoint_weights = numpy.ravel(mat).astype(numpy.single)
 
-        threshold = dmap.surface_levels[0]
+        threshold = dmap.minimum_surface_level
         ge = numpy.greater_equal(fpoint_weights, threshold)
         fpoints = numpy.compress(ge, fpoints, 0)
         fpoint_weights = numpy.compress(ge, fpoint_weights)
         nz = numpy.nonzero( fpoint_weights )[0]
 
-        print("%d above %f in %s\n" % (len(nz), threshold, dmap.name))
+        debug("%d above %f in %s\n" % (len(nz), threshold, dmap.name))
 
         COM, U, S, V = prAxes ( fpoints )
 
-        print("COM: ", COM)
-        print("U: ", U)
-        print("S: ", S)
+        debug("COM: ", COM)
+        debug("U: ", U)
+        debug("S: ", S)
 
-        T0 = numpy.matrix ( [
+        from chimerax.core.geometry import Place
+        T0 = Place ( [
             [ 1, 0, 0, -COM[0] ],
             [ 0, 1, 0, -COM[1] ],
-            [ 0, 0, 1, -COM[2] ],
-            [ 0, 0, 0,      1 ]  ] )
+            [ 0, 0, 1, -COM[2] ] ] )
 
-        T = numpy.matrix ( [
+        T = Place ( [
             [ 1, 0, 0, COM[0] ],
             [ 0, 1, 0, COM[1] ],
-            [ 0, 0, 1, COM[2] ],
-            [ 0, 0, 0,      1 ]  ] )
+            [ 0, 0, 1, COM[2] ] ] )
 
 
-        fmapM = xf_2_MM ( fmap.openState.xform )
-        dmapM = xf_2_MM ( dmap.openState.xform )
+        fmapM = fmap.scene_position
+        dmapM = dmap.scene_position
 
 
         smols = []
 
         if 0 :
-            M = xf_2_MM ( chimera.Xform.rotation( 0, 0, 1, 360.0/7.0 ) )
+            from chimerax.core.geometry import rotation
+            M = rotation( (0, 0, 1), 360.0/7.0 )
             mols = self.PlaceCopy (fmap.mols, M*fmap.M, dmap, (0,0,0,1) )
-            for m in mols : m.openState.xform = dmap.openState.xform
+            for m in mols : m.scene_position = dmap.scene_position
             smols = smols + mols
 
-            M = xf_2_MM ( chimera.Xform.rotation( 0, 0, 1, -360.0/7.0 ) )
+            M = rotation( (0, 0, 1), -360.0/7.0 )
             mols = self.PlaceCopy (fmap.mols, M*fmap.M, dmap, (0,0,0,1))
-            for m in mols : m.openState.xform = dmap.openState.xform
+            for m in mols : m.scene_position = dmap.scene_position
             smols = smols + mols
 
-            M1 = xf_2_MM ( chimera.Xform.rotation( 1, 0, 0, 180.0 ) )
-            M = xf_2_MM ( chimera.Xform.rotation( 0, 0, 1, 2.0*360.0/7.0 ) )
+            M1 = rotation( (1, 0, 0), 180.0 )
+            M =  rotation( (0, 0, 1), 2.0*360.0/7.0 )
             mols = self.PlaceCopy (fmap.mols, M*M1*fmap.M, dmap, (0,0,0,1))
-            for m in mols : m.openState.xform = dmap.openState.xform
+            for m in mols : m.scene_position = dmap.scene_position
             smols = smols + mols
 
-            M1 = xf_2_MM ( chimera.Xform.rotation( 0, 0, 1, 180.0 ) )
-            M = xf_2_MM ( chimera.Xform.rotation( 0, 0, 1, 3.0*360.0/7.0 ) )
+            M1 = rotation( (0, 0, 1), 180.0 )
+            M = rotation( (0, 0, 1), 3.0*360.0/7.0 )
             mols = self.PlaceCopy (fmap.mols, M*M1*fmap.M, dmap, (0,0,0,1) )
-            for m in mols : m.openState.xform = dmap.openState.xform
+            for m in mols : m.scene_position = dmap.scene_position
             smols = smols + mols
 
 
-        M = xf_2_MM ( chimera.Xform.rotation( U[0,2], U[1,2], U[2,2], 360.0/7.0 ) )
+        from chimerax.core.geometry import rotation
+        M = rotation( (U[0,2], U[1,2], U[2,2]), 360.0/7.0 )
         mols = self.PlaceCopy (fmap.mols, T*M*T0*fmap.M, dmap, (0,0,0,1) )
-        for m in mols : m.openState.xform = dmap.openState.xform
+        for m in mols : m.scene_position = dmap.scene_position
         smols = smols + mols
 
-        M = xf_2_MM ( chimera.Xform.rotation( U[0,2], U[1,2], U[2,2], -360.0/7.0 ) )
+        M = rotation( (U[0,2], U[1,2], U[2,2]), -360.0/7.0 )
         mols = self.PlaceCopy (fmap.mols, T*M*T0*fmap.M, dmap, (0,0,0,1) )
-        for m in mols : m.openState.xform = dmap.openState.xform
+        for m in mols : m.scene_position = dmap.scene_position
         smols = smols + mols
 
         return smols
@@ -1325,44 +1515,34 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
     def StrucCenter ( self ) :
 
-        label = self.struc.get()
-        sel_str = "#" + label [ label.rfind("(")+1 : label.rfind(")") ]
-        mols = centerMol ( sel_str )
+        mols = [self._struct_to_fit]
+        centerMol ( mols )
 
-        mm = segmentation_map()
+        mm = self.segmentation_map
         if mm :
             for mol in mols :
-                mol.openState.xform = mm.openState.xform
+                mol.scene_position = mm.scene_position
 
 
 
     def StrucShowAxes ( self ) :
 
-        if len ( self.struc.get() ) == 0 :
-            print("Please select a structure")
-            return
-
-        label = self.struc.get()
-        sel_str = "#" + label [ label.rfind("(")+1 : label.rfind(")") ]
-        mols = centerMol ( sel_str )
-
-        if len(mols) == 0:
-            print(self.struc.get(), "not open");
-            return
+        mols = [self._struct_to_fit]        
+        centerMol ( mols )
 
         fmol = mols[0]
-        print("Showing axes for", fmol.name)
-        print(" - COM:", fmol.COM)
-        print(" - extents:", fmol.Extents)
+        debug("Showing axes for", fmol.name)
+        debug(" - COM:", fmol.COM)
+        debug(" - extents:", fmol.Extents)
 
         try :
-            chimera.openModels.close ( fmol.axes )
+            self.session.models.close ( [fmol.axes] )
             fmol.axes = None
         except :
             pass
 
         from . import axes
-        fmol.axes =  axes.AxesMod ( Extents = fmol.Extents, rad = 1.0,
+        fmol.axes =  axes.AxesMod ( fmol.session, Extents = fmol.Extents, rad = 1.0,
                                     alignTo = fmol )
         fmol.axes.name = os.path.splitext (fmol.name)[0] + "_axes"
 
@@ -1370,17 +1550,13 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
     def StrucHideAxes ( self ) :
 
-        label = self.struc.get()
-        sel_str = "#" + label [ label.rfind("(")+1 : label.rfind(")") ]
-        mols = centerMol ( sel_str )
-
-        if len(mols) == 0 :
-            print(self.struc.get(), "not open"); return
+        mols = [self._struct_to_fit]
+        centerMol ( mols )
 
         fmol = mols[0]
 
         try :
-            chimera.openModels.close ( fmol.axes )
+            self.session.models.close ( [fmol.axes] )
             fmol.axes = None
         except :
             pass
@@ -1390,169 +1566,129 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
         self.SetResolution()
 
-        try : res = float ( self.simRes.get() )
-        except :
-            umsg ( "Invalid resolution entered, please enter a number" )
+        res, grid = self._sim_res_and_grid
+
+        self.status ( "Simulating map res %.3f, grid %.3f" % (res, grid) )
+
+        if self._struct_to_fit is None:
+            self.status ( "Please select a Structure to fit in the field above" )
             return
 
-        try : grid = float ( self.simGridSp.get() )
-        except :
-            umsg ( "Invalid grid spacing entered, using resolution/3.0" )
-            grid = res/3.0
-
-        umsg ( "Simulating map res %.3f, grid %.3f" % (res, grid) )
-
-        if len(self.struc.get()) == 0 :
-            umsg ( "Please select a Structure to fit in the field above" )
-            return
-
-        label = self.struc.get()
-        sel_str = label [ label.rfind("(")+1 : label.rfind(")") ]
-        mols = centerMol ( "#" + sel_str )
-        if len(mols) == 0 :
-            umsg ( "%s not open" % self.struc.get() )
-            return
+        
+        mols = [self._struct_to_fit]
+        centerMol ( mols )
 
         mol = mols[0]
 
         base = os.path.splitext(mol.name)[0]
-        mname = base + "_" + sel_str + "_r%.1f_sp%.1f" % (res, grid)
-        if self.useLaplace.get() :
+        mname = base + "_" + mol.id_string + "_r%.1f_sp%.1f" % (res, grid)
+        if self._use_laplace.enabled :
             mname = mname + "_L"
         mname = mname + ".mrc"
 
-        mv = getMod ( mname )
+        mv = getMod ( self.session, mname )
         if mv != None :
-            print("Found", mname)
+            debug("Found", mname)
             return mv
 
-        print("Generating", mname)
+        debug("Generating", mname)
 
-        #cmd = "molmap #%s:.C-D@CA %f sigmaFactor 0.187 gridSpacing %f replace false" % ( sel_str, res, grid )
-        cmd = "molmap #%s %f sigmaFactor 0.187 gridSpacing %f replace false" % ( sel_str, res, grid )
-        print(" -", cmd)
-        chimera.runCommand ( cmd )
+        #cmd = "molmap #%s/C-D@CA %f sigmaFactor 0.187 gridSpacing %f replace false" % ( sel_str, res, grid )
+        cmd = "molmap #%s %f sigmaFactor 0.187 gridSpacing %f replace false" % ( mol.id_string, res, grid )
+        debug(" -", cmd)
+        mv = self._run_command ( cmd )
 
-        mv = None
-        for mod in chimera.openModels.list() :
-            ts = mod.name.split()
-            if len(ts) > 1 and mod.name.find("map") >=0 and mod.name.find("res") >=0 :
-                print(" - found", mod.name)
-                mv = mod
-                mv.name = mname
-                break
-
-        if mv == None :
-            umsg ("Map not generated - molmap command did not produce expected result.")
+        if mv is None :
+            self.status ("Map not generated - molmap command did not produce expected result.")
             return
 
-        if self.useLaplace.get() :
-            umsg ("Generating Laplacian...")
+        if self._use_laplace.enabled :
+            self.status ("Generating Laplacian...")
             from chimerax.map.filter import laplacian
             mvl = laplacian ( mv )
-            chimera.openModels.close ( [mv] )
+            self.session.models.close ( [mv] )
             mv = mvl
             mv.name = mname
 
         mv.display = show
-        clr = mol.color.rgba()
-        mv.surfacePieces[0].color = ( clr[0], clr[1], clr[2], 1.0 )
         mv.mols = mols
-        mv.struc_name = label
+        mv.struc_name = mol.name
 
         # for consistency when fitting maps, which need this pre-transform
         # since they don't get transformed like the molecules
-        mv.preM = numpy.matrix ( [
-            [ 1, 0, 0, 0 ],
-            [ 0, 1, 0, 0 ],
-            [ 0, 0, 1, 0 ],
-            [ 0, 0, 0, 1 ]  ] )
+        from chimerax.core.geometry import Place
+        mv.preM = Place()
 
         return mv
 
+    def _run_command(self, command):
 
-
+        from chimerax.core.commands import run
+        result = run ( self.session, command )
+        return result
 
     def GenChMaps ( self, m ) :
 
-        try : res = float ( self.simRes.get() )
-        except :
-            umsg ( "Invalid resolution entered, please enter a number" )
+        res, grid = self._sim_res_and_grid
+
+        if self._struct_to_fit is None:
+            self.status ( "Please select a Structure to fit in the field above" )
             return
 
-        try : grid = float ( self.simGridSp.get() )
-        except :
-            umsg ( "Invalid grid spacing entered, using resolution/3.0" )
-            grid = res/3.0
-
-
-
-
-        if len(self.struc.get()) == 0 :
-            umsg ( "Please select a Structure to fit in the field above" )
-            return
-
-        label = self.struc.get()
-        sel_str = label [ label.rfind("(")+1 : label.rfind(")") ]
-        mols = centerMol ( "#" + sel_str )
-        if len(mols) == 0 :
-            umsg ( "%s not open" % self.struc.get() )
-            return
+        mols = [self._struct_to_fit]
+        centerMol ( mols )
 
         mol = mols[0]
 
         base = os.path.splitext(mol.name)[0]
-        mname = base + "_" + sel_str + "_r%.1f_sp%.1f" % (res, grid)
-        if self.useLaplace.get() :
+        mname = base + "_" + mol.id_string + "_r%.1f_sp%.1f" % (res, grid)
+        if self._use_laplace.enabled :
             mname = mname + "_L"
         mname = mname + ".mrc"
 
-        mv = getMod ( mname )
+        mv = getMod ( self.session, mname )
         if mv != None :
-            print("Found", mname)
+            debug("Found", mname)
             return mv
 
-        print("Generating", mname)
+        debug("Generating", mname)
 
-        #cmd = "molmap #%s:.C-D@CA %f sigmaFactor 0.187 gridSpacing %f replace false" % ( sel_str, res, grid )
-        cmd = "molmap #%s %f sigmaFactor 0.187 gridSpacing %f replace false" % ( sel_str, res, grid )
-        print(" -", cmd)
-        chimera.runCommand ( cmd )
+        #cmd = "molmap #%s/C-D@CA %f sigmaFactor 0.187 gridSpacing %f replace false" % ( sel_str, res, grid )
+        cmd = "molmap #%s %f sigmaFactor 0.187 gridSpacing %f replace false" % ( mol.id_string, res, grid )
+        debug(" -", cmd)
+        self._run_command ( cmd )
 
         mv = None
-        for mod in chimera.openModels.list() :
+        for mod in self._all_models :
             ts = mod.name.split()
             if len(ts) > 1 and mod.name.find("map") >=0 and mod.name.find("res") >=0 :
-                print(" - found", mod.name)
+                debug(" - found", mod.name)
                 mv = mod
                 mv.name = mname
                 break
 
         if mv == None :
-            umsg ("Map not generated - molmap command did not produce expected result.")
+            self.status ("Map not generated - molmap command did not produce expected result.")
             return
 
-        if self.useLaplace.get() :
-            umsg ("Generating Laplacian...")
+        if self._use_laplace.enabled :
+            self.status ("Generating Laplacian...")
             from chimerax.map.filter import laplacian
             mvl = laplacian ( mv )
-            chimera.openModels.close ( [mv] )
+            self.session.models.close ( [mv] )
             mv = mvl
             mv.name = mname
 
         mv.display = show
-        clr = mol.color.rgba()
-        mv.surfacePieces[0].color = ( clr[0], clr[1], clr[2], 1.0 )
+        clr = mol.single_color
+        mv.single_color = clr
         mv.mols = mols
         mv.struc_name = label
 
         # for consistency when fitting maps, which need this pre-transform
         # since they don't get transformed like the molecules
-        mv.preM = numpy.matrix ( [
-            [ 1, 0, 0, 0 ],
-            [ 0, 1, 0, 0 ],
-            [ 0, 0, 1, 0 ],
-            [ 0, 0, 0, 1 ]  ] )
+        from chimerax.core.geometry import Place
+        mv.preM = Place()
 
         return mv
 
@@ -1564,27 +1700,25 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
         lfits = self.selected_listbox_fits()
         if len(lfits) == 0:
-            status('No fits chosen from list')
+            self.status('No fits chosen from list')
             return
 
-        def save ( okay, dialog, lfits = lfits ):
-            if okay:
-                paths = dialog.getPaths ( )
-                if paths:
-                    path = paths[0]
-                    import Midas
-                    if len(lfits) > 1 and path.find('%d') == -1:
-                        base, suf = os.path.splitext(path)
-                        path = base + '_fit%d' + suf
-                    for i, (fmap, dmap, mat, corr, aI, bI, bC, hdo, regions) in enumerate(lfits):
-                        p = path if len(lfits) == 1 else path % (i+1)
-                        self.place_molecule(fmap, mat, dmap)
-                        Midas.write(fmap.mols, relModel = dmap, filename = p)
+        def save ( path, lfits = lfits ):
+            if len(lfits) > 1 and path.find('%d') == -1:
+                base, suf = os.path.splitext(path)
+                path = base + '_fit%d' + suf
+            for i, (fmap, dmap, mat, corr, aI, bI, bC, hdo, regions) in enumerate(lfits):
+                p = path if len(lfits) == 1 else path % (i+1)
+                self.place_molecule(fmap, mat, dmap)
+                cmd = ('save %s models #%s relModel #%s'
+                       % (p, ','.join(s.id_string for s in fmap.mols), dmap.id_string))
+                from chimerax.core.commands import run
+                run(self.session, cmd)
 
         mol = lfits[0][0].mols[0]
-        if hasattr(mol, 'openedAs'):
+        if hasattr(mol, 'filename'):
             import os.path
-            idir, ifile = os.path.split(mol.openedAs[0])
+            idir, ifile = os.path.split(mol.filename)
             base, suf = os.path.splitext(ifile)
             if len(lfits) > 1:
                 ifile = base + '_fit%d' + suf
@@ -1594,23 +1728,23 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
             idir = None
             ifile = None
 
-        from OpenSave import SaveModeless
-        SaveModeless ( title = 'Save Fit Molecules',
+        from .opensave import SaveFileDialog
+        SaveFileDialog ( title = 'Save Fit Molecules',
                        filters = [('PDB', '*.pdb', '.pdb')],
                        initialdir = idir, initialfile = ifile, command = save )
 
     def SaveFit ( self, fmap, clr=None ) :
 
-        dmap = segmentation_map()
-        if dmap == None : print("No segmentation map"); return
+        dmap = self.segmentation_map
+        if dmap == None : debug("No segmentation map"); return
 
         mols = self.PlaceCopy(fmap.mols, fmap.M, dmap, clr)
         path = os.path.dirname ( dmap.data.path ) + os.path.sep
-        print("Saving:")
+        debug("Saving:")
         for mol in mols :
-            print(" - %s %d.%d" % ( path + mol.name, mol.id, mol.subid ))
+            debug(" - %s %s" % ( path + mol.name, mol.id_string ))
         chimera.PDBio().writePDBfile ( mols, path + mols[0].name )
-        umsg ( "Saved fit (%d structures)" % len(mols) )
+        self.status ( "Saved fit (%d structures)" % len(mols) )
 
         return mols
 
@@ -1624,29 +1758,30 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
         for molecule in molecules :
 
-            mol = CopyMol ( molecule )
+            mol = molecule.copy()
             mol.name = os.path.splitext ( mol.name )[0] + "_f%d.pdb" % fit_m_at
 
+            from .regions import float_to_8bit_color
             if clr :
-                r, g, b, a = clr
-                mclr = chimera.MaterialColor ( r, g, b, a )
-            else : mclr = molecule.residues[0].ribbonColor
+                mclr = float_to_8bit_color(clr)
+            else :
+                mclr = molecule.residues[0].ribbon_color
 
-            if mat != None : molApplyT ( mol, mat )
+            if mat is not None :
+                mol.scene_position = dmap.scene_position * mat
+                #molApplyT ( mol, mat )
             new_mols.append ( mol )
 
-            for res in mol.residues :
-                res.ribbonDisplay = True
-                res.ribbonDrawMode = 2
-                res.ribbonColor = mclr
-                for at in res.atoms : at.display = False
-
+            res = mol.residues
+            res.ribbon_displays = True
+            res.ribbon_colors = mclr
+            mol.atoms.displays = False
             mol.display = True
 
         if dmap :
             self.fitted_mols = self.fitted_mols + new_mols
 
-        chimera.openModels.add ( new_mols, noprefs = True )
+        self.session.models.add ( new_mols )
 
         return new_mols
 
@@ -1654,8 +1789,8 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
     def FitToEachRegion ( self ) :
 
-        dmap = segmentation_map()
-        if dmap == None : print("No segmentation map"); return
+        dmap = self.segmentation_map
+        if dmap == None : debug("No segmentation map"); return
 
         smod = self.CurrentSegmentation()
         if smod is None : return
@@ -1670,7 +1805,7 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
         regs = smod.selected_regions()
         if len(regs) == 0 :
-            umsg ( "Please select one or more regions to align the structure to" )
+            self.status ( "Please select one or more regions to align the structure to" )
             return
 
         path = os.path.dirname ( dmap.data.path ) + os.path.sep
@@ -1684,8 +1819,7 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
             sp = reg.surface_piece
             sp.display = True
-            clr = sp.region.color
-            sp.color = ( clr[0], clr[1], clr[2], REG_OPACITY )
+            reg.show_transparent( REG_OPACITY )
 
             fmap.display = False
             for mol in fmap.mols : mol.display = True
@@ -1699,21 +1833,21 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
             bCloseMap = False
 
-            if self.useLaplace.get () :
-                umsg ("Generating Laplace version of " + dmap.name)
+            if self._use_laplace.enabled :
+                self.status ("Generating Laplace version of " + dmap.name)
                 from chimerax.map.filter import laplacian
                 to_map = laplacian ( dmap )
                 bCloseMap = True
 
-            elif self.mask_map_when_fitting.get() :
+            elif self._mask_map_when_fitting.enabled :
                 to_map = reg_map
                 bCloseMap = True
                 if to_map is None:
-                    umsg ('Could not create masked map')
+                    self.status ('Could not create masked map')
                     return
 
             tpoints = reg.map_points()
-            if self.rotaSearch.get () :
+            if self._rota_search.enabled :
                 self.saFitMapToPoints_byRot ( fmap, tpoints, to_map )
             else :
                 self.saFitMapToPoints ( fmap, tpoints, to_map )
@@ -1721,7 +1855,7 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
             scores.append ( 0 )
             corrs.append ( fmap.fit_score )
 
-            umsg ( "Cross-correlation of fit: %f" % fmap.fit_score )
+            self.status ( "Cross-correlation of fit: %f" % fmap.fit_score )
 
             self.cfits = self.ClusterFits ( self.fits )
             self.cfits.sort ( reverse=True, key=lambda x: x[0] )
@@ -1730,30 +1864,29 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
             #frame_at = 0
 
-            try : nToAdd = int ( self.numFitsToAdd.get() )
+            try : nToAdd = self._num_fits_to_add.value
             except : nToAdd = len (self.cfits)
             for corr, M, regions, stats in self.cfits [ 0 : nToAdd ] :
-                print(" -- clustered Fit -- #fits:%d maxAngle:%.1f maxShift:%.2f maxHeight:%.2f" % ( stats['numFits'], stats['maxAngle'], stats['maxShift'], stats['maxHeight'] ))
+                debug(" -- clustered Fit -- #fits:%d maxAngle:%.1f maxShift:%.2f maxHeight:%.2f" % ( stats['numFits'], stats['maxAngle'], stats['maxShift'], stats['maxHeight'] ))
                 fmap.fit_score, fmap.M, fmap.fit_regions = corr, M, regions
                 fmap.atomInclusion, fmap.bbAtomInclusion, fmap.bbClashes, fmap.hdoScore = self.FitScores ( fmap, reg_map )
                 #frame_at = frame_at + 1
                 self.add_fit (fmap, dmap)
 
             # FitScores fn moves the model, so move it back to top fit
-            move_fit_models(fmap, self.cfits[0][1], dmap.openState.xform)
+            move_fit_models(fmap, self.cfits[0][1], dmap.scene_position)
 
-            #umsg ( "Cross-correlation: %.4f\n" % (fmap.fit_score) )
+            #self.status ( "Cross-correlation: %.4f\n" % (fmap.fit_score) )
             self.ReportZScore ( self.cfits )
 
             # close masked map if it was created
-            #if bCloseMap : chimera.openModels.close ( [to_map] )
-            if reg_map :
-                chimera.openModels.close ( [reg_map] )
+            #if bCloseMap : close_models ( [to_map] )
+            close_models ( [reg_map] )
 
 
     def saFitMapToPoints ( self, fmap, points, dmap ) :
 
-        print("fitting %s in map %s, to %d points" % (fmap.name, dmap.name, len(points)))
+        debug("fitting %s in map %s, to %d points" % (fmap.name, dmap.name, len(points)))
 
         fpoints, fpoint_weights = fit_points(fmap)
 
@@ -1765,14 +1898,14 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
         best = (-2, None, None)
         names =  ['%.1f*X %.1f*Y %.1f*Z' % f for f in flips]
 
-        optimize = self.optimize_fits.get()
+        optimize = self._optimize_fits.enabled
 
         fits = optimize_fits(fpoints, fpoint_weights, mlist, dmap,
                              names, None, optimize)
         corr, Mfit, i = self.make_best_fit(fits, fmap, dmap)
 
         f = flips[i]
-        print(" - best fit: %f for %.1f*X %.1f*Y %.1f*Z" % (
+        debug(" - best fit: %f for %.1f*X %.1f*Y %.1f*Z" % (
             corr, f[0], f[1], f[2] ))
 
 
@@ -1784,12 +1917,12 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
             fit_scores.reverse ()
             best_score = fit_scores[0]
             other_scores = fit_scores[1:14]
-            print("Best score: ", best_score)
-            print("Next scores: ", other_scores)
+            debug("Best score: ", best_score)
+            debug("Next scores: ", other_scores)
             avg = numpy.average ( other_scores )
             stdev = numpy.std ( other_scores )
             self.zscore = (best_score - avg) / stdev
-            umsg ( "Top score: %.5f, z-score: %.5f (avg: %.4f, stdev: %.4f)" % (
+            self.status ( "Top score: %.5f, z-score: %.5f (avg: %.4f, stdev: %.4f)" % (
                 best_score, self.zscore, avg, stdev) )
 
 
@@ -1799,10 +1932,10 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
         class ClusterEntry :
             def __init__ (self, T, corr, regs, stats) :
                 self.M = T
-                xf = chimera.Xform.xform ( T[0,0], T[0,1], T[0,2], T[0,3], T[1,0], T[1,1], T[1,2], T[1,3], T[2,0], T[2,1], T[2,2], T[2,3] )
-                self.COM = xf.getTranslation()
-                self.Q = Segger.quaternion.Quaternion()
-                self.Q.fromXform ( xf )
+                self.COM = T.origin()
+                from .quaternion import Quaternion
+                self.Q = Quaternion()
+                self.Q.fromXform ( T )
                 self.corr = corr
                 self.regs = regs
                 self.stats = stats
@@ -1836,8 +1969,8 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
                 self.stats['numFits'] = self.stats['numFits'] + 1
 
                 # compute the new averages
-                self.COM = chimera.Vector (0,0,0)
-                self.Q = Segger.quaternion.Quaternion(0, chimera.Vector(0,0,0))
+                self.COM = (0,0,0)
+                self.Q = Segger.quaternion.Quaternion(0, (0,0,0))
 
                 for e in self.entries :
                     self.COM = self.COM + e.COM
@@ -1855,17 +1988,18 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
 
             def SimilarTo ( self, e, posTol=5.0, angleTol=5.0 ) :
-                if ( (self.COM - e.COM).length < posTol and
+                from chimerax.core.geometry import norm
+                if ( norm(self.COM - e.COM) < posTol and
                      self.Q.angleTo ( e.Q ) * 180.0 / numpy.pi < angleTol ) :
                     return True
                 return False
 
-        posTol = float ( self.positionTolString.get() )
-        angleTol = float ( self.angleTolString.get() )
-        if self.doClusterFits.get () :
-            print("Clustering %d fits..." % len(fits))
-            print(" - distance < ", posTol)
-            print(" - angle < ", angleTol)
+        posTol = self._position_tol.value
+        angleTol = self._angle_tol.value
+        if self._do_cluster_fits.enabled :
+            debug("Clustering %d fits..." % len(fits))
+            debug(" - distance < ", posTol)
+            debug(" - angle < ", angleTol)
 
         clusters = []
         for corr, M, regs, stats in fits :
@@ -1874,7 +2008,7 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
             bAdded = False
 
-            if self.doClusterFits.get () :
+            if self._do_cluster_fits.enabled :
                 for c in clusters :
                     if c.SimilarTo ( e, posTol, angleTol ) :
                         c.AddEntry ( e )
@@ -1884,7 +2018,7 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
             if bAdded == False :
                 clusters.append ( Cluster (e) )
 
-        print("%d clusters" % len(clusters))
+        debug("%d clusters" % len(clusters))
 
         cfits = []
         for c in clusters :
@@ -1897,23 +2031,20 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
     def saFitMapToPoints_byRot ( self, fmap, points, dmap, N=10, M=10 ) :
 
-        print("fitting %s in map %s, to %d points, by rotation" % (fmap.name, dmap.name, len(points)))
+        debug("fitting %s in map %s, to %d points, by rotation" % (fmap.name, dmap.name, len(points)))
 
-        num = float ( self.rotaSearchNum.get() )
+        num = self._rota_search_num.value
         N = int ( numpy.floor ( numpy.sqrt ( num ) ) )
         M = int ( numpy.floor ( num / N ) )
 
-        fpoints, fpoint_weights = fit_points ( fmap, (self.useLaplace.get()==False) )
+        fpoints, fpoint_weights = fit_points ( fmap, (not self._use_laplace.enabled) )
 
-        print("%d fits - rotations %d axes, %d angles" % (num, N, M))
+        debug("%d fits - rotations %d axes, %d angles" % (num, N, M))
         alist = uniform_rotation_angles(N, M)
 
         COM, U, S, V = prAxes ( points )
-        comT = numpy.matrix ( [
-            [ 1, 0, 0, COM[0] ],
-            [ 0, 1, 0, COM[1] ],
-            [ 0, 0, 1, COM[2] ],
-            [ 0, 0, 0,      1 ]  ] )
+        from chimerax.core.geometry import translation
+        comT = translation(COM)
 
         mlist = [comT*rotation_from_angles(*angles)*fmap.preM for angles in alist]
 
@@ -1922,13 +2053,13 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
                  % tuple([a*180/pi for a in a3]) for a3 in alist]
         status_text = 'Rotational fit'
 
-        optimize = self.optimize_fits.get()
+        optimize = self._optimize_fits.enabled
 
         fits = optimize_fits(fpoints, fpoint_weights, mlist, dmap,
                              names, status_text, optimize)
         corr, Mfit, i = self.make_best_fit(fits, fmap, dmap)
 
-        print(" - best fit: %f\n" % ( corr, ))
+        debug(" - best fit: %f\n" % ( corr, ))
 
 
     def make_best_fit(self, fits, fmap, dmap):
@@ -1941,24 +2072,19 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
         list_fits = [(c, Mf, fmap.fit_regions, stats) for Mf,c,stats in fits]
         self.fits.extend(list_fits)
 
-        move_fit_models(fmap, Mfit, dmap.openState.xform)
+        move_fit_models(fmap, Mfit, dmap.scene_position)
 
         return corr, Mfit, i
 
 
     def MoleculeMap ( self, create = True, warn = True ) :
 
-        label = self.struc.get()
-        sel_str = "#" + label [ label.rfind("(")+1 : label.rfind(")") ]
-        try :
-            fmol = chimera.selection.OSLSelection(sel_str).molecules()[0]
-        except :
-            umsg ( "%s not open - " % self.struc.get() ); return
+        fmol = self._struct_to_fit
 
         try :
-            fmol.fitting_map.name
             return fmol.fitting_map
-        except : pass
+        except :
+            pass
         if create:
             fmol.fitting_map = self.GenStrucMap(show = False)
             return fmol.fitting_map
@@ -1974,7 +2100,7 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
         stack = [([reg], reg.enclosed_volume(), 0) for reg in regs]
 
-        status ( "Making groups around %d regions" % len(regs) )
+        self.status ( "Making groups around %d regions" % len(regs) )
 
         while len(stack) > 0 :
 
@@ -1989,7 +2115,7 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
             dv_rgroups.append ( [dv, regs] )
 
             if len(dv_rgroups) % 100 == 0 :
-                status ( "Making groups around %d - %d groups" % (reg.rid, len(dv_rgroups)) ),
+                self.status ( "Making groups around %d - %d groups" % (reg.rid, len(dv_rgroups)) ),
 
             reg_at = regs[0]
             for cr in reg_at.contacting_regions():
@@ -2000,7 +2126,7 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
         dv_rgroups_f = self.FilterGroups ( dv_rgroups, bRad )
 
-        print(" - %d groups --> %d filtered groups" % (len(dv_rgroups), len(dv_rgroups_f)))
+        debug(" - %d groups --> %d filtered groups" % (len(dv_rgroups), len(dv_rgroups_f)))
         return [dv_rgroups_f, maxDepthReached]
 
 
@@ -2019,7 +2145,7 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
             gi = gi + 1
             if gi % 100 == 0 :
-                status ( "Filtering group %d/%d" % (gi,ngroups) )
+                self.status ( "Filtering group %d/%d" % (gi,ngroups) )
 
             if dv > SAF_DVOL : continue
 
@@ -2066,7 +2192,7 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
         dv_rgroups = []
         maxDepthReached = 0
 
-        print("Grouping %d regions in %s, target volume %.2f, bounding radius %.2f" % (
+        debug("Grouping %d regions in %s, target volume %.2f, bounding radius %.2f" % (
             len(smod.surfacePieces), smod.name, target_volume, bRad ))
 
         ri, nregs = 0, len(smod.regions)
@@ -2082,9 +2208,9 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
             if maxDepthReachedR > maxDepthReached : maxDepthReached = maxDepthReachedR
 
 
-        print("\n - max depth reached: %d" % maxDepthReached)
+        debug("\n - max depth reached: %d" % maxDepthReached)
 
-        print(" - filtering %d groups..." % len( dv_rgroups ))
+        debug(" - filtering %d groups..." % len( dv_rgroups ))
         return self.FilterGroups ( dv_rgroups, bRad )
 
 
@@ -2092,39 +2218,39 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
     def FitMapToSelRGroup ( self, dmap = None ) :
 
         if dmap is None:
-            dmap = segmentation_map()
-            if dmap == None : print("No segmentation map"); return
+            dmap = self.segmentation_map
+            if dmap == None : debug("No segmentation map"); return
 
-        fmap = None
-        if self.map_to_fit : fmap = self.map_to_fit
-        else : fmap = self.MoleculeMap()
+        fmap = self.map_to_fit
+        if fmap is None:
+            fmap = self.MoleculeMap()
 
-        thr = fmap.surface_levels[0]
+        thr = fmap.minimum_surface_level
         mm = fmap.data.matrix()
         mmab = numpy.where ( mm > thr, numpy.ones_like(mm), numpy.zeros_like(mm) )
         nz = numpy.shape ( numpy.nonzero ( mmab ) )[1]
         tvol = float(nz) * fmap.data.step[0] * fmap.data.step[1] * fmap.data.step[2]
-        print("%s - %d above %f, volume %.3f" % (fmap.name, nz, thr, tvol))
+        debug("%s - %d above %f, volume %.3f" % (fmap.name, nz, thr, tvol))
 
         smod = self.CurrentSegmentation()
         if smod == None : return
 
         regs = smod.selected_regions()
-        if len(regs)==0 : umsg ( "Please select a region to fit to" ); return
+        if len(regs)==0 : self.status ( "Please select a region to fit to" ); return
 
         reportFitRegions(fmap.name, regs)
 
         for reg in regs:
             clr = reg.color
-            reg.surface_piece.color = ( clr[0], clr[1], clr[2], REG_OPACITY )
-        print("")
+            reg.show_transparent( REG_OPACITY )
+        debug("")
 
         points = numpy.concatenate ( [r.map_points()
                                       for r in regs], axis=0 )
         regions_vol = sum([r.enclosed_volume() for r in regs])
 
         dv = abs(regions_vol - tvol) / tvol
-        print(" - regions volume: %.2f - dv %.5f" % (regions_vol, dv))
+        debug(" - regions volume: %.2f - dv %.5f" % (regions_vol, dv))
 
         self.fits = []
         fmap.fit_regions = regs
@@ -2137,20 +2263,20 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
         bCloseMap = False
 
-        if self.useLaplace.get () :
-            umsg ("Generating Laplace version of " + dmap.name)
+        if self._use_laplace.enabled :
+            self.status ("Generating Laplace version of " + dmap.name)
             from chimerax.map.filter import laplacian
             to_map = laplacian ( dmap )
             bCloseMap = True
 
-        elif self.mask_map_when_fitting.get() :
+        elif self._mask_map_when_fitting.enabled :
             to_map = reg_map
             bCloseMap = True
             if to_map is None:
-                umsg ('Could not create masked map')
+                self.status ('Could not create masked map')
                 return
 
-        if self.rotaSearch.get () :
+        if self._rota_search.enabled:
             self.saFitMapToPoints_byRot ( fmap, points, to_map )
         else :
             self.saFitMapToPoints ( fmap, points, to_map )
@@ -2160,23 +2286,22 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
         #cfits.sort()
         #cfits.reverse()
 
-        try : nToAdd = int ( self.numFitsToAdd.get () )
+        try : nToAdd = self._num_fits_to_add.value
         except : nToAdd = len (self.cfits)
         for corr, M, regions, stats in self.cfits [ 0 : nToAdd ] :
-            print(" -- clustered Fit -- #fits:%d maxAngle:%.1f maxShift:%.2f maxHeight:%.2f" % ( stats['numFits'], stats['maxAngle'], stats['maxShift'], stats['maxHeight'] ))
+            debug(" -- clustered Fit -- #fits:%d maxAngle:%.1f maxShift:%.2f maxHeight:%.2f" % ( stats['numFits'], stats['maxAngle'], stats['maxShift'], stats['maxHeight'] ))
             fmap.fit_score, fmap.M, fmap.fit_regions = corr, M, regions
             fmap.atomInclusion, fmap.bbAtomInclusion, fmap.bbClashes, fmap.hdoScore  = self.FitScores ( fmap, reg_map )
             self.add_fit (fmap, dmap)
 
-        move_fit_models(fmap, self.cfits[0][1], dmap.openState.xform)
+        move_fit_models(fmap, self.cfits[0][1], dmap.scene_position)
 
-        #umsg ( "Cross-correlation: %.4f\n" % (fmap.fit_score) )
+        #self.status ( "Cross-correlation: %.4f\n" % (fmap.fit_score) )
         self.ReportZScore ( self.cfits )
 
         # close masked map if it was created
-        #if bCloseMap : chimera.openModels.close ( [to_map] )
-        if reg_map :
-            chimera.openModels.close ( [reg_map] )
+        #if bCloseMap : close_models ( [to_map] )
+        close_models ( [reg_map] )
 
         for m in fmap.mols :
             m.display = True
@@ -2187,7 +2312,7 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
     def MapIndexesInMap ( self, ref_map, mask_map ) :
 
-        thr = mask_map.surface_levels[0]
+        thr = mask_map.minimum_surface_level
         mm = mask_map.data.matrix()
         mm = numpy.where ( mm > thr, mm, numpy.zeros_like(mm) )
 
@@ -2199,19 +2324,17 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
         points[:,1] = nze[1]
         points[:,2] = nze[0]
 
-        print("Making map indices for %s in %s" % ( mask_map.name, ref_map.name ))
-        print(" - %d points above %.3f" % ( len(points), thr ))
+        debug("Making map indices for %s in %s" % ( mask_map.name, ref_map.name ))
+        debug(" - %d points above %.3f" % ( len(points), thr ))
 
         # transform to index reference frame of ref_map
         f1 = mask_map.data.ijk_to_xyz_transform
-        f2 = xform_matrix ( mask_map.openState.xform )
-        f3 = xform_matrix ( ref_map.openState.xform.inverse() )
+        f2 = mask_map.scene_position
+        f3 = ref_map.scene_position.inverse()
         f4 = ref_map.data.xyz_to_ijk_transform
 
-        tf = multiply_matrices( f2, f1 )
-        tf = multiply_matrices( f3, tf )
-        tf = multiply_matrices( f4, tf )
-        transform_vertices ( points, tf )
+        tf = f4 * f3 * f2 * f1
+        tf.transform_points ( points, in_place = True )
 
         imap = set()
         for fi, fj, fk in points :
@@ -2225,7 +2348,7 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
     def ZeroMatWitMap ( self, ref_mat, ref_map, mask_map ) :
 
-        thr = mask_map.surface_levels[0]
+        thr = mask_map.minimum_surface_level
         mm = mask_map.data.matrix()
         mm = numpy.where ( mm > thr, mm, numpy.zeros_like(mm) )
 
@@ -2237,19 +2360,17 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
         points[:,1] = nze[1]
         points[:,2] = nze[0]
 
-        print("Making map indices for %s in %s" % ( mask_map.name, ref_map.name ))
-        print(" - %d points above %.3f" % ( len(points), thr ))
+        debug("Making map indices for %s in %s" % ( mask_map.name, ref_map.name ))
+        debug(" - %d points above %.3f" % ( len(points), thr ))
 
         # transform to index reference frame of ref_map
         f1 = mask_map.data.ijk_to_xyz_transform
-        f2 = xform_matrix ( mask_map.openState.xform )
-        f3 = xform_matrix ( ref_map.openState.xform.inverse() )
+        f2 = mask_map.scene_position
+        f3 = ref_map.scene_position.inverse()
         f4 = ref_map.data.xyz_to_ijk_transform
 
-        tf = multiply_matrices( f2, f1 )
-        tf = multiply_matrices( f3, tf )
-        tf = multiply_matrices( f4, tf )
-        transform_vertices ( points, tf )
+        tf = f4 * f3 * f2 * f1
+        tf.transform_points ( points, in_place = True )
 
         imap = set()
         for fi, fj, fk in points :
@@ -2271,17 +2392,17 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
     def OverlappingRegions ( self, dmap, fmap, smod, hide_others = True ) :
 
         imap = self.MapIndexesInMap ( dmap, fmap )
-        print('imap', len(imap))
+        debug('imap', len(imap))
 
         try : fmap.COM
         except : fmap.COM = fmap.mols[0].COM; fmap.bRad = fmap.mols[0].BoundRad
 
         p = numpy.array ( [ fmap.COM ], numpy.float32 )
-        transform_vertices ( p, xform_matrix( fmap.openState.xform ) )
-        transform_vertices ( p, xform_matrix( dmap.openState.xform.inverse() ) )
-        f_COM = chimera.Vector ( *p[0] )
+        fmap.scene_position.transform_points ( p, in_place = True )
+        dmap.scene_position.inverse().transform_points ( p, in_place = True )
+        f_COM = p[0]
         f_bRad = fmap.bRad
-        print(" center", f_COM, "brad", f_bRad)
+        debug(" center", f_COM, "brad", f_bRad)
 
         jregs = []
 
@@ -2312,18 +2433,16 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
         oregs = jregs
 
-        umsg ( "Found %d regions overlapping" % len(oregs) )
+        self.status ( "Found %d regions overlapping" % len(oregs) )
         sel_sps = []
 
-        for sp in smod.surfacePieces :
-            try : clr = sp.region.color
-            except : continue
+        for sp in smod.region_surfaces :
             if oregs.count ( sp.region ) > 0 :
-                sp.color = ( clr[0], clr[1], clr[2], REG_OPACITY )
+                sp.region.show_transparent( REG_OPACITY )
                 sp.display = True
                 sel_sps.append ( sp )
             else :
-                sp.color = ( clr[0], clr[1], clr[2], 1.0 )
+                sp.region.show_transparent( 1 )
                 sp.display = not hide_others
 
         return jregs
@@ -2334,8 +2453,8 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
     def ShowOverlappingRegions ( self ) :
 
-        dmap = segmentation_map()
-        if dmap == None : print("No segmentation map"); return
+        dmap = self.segmentation_map
+        if dmap == None : debug("No segmentation map"); return
 
         smod = self.CurrentSegmentation()
         if smod is None : return
@@ -2363,17 +2482,17 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
         bRad = -1.0 # fmap.mol.BoundRad / float(dmap.data.step[0]); # self.MapBoundingRad ( fmap )
         bRad = fmap.mols[0].BoundRad
 
-        print("\nMaking groups around %d regions - target vol %.3f, b-Rad %.3f" % ( len(regs), tvol, bRad ))
+        debug("\nMaking groups around %d regions - target vol %.3f, b-Rad %.3f" % ( len(regs), tvol, bRad ))
         smod.rgroups, maxDepthReached = self.GroupAroundReg ( smod, regs, tvol, bRad )
         smod.rgroups.sort()
-        print(" - depth reached: %d" % maxDepthReached)
+        debug(" - depth reached: %d" % maxDepthReached)
 
-        if len(smod.rgroups) == 0 : umsg ( "No groups found" ); return -1e99
+        if len(smod.rgroups) == 0 : self.status ( "No groups found" ); return -1e99
 
         nsearchgrps = min ( len(smod.rgroups), SAF_LS_NGROUPS )
-        print("________________________________________________________________________")
-        umsg ( "Fitting %s to %d/%d groups..." % ( fmap.name, nsearchgrps, len(smod.rgroups) ) )
-        print("________________________________________________________________________")
+        debug("________________________________________________________________________")
+        self.status ( "Fitting %s to %d/%d groups..." % ( fmap.name, nsearchgrps, len(smod.rgroups) ) )
+        debug("________________________________________________________________________")
 
 
         self.fits = []
@@ -2382,45 +2501,43 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
             dv, regs = dv_regs
 
-            umsg ( "Fitting to group %d/%d, dVolume %.4f, %d regions" % (i+1, nsearchgrps, dv, len(regs) ) )
-            print(" - regions:", end=' ')
-            for r in regs : print(r.rid, end=' ')
-            print("")
+            self.status ( "Fitting to group %d/%d, dVolume %.4f, %d regions" % (i+1, nsearchgrps, dv, len(regs) ) )
+            debug(" - regions:", end=' ')
+            for r in regs : debug(r.rid, end=' ')
+            debug("")
 
             fmap.fit_regions = regs
 
             points = numpy.concatenate ( [r.map_points() for r in regs], axis=0 )
 
-            if self.rotaSearch.get () :
+            if self._rota_search.enabled :
                 self.saFitMapToPoints_byRot ( fmap, points, dmap )
             else :
                 self.saFitMapToPoints ( fmap, points, dmap )
 
-            print("")
+            debug("")
 
             if fmap.fit_score > bestFitScore :
                 bestFitScore = fmap.fit_score
                 bestFitM = fmap.M
                 bestFitRegions = regs
 
-        umsg ( "Best cross-correlation: %.4f\n\n" % ( bestFitScore ) )
+        self.status ( "Best cross-correlation: %.4f\n\n" % ( bestFitScore ) )
 
         fmap.fit_score = bestFitScore
         fmap.M = bestFitM
         fmap.fit_regions = bestFitRegions
 
-        tXO, tXR = xf_2_M ( dmap.openState.xform )
-        T = tXO * tXR * fmap.M
-        xfA = chimera.Xform.xform ( T[0,0], T[0,1], T[0,2], T[0,3], T[1,0], T[1,1], T[1,2], T[1,3], T[2,0], T[2,1], T[2,2], T[2,3] )
-        fmap.openState.xform = xfA
-        for mol in fmap.mols : mol.openState.xform = xfA
+        xfA = dmap.scene_position * fmap.M
+        fmap.scene_position = xfA
+        for mol in fmap.mols : mol.scene_position = xfA
 
         self.cfits = self.ClusterFits ( self.fits )
         #cfits.sort ( reverse=True, key=lambda x: x[0] )
         self.cfits.sort()
         self.cfits.reverse()
 
-        try : nToAdd = int ( self.numFitsToAdd.get () )
+        try : nToAdd = self._num_fits_to_add.value
         except : nToAdd = len (self.cfits)
 
         for corr, M, regions, stats in self.cfits [ 0 : nToAdd ] :
@@ -2428,14 +2545,14 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
             self.add_fit (fmap, dmap)
             # TODO - add atom inclusion comp
 
-        #umsg ( "Cross-correlation: %.4f\n" % (fmap.fit_score) )
+        #self.status ( "Cross-correlation: %.4f\n" % (fmap.fit_score) )
         self.ReportZScore ( self.cfits )
 
 
     def FitMapToRegionsAroundSel ( self ) :
 
-        dmap = segmentation_map()
-        if dmap == None : print("No segmentation map"); return
+        dmap = self.segmentation_map
+        if dmap == None : debug("No segmentation map"); return
 
         smod = self.CurrentSegmentation()
         if smod is None : return
@@ -2449,10 +2566,10 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
         self.FitMapToGroupsAround ( fmap, smod, regs, dmap )
         if timing:
             t1 = clock()
-            print("Time: %.1f sec" % (t1-t0,))
+            debug("Time: %.1f sec" % (t1-t0,))
 
         if fmap.fit_score is None:
-            umsg('No groups of regions meet size requirement')
+            self.status('No groups of regions meet size requirement')
             return
 
         oregs = self.OverlappingRegions ( dmap, fmap, smod, hide_others = False )
@@ -2480,16 +2597,16 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
         for fmap in fmaps :
 
-            print("\n****************************************************")
-            print("Fitting: ", fmap.name)
-            print("****************************************************\n")
+            debug("\n****************************************************")
+            debug("Fitting: ", fmap.name)
+            debug("****************************************************\n")
 
             for mol in fmap.mols : mol.display = True
 
             self.FitMapToGroupsAround ( fmap, smod, reg, dmap, bFirst )
 
             if fmap.fit_score == None :
-                print(" - no fits for map", fmap.name)
+                debug(" - no fits for map", fmap.name)
 
             elif fmap.fit_score > bestFitScore :
                 bestFitScore = fmap.fit_score
@@ -2500,27 +2617,25 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
 
         if bestFitM == None :
-            print("No best fit recorded, perhaps there were not groups to start with")
+            debug("No best fit recorded, perhaps there were not groups to start with")
             return None
 
         fmap = bestFitMap
         for mol in fmap.mols : mol.display = True
 
-        print("\n**********************************************************")
-        print("Best fit score was %.4f for %s" % (bestFitScore, fmap.name))
-        print("**********************************************************\n")
+        debug("\n**********************************************************")
+        debug("Best fit score was %.4f for %s" % (bestFitScore, fmap.name))
+        debug("**********************************************************\n")
         fmap.M = bestFitM
 
-        tXO, tXR = xf_2_M ( dmap.openState.xform )
-        T = tXO * tXR * fmap.M
-        xfA = chimera.Xform.xform ( T[0,0], T[0,1], T[0,2], T[0,3], T[1,0], T[1,1], T[1,2], T[1,3], T[2,0], T[2,1], T[2,2], T[2,3] )
-        fmap.openState.xform = xfA
-        for mol in fmap.mols : mol.openState.xform = xfA
+        xfA = dmap.scene_position * fmap.M
+        fmap.scene_position = xfA
+        for mol in fmap.mols : mol.scene_position = xfA
 
         oregs = self.OverlappingRegions ( dmap, fmap, smod, hide_others = False  )
 
         if oregs.count ( reg ) == 0 :
-            print("Overlapping regions not inclusive")
+            debug("Overlapping regions not inclusive")
             return False
 
 
@@ -2530,8 +2645,7 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
             self.ReportRegionCount(smod)
 
             jsp = jreg.surface_piece
-            clr = jreg.color
-            jsp.color = ( clr[0], clr[1], clr[2], REG_OPACITY )
+            jreg.show_transparent( REG_OPACITY )
             jsp.display = False
 
         elif len(oregs) == 1 :
@@ -2552,15 +2666,14 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
     def FitMapsToRGroups ( self ) :
 
-        dmap = segmentation_map()
-        if dmap == None : print("No segmentation map"); return
+        dmap = self.segmentation_map
+        if dmap == None : debug("No segmentation map"); return
 
         smod = self.CurrentSegmentation()
         if smod == None : return
 
         for sp in smod.surfacePieces :
-            clr = sp.region.color
-            sp.color = ( clr[0], clr[1], clr[2], REG_OPACITY )
+            sp.region.show_transparent( REG_OPACITY )
             sp.display = False
 
 
@@ -2573,9 +2686,7 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
                 try :
                     spi.region.placed.display = False
-
-                    clr = spi.region.color
-                    spi.color = ( clr[0], clr[1], clr[2], REG_OPACITY )
+                    spi.region.show_transparent( REG_OPACITY )
                     spi.display = True
                     spi.region.placed.display = True
                     spi.display = False
@@ -2588,15 +2699,15 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
                     break
 
             if sp == None :
-                print("\nAll regions have maps placed")
+                debug("\nAll regions have maps placed")
                 break
 
             clr = sp.region.color
-            sp.color = ( clr[0], clr[1], clr[2], REG_OPACITY )
+            sp.region.show_transparent( REG_OPACITY )
             sp.display = True
 
             if self.FitOpenMapsToGroupsAround ( smod, sp.region, dmap, False ) == False :
-                print("___ No map fit for region! ___", sp.region.rid, sp.region.enclosed_volume())
+                debug("___ No map fit for region! ___", sp.region.rid, sp.region.enclosed_volume())
                 sp.failed_fit = True
 
             sp.region.placed = True
@@ -2604,24 +2715,24 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
         if timing:
             t1 = clock()
-            print("Time: %.1f sec" % (t1-t0))
+            debug("Time: %.1f sec" % (t1-t0))
 
-        for sp in smod.surfacePieces :
+        for sp in smod.region_surfaces :
             try : sp.failed_fit
             except : continue
-            print("Region %d failed fit and still in model" % sp.region.rid)
+            debug("Region %d failed fit and still in model" % sp.region.rid)
 
 
 
     def MapVolume ( self, fmap ) :
 
-        thr = fmap.surface_levels[0]
+        thr = fmap.minimum_surface_level
         mm = fmap.data.matrix()
         mmab = numpy.where ( mm > thr, numpy.ones_like(mm), numpy.zeros_like(mm) )
         nz = numpy.shape ( numpy.nonzero ( mmab ) )[1]
         vvol = fmap.data.step[0] * fmap.data.step[1] * fmap.data.step[2]
         tvol = vvol * float(nz)
-        print("%s - %d above %f, VOLUME %.3f" % (fmap.name, nz, thr, tvol))
+        debug("%s - %d above %f, VOLUME %.3f" % (fmap.name, nz, thr, tvol))
         return tvol
 
 
@@ -2635,99 +2746,98 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
     def SMS ( self ) :
 
-        dmap = segmentation_map()
+        dmap = self.segmentation_map
         if dmap == None :
-            print("No segmentation map");
+            debug("No segmentation map");
             return
 
         fmap = self.MoleculeMap()
         if fmap == None : return
 
-        sel_str = "#%d@C,N,CA" % fmap.mols[0].id
-        sel = chimera.selection.OSLSelection (sel_str)
-        backbone_atoms = sel.atoms()
-
-        sms = ShapeMatchScore ( backbone_atoms, dmap )
+        sms = ShapeMatchScore ( self._backbone_atoms(fmap.mols[0]), dmap )
 
 
+    def _backbone_atoms(self, mol):
+        atoms = mol.atoms
+        anames = atoms.names
+        from chimerax.atomic import concatenate, Atoms
+        bbatoms = concatenate([atoms.filter(anames == 'C'),
+                               atoms.filter(anames == 'N'),
+                               atoms.filter(anames == 'CA')], Atoms)
+        return bbatoms
 
     def VisiScores ( self ) :
 
-        print("Visi scores...")
-        dmap = segmentation_map()
+        msg = ["Visi scores..."]
+        dmap = self.segmentation_map
         if dmap == None :
             return
 
-        print(" - in map: " + dmap.name)
+        msg.append(" - in map: " + dmap.name)
 
         molmap = None
         mols = []
 
-        for m in chimera.openModels.list() :
+        from chimerax.map import Volume
+        from chimerax.atomic import Structure
+        for m in self._all_models :
             if m.display == False :
                 continue
-            if type(m) == chimera.Molecule :
-                print(" - mol: ", m.name)
+            if isinstance(m, Structure) :
+                msg.append(" - mol: " + m.name)
                 mols.append ( m )
-            if type(m) == VolumeViewer.Volume :
-                print(" - map: ", m.name)
+            if isinstance(m, Volume) :
+                msg.append(" - map: " + m.name)
                 molmap = m
 
         if molmap != None :
             fpoints, fpoint_weights = fit_points(molmap, True)
-            map_values = dmap.interpolated_values ( fpoints, molmap.openState.xform )
+            map_values = dmap.interpolated_values ( fpoints, molmap.scene_position )
             olap, corr = overlap_and_correlation ( fpoint_weights, map_values )
-            print(" - Overlap: %f, Cross-correlation: %f" % (olap, corr))
+            msg.append(" - Overlap: %f, Cross-correlation: %f" % (olap, corr))
 
 
 
-        otherPoints = None
-        otherAtoms = []
+        otherPoints = numpy.concatenate ( [m.atoms.scene_coords for m in mols], axis=0 )
+        from chimerax import atomic
+        otherAtoms = atomic.concatenate([m.atoms for m in mols], atomic.Atoms)
 
+        # debug "Doing tree with %d %d" % ( len(otherPoints), len(otherAtoms) )
 
-        for m in mols :
-            otherAtoms = otherAtoms + m.atoms
-            mpoints = get_atom_coordinates ( m.atoms, transformed = True )
-            if otherPoints == None : otherPoints = mpoints
-            else : otherPoints = numpy.concatenate ( [otherPoints, mpoints], axis=0 )
+        msg.append(" - making tree, %d atoms" % len(otherAtoms))
 
-        # print "Doing tree with %d %d" % ( len(otherPoints), len(otherAtoms) )
-
-        print(" - making tree, %d atoms" % len(otherAtoms))
-
-        from CGLutil.AdaptiveTree import AdaptiveTree
+        from chimerax.core.geometry import AdaptiveTree
         searchTreeAll = AdaptiveTree (otherPoints.tolist(), otherAtoms, 4.0)
 
-        print(" - checking clashes, %d atoms" % len(otherAtoms))
+        msg.append(" - checking clashes, %d atoms" % len(otherAtoms))
 
         numClash = 0.0
         for at in otherAtoms :
-            nearby = searchTreeAll.searchTree ( at.xformCoord().data(), 3.0 )
+            nearby = searchTreeAll.search_tree ( at.scene_coord, 3.0 )
             for nb in nearby :
-                if nb.molecule != at.molecule :
+                if nb.structure != at.structure :
                     numClash = numClash + 1.0
                     break
 
         bbClashes = numClash / float ( len(otherAtoms) )
 
-        print(" - clashes: %.0f/%.0f = %0.3f clash-free" % (numClash, len(otherAtoms), 1.0-bbClashes));
+        msg.append(" - clashes: %.0f/%.0f = %0.3f clash-free" % (numClash, len(otherAtoms), 1.0-bbClashes))
 
-
+        self.session.logger.info('\n'.join(msg))
 
 
 
 
     def FitScores ( self, fmap, regionMap = None ) :
 
-        dmap = segmentation_map()
+        dmap = self.segmentation_map
         if dmap == None :
-            print("No segmentation map");
+            debug("No segmentation map");
             return [0.0, 0.0, 0.0, 0.0]
 
-        print("Fit scores for", fmap.name, "in", dmap.name)
+        debug("Fit scores for", fmap.name, "in", dmap.name)
 
         import numpy
-        import _contour
 
         # move fmap (and structures) to fmap.M if it's there
         # (it's not there if we do scores for a selected structure
@@ -2736,21 +2846,19 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
         except : move = False
 
         if move :
-            tf = numpy.array(fmap.M)
-            xf = dmap.openState.xform
-            xf.multiply(chimera_xform(tf))
-            fmap.openState.xform = xf
+            xf = dmap.scene_position * fmap.M
+            fmap.scene_position = xf
             for mol in fmap.mols :
-                mol.openState.xform = xf
+                mol.scene_position = xf
 
 
         # ---------------------------------------------------------------
         # Cross-correlation
         # ---------------------------------------------------------------
         fpoints, fpoint_weights = fit_points(fmap)
-        map_values = dmap.interpolated_values ( fpoints, fmap.openState.xform )
+        map_values = dmap.interpolated_values ( fpoints, fmap.scene_position )
         olap, corr = overlap_and_correlation ( fpoint_weights, map_values )
-        print(" - Overlap: %f, Cross-correlation: %f" % (olap, corr))
+        debug(" - Overlap: %f, Cross-correlation: %f" % (olap, corr))
 
 
         # ---------------------------------------------------------------
@@ -2768,47 +2876,46 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
         bbIncl = 0.0
         bbClashes = 0.0
 
-        all_atoms = []
-        for mol in fmap.mols : all_atoms = all_atoms + mol.atoms
+        from chimerax.atomic import concatenate, Atoms
+        all_atoms = concatenate([mol.atoms for mol in fmap.mols], Atoms)
         numAllAtoms = float ( len(all_atoms) )
 
         if len(all_atoms) == 0 :
             return [0.0, 0.0, 0.0, 0.0]
 
-        #dmapXfInv = xform_matrix( dmap.openState.xform.inverse() )
+        #dmapXfInv = dmap.scene_position.inverse()
         #transform_vertices( points, dmapXfInv )
-        points = get_atom_coordinates ( all_atoms, transformed = True )
-        dvals = dmap.interpolated_values ( points, chimera.Xform() )
-        min_d = dmap.surface_levels[0]
+        points = all_atoms.scene_coords
+        from chimerax.core.geometry import Place
+        dvals = dmap.interpolated_values ( points, Place() )
+        min_d = dmap.minimum_surface_level
         dvals = numpy.where ( dvals > min_d, dvals, numpy.zeros_like(dvals) )
         nze = numpy.nonzero ( dvals )
         allIn = float(len(nze[0]))
         allIncl = allIn / numAllAtoms
 
-        print(" - Atom inclusion: %.0f/%.0f = %.3f" % ( allIn, numAllAtoms, allIncl ))
+        debug(" - Atom inclusion: %.0f/%.0f = %.3f" % ( allIn, numAllAtoms, allIncl ))
 
         # ---------------------------------------------------------------
         # Atom inclusion -- backbone atoms
         # ---------------------------------------------------------------
         bbIncl = 0.0
 
-        sel_str = "#%d@C,N,CA" % fmap.mols[0].id
-        sel = chimera.selection.OSLSelection (sel_str)
-        backbone_atoms = sel.atoms()
+        backbone_atoms = self._backbone_atoms(fmap.mols[0])
 
         if len(backbone_atoms) > 0 :
 
-            points = get_atom_coordinates ( backbone_atoms, transformed = True )
-            #dmapXfInv = xform_matrix( dmap.openState.xform.inverse() )
+            points = backbone_atoms.scene_coords
+            #dmapXfInv = dmap.scene_position.inverse()
             #transform_vertices( points, dmapXfInv )
-            dvals = dmap.interpolated_values ( points, chimera.Xform() )
-            min_d = dmap.surface_levels[0]
+            dvals = dmap.interpolated_values ( points, Place() )
+            min_d = dmap.minimum_surface_level
             dvals = numpy.where ( dvals > min_d, dvals, numpy.zeros_like(dvals) )
             nze = numpy.nonzero ( dvals )
             bbIn = float(len(nze[0]))
             numBBAtoms = float(len(backbone_atoms))
             bbIncl = bbIn / numBBAtoms
-            print(" - BB Atom inclusion: %.0f/%.0f = %.3f" % (bbIn, numBBAtoms, bbIncl ));
+            debug(" - BB Atom inclusion: %.0f/%.0f = %.3f" % (bbIn, numBBAtoms, bbIncl ));
 
 
         if 0 :
@@ -2826,27 +2933,28 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
             nz_fpoints = len ( numpy.nonzero ( regionMap.data.full_matrix() )[0] )
 
-            _contour.affine_transform_vertices ( points, Matrix.xform_matrix( regionMap.openState.xform.inverse() ) )
+            regionMap.scene_position.inverse().transform_points( points, in_place = True )
             s = regionMap.data.step[0]
-            mdata = VolumeData.zone_masked_grid_data ( regionMap.data, points, numpy.sqrt(3*s*s) )
-            #gv = VolumeViewer.volume.volume_from_grid_data ( mdata )
-            #gv.openState.xform = dmap.openState.xform
+            from chimerax.map.data import zone_masked_grid_data
+            mdata = zone_masked_grid_data ( regionMap.data, points, numpy.sqrt(3*s*s) )
+            #gv = volume_from_grid_data ( mdata )
+            #gv.scene_position = dmap.scene_position
             #gv.name = "Masked"
 
             mat = mdata.full_matrix()
             nz_mdata = len ( numpy.nonzero ( mat )[0] )
             if nz_fpoints > 0 :
                 hdo = float (nz_mdata) / float(nz_fpoints)
-                print(" - Density Occupancy: %d / %d grid points above %.3f occupied (%.4f)" % (
-                    nz_mdata, nz_fpoints, dmap.surface_levels[0], hdo ))
+                debug(" - Density Occupancy: %d / %d grid points above %.3f occupied (%.4f)" % (
+                    nz_mdata, nz_fpoints, dmap.minimum_surface_level, hdo ))
         else :
-            print(" - not computing density occupancy")
+            debug(" - not computing density occupancy")
 
 
         # ---------------------------------------------------------------
         # Clashes with symmetric copies
         # ---------------------------------------------------------------
-        if self.calcSymmetryClashes.get() :
+        if self._calc_symmetry_clashes.enabled :
 
             symMols = self.PlaceSym ()
             if symMols:
@@ -2856,13 +2964,13 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
                 for m in symMols :
                     otherAtoms = otherAtoms + m.atoms
-                    mpoints = get_atom_coordinates ( m.atoms, transformed = True )
+                    mpoints = m.atoms.scene_coords
                     if otherPoints == None : otherPoints = mpoints
                     else : otherPoints = numpy.concatenate ( [otherPoints, mpoints], axis=0 )
 
-                # print "Doing tree with %d %d" % ( len(otherPoints), len(otherAtoms) )
+                # debug "Doing tree with %d %d" % ( len(otherPoints), len(otherAtoms) )
 
-                from CGLutil.AdaptiveTree import AdaptiveTree
+                from chimerax.core.geometry import AdaptiveTree
                 searchTreeAll = AdaptiveTree (otherPoints.tolist(), otherAtoms, 4.0)
 
                 #if len ( backbone_atoms ) == 0 :
@@ -2872,32 +2980,32 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
                 numClash = 0.0
                 for at in all_atoms :
-                    nearby = searchTreeAll.searchTree ( at.xformCoord().data(), 3.0 )
+                    nearby = searchTreeAll.search_tree ( at.scene_coord, 3.0 )
                     if len(nearby) > 0 :
                         numClash = numClash + 1.0
 
                 bbClashes = numClash / numAllAtoms
 
-                chimera.openModels.close ( symMols )
+                self.session.models.close ( symMols )
 
-                print(" - Clashes with symmetric copies: %.0f/%.0f = %0.3f" % (numClash, numAllAtoms, bbClashes));
+                debug(" - Clashes with symmetric copies: %.0f/%.0f = %0.3f" % (numClash, numAllAtoms, bbClashes));
 
-        print(fmap.name, corr, allIncl, bbClashes, hdo)
+        debug(fmap.name, corr, allIncl, bbClashes, hdo)
 
         #for i in range ( 1 ) :
-        #    print (frame_at+i),
-        #    chimera.printer.saveImage ( "./frames/%06d.png" % (frame_at + i) )
-        #print ""
+        #    debug (frame_at+i),
+        #    chimera.debuger.saveImage ( "./frames/%06d.png" % (frame_at + i) )
+        #debug ""
 
         return [allIncl, bbIncl, bbClashes, hdo]
 
 
     def FitMapToRGroups ( self ) :
 
-        print("_______________________________________________________________")
+        debug("_______________________________________________________________")
 
-        dmap = segmentation_map()
-        if dmap == None : print("No segmentation map"); return
+        dmap = self.segmentation_map
+        if dmap == None : debug("No segmentation map"); return
 
         fmap = self.MoleculeMap()
         if fmap == None : return
@@ -2906,7 +3014,7 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
         smod = self.CurrentSegmentation()
         if smod is None : return
 
-        print("---")
+        debug("---")
 
         if timing: t0 = clock()
 
@@ -2918,14 +3026,14 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
         bestFitScore = -1e99
         bestFitM = None
 
-        print("Got %d groups..." % (len(smod.rgroups) ))
+        debug("Got %d groups..." % (len(smod.rgroups) ))
 
         dmap_name = os.path.splitext ( dmap.name )[0]
         path = os.path.dirname ( dmap.data.path ) + os.path.sep
 
         nsearchgrps = min ( MAX_NUM_GROUPS, len(smod.rgroups) )
         if nsearchgrps == 0:
-            umsg('No groups of regions meet size requirement')
+            self.status('No groups of regions meet size requirement')
             return
 
         self.fits = []
@@ -2934,16 +3042,15 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
             dv, regs = dv_regs
 
-            umsg ( "Fitting to group %d/%d, dVolume %.4f, %d regions" % (i+1, nsearchgrps, dv, len(regs) ) )
-            print(" - regions:", end=' ')
-            for r in regs : print(r.rid, end=' ')
-            print("")
+            self.status ( "Fitting to group %d/%d, dVolume %.4f, %d regions" % (i+1, nsearchgrps, dv, len(regs) ) )
+            debug(" - regions:", end=' ')
+            for r in regs : debug(r.rid, end=' ')
+            debug("")
 
             for sp in smod.surfacePieces :
                 if regs.count ( sp.region ) > 0 :
                     sp.display = True
-                    clr = sp.region.color
-                    sp.color = ( clr[0], clr[1], clr[2], REG_OPACITY )
+                    sp.region.show_transparent( REG_OPACITY )
 
                 else : sp.display = False
 
@@ -2952,7 +3059,7 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
             # TODO: points need to be in dmap coordinates.
             points = numpy.concatenate ( [r.map_points()
                                           for r in regs], axis=0 )
-            if self.rotaSearch.get () :
+            if self._rota_search.enabled :
                 self.saFitMapToPoints_byRot ( fmap, points, dmap )
             else :
                 self.saFitMapToPoints ( fmap, points, dmap )
@@ -2962,20 +3069,18 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
                 bestFitM = fmap.M
                 bestFitRegs = regs
 
-        umsg ( "Best cross-correlation: %.4f\n\n" % ( bestFitScore ) )
+        self.status ( "Best cross-correlation: %.4f\n\n" % ( bestFitScore ) )
 
         fmap.fit_score = bestFitScore
         fmap.M = bestFitM
 
-        tXO, tXR = xf_2_M ( dmap.openState.xform )
-        T = tXO * tXR * fmap.M
-        xfA = chimera.Xform.xform ( T[0,0], T[0,1], T[0,2], T[0,3], T[1,0], T[1,1], T[1,2], T[1,3], T[2,0], T[2,1], T[2,2], T[2,3] )
-        fmap.openState.xform = xfA
-        for mol in fmap.mols : mol.openState.xform = xfA
+        xfA = dmap.scene_position * fmap.M
+        fmap.scene_position = xfA
+        for mol in fmap.mols : mol.scene_position = xfA
 
         if timing:
             t1 = clock()
-            print("Time: %.1f sec" % (t1-t0))
+            debug("Time: %.1f sec" % (t1-t0))
 
         oregs = self.OverlappingRegions ( dmap, fmap, smod, hide_others = False  )
 
@@ -2984,7 +3089,7 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
         #cfits.sort()
         #cfits.reverse()
 
-        try : nToAdd = int ( self.numFitsToAdd.get () )
+        try : nToAdd = self._num_fits_to_add.value
         except : nToAdd = len (self.cfits)
 
         for corr, M, regions, stats in self.cfits [ 0 : nToAdd ] :
@@ -2992,7 +3097,7 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
             self.add_fit (fmap, dmap)
             # TODO - add atom inclusion comp
 
-        #umsg ( "Cross-correlation: %.4f\n" % (fmap.fit_score) )
+        #self.status ( "Cross-correlation: %.4f\n" % (fmap.fit_score) )
         self.ReportZScore ( self.cfits )
 
 
@@ -3000,55 +3105,44 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
     def GetMapFromMolRes ( self, mol, cid, rStart, rEnd ) :
 
-        sel_str = "#%d:%d-%d.%s" % (mol.id, rStart, rEnd, cid)
-        print("[%s]" % (sel_str), end=' ')
+        sel_str = "#%s/%s:%d-%d" % (mol.id_string, cid, rStart, rEnd)
+        debug("[%s]" % (sel_str), end=' ')
 
-
-        res = float ( self.simRes.get() )
-        grid = float ( self.simGridSp.get() )
+        res, grid = self._sim_res_and_grid
 
         cmd = "molmap %s %f sigmaFactor 0.187 gridSpacing %f replace false" % ( sel_str, res, grid )
-        chimera.runCommand ( cmd )
+        self._run_command ( cmd )
 
         mv = None
-        for mod in chimera.openModels.list() :
+        for mod in self._all_models :
             ts = mod.name.split()
             if len(ts) > 1 and mod.name.find("map") >=0 and mod.name.find("res") >=0 :
-                #print " - found", mod.name
+                #debug " - found", mod.name
                 mv = mod
                 mv.name = "_" + sel_str
                 break
 
         if mv == None :
-            umsg (" - error - could not find chain map")
+            self.status (" - error - could not find chain map")
 
         return mv
 
 
+    @property
+    def _all_models(self):
+
+        return self.session.models.list()
 
     def GetMapFromMolRanges ( self, mol, cid, ranges ) :
 
-        sel_str = "#%d:%s" % (mol.id, ranges)
-        print("[%s]" % (sel_str), end=' ')
+        sel_str = "#%s:%s" % (mol.id_string, ranges)
+        debug("[%s]" % (sel_str), end=' ')
 
-
-        res = float ( self.simRes.get() )
-        grid = float ( self.simGridSp.get() )
+        res, grid = self._sim_res_and_grid
 
         cmd = "molmap %s %f sigmaFactor 0.187 gridSpacing %f replace false" % ( sel_str, res, grid )
-        chimera.runCommand ( cmd )
-
-        mv = None
-        for mod in chimera.openModels.list() :
-            ts = mod.name.split()
-            if len(ts) > 1 and mod.name.find("map") >=0 and mod.name.find("res") >=0 :
-                #print " - found", mod.name
-                mv = mod
-                mv.name = "_" + sel_str
-                break
-
-        if mv == None :
-            umsg (" - error - could not find chain map")
+        mv = self._run_command ( cmd )
+        mv.name = "_" + sel_str
 
         return mv
 
@@ -3056,8 +3150,8 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
     def GroupRegionsBySS ( self ) :
 
-        dmap = segmentation_map()
-        if dmap == None : print("No segmentation map"); return
+        dmap = self.segmentation_map
+        if dmap == None : debug("No segmentation map"); return
 
         #fmap = self.MoleculeMap()
         #if fmap == None : return
@@ -3065,24 +3159,24 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
         smod = self.CurrentSegmentation()
         if smod is None : return
 
-        print("---")
+        debug("---")
 
         #mol = fmap.mols[0]
-        #print mol.name
+        #debug mol.name
 
         #chain_colors = RandColorChains ( mol )
 
         chain_maps = []
 
-        res = float ( self.simRes.get() )
-        grid = float ( self.simGridSp.get() )
+        res, grid = self._sim_res_and_grid
 
-        print("_____________ res %2f _______ grid %.2f _________________________________" % (res, grid))
+        debug("_____________ res %2f _______ grid %.2f _________________________________" % (res, grid))
 
 
-        for mol in chimera.openModels.list() :
+        from chimerax.atomic import Structure
+        for mol in self._all_models :
 
-            if type(mol) != chimera.Molecule or mol.display == False : continue
+            if not isinstance(mol, Structure) or mol.display == False : continue
 
             basename = os.path.splitext ( mol.name )[0]
             #chain_colors = RandColorChains ( mol )
@@ -3103,7 +3197,7 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
                 residues = chainsRes[chainId]
 
-                print(" - chain " + chainId + ", %d " % len(residues) + " residues")
+                debug(" - chain " + chainId + ", %d " % len(residues) + " residues")
 
                 ss, rStart = "", 0
                 rI = 0
@@ -3114,23 +3208,23 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
                     res = residues[rI]
 
                     if rStart == 0 :
-                        print("  - at first res %d " % rI + ", pos: %d " % res.id.position, end=' ')
+                        debug("  - at first res %d " % rI + ", pos: %d " % res.id.position, end=' ')
 
                         rStart = res.id.position
                         if res.isHelix :
-                            print(" - H")
+                            debug(" - H")
                             ss = "H"
                         else :
-                            print("")
+                            debug("")
                             ss = ""
 
                     else :
-                        #print "  - at res %d " % rI + ", pos: %d " % res.id.position,
+                        #debug "  - at res %d " % rI + ", pos: %d " % res.id.position,
 
                         if res.isHelix :
-                            #print " - H "
+                            #debug " - H "
                             if ss != "H" :
-                                print("  - _->H - at res %d " % rI + ", pos: %d " % res.id.position)
+                                debug("  - _->H - at res %d " % rI + ", pos: %d " % res.id.position)
                                 #mv = self.GetMapFromMolRes ( mol, chainId, rStart, res.id.position-1 )
                                 #chain_maps.append ( [mv, self.MapIndexesInMap ( dmap, mv )] )
                                 #mv.chain_id = basename + "_" + chainId + "_H%d" % rStart
@@ -3139,9 +3233,9 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
                                 rStart = res.id.position
                                 ss = "H"
                         else :
-                            #print ""
+                            #debug ""
                             if ss == "H" :
-                                print("  - H->_ - at res %d " % rI + ", pos: %d " % res.id.position)
+                                debug("  - H->_ - at res %d " % rI + ", pos: %d " % res.id.position)
                                 mv = self.GetMapFromMolRes ( mol, chainId, rStart, res.id.position-1 )
                                 chain_maps.append ( [mv, self.MapIndexesInMap ( dmap, mv )] )
                                 mv.chain_id = basename + "_" + chainId + "_%d" % rStart
@@ -3150,15 +3244,15 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
                     rI += 1
                     if rI >= len(residues) :
-                        print("  - done chain " + chainId + " - at res %d " % rI + ", pos: %d " % res.id.position, end=' ')
+                        debug("  - done chain " + chainId + " - at res %d " % rI + ", pos: %d " % res.id.position, end=' ')
 
                         if res.isHelix :
-                            print(" - H ")
+                            debug(" - H ")
                             mv = self.GetMapFromMolRes ( mol, chainId, rStart, res.id.position )
                             chain_maps.append ( [mv, self.MapIndexesInMap ( dmap, mv )] )
                             mv.chain_id = basename + "_" + chainId + "_" + ss + "%d" % rStart
                         else :
-                            print("")
+                            debug("")
                             if len(oRanges) > 0 : oRanges = oRanges + ","
                             oRanges = oRanges + "%d-%d.%s" % (rStart, res.id.position, chainId)
 
@@ -3172,16 +3266,16 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
             #break
 
-        # print chain_maps
+        # debug chain_maps
 
         rgroups = {}
 
-        print(" - %d regions" % len(smod.regions))
+        debug(" - %d regions" % len(smod.regions))
 
         for ri, reg in enumerate ( smod.regions ) :
 
             if ri % 100 == 0 :
-                print(" %d/%d " % (ri+1, len(smod.regions) ))
+                debug(" %d/%d " % (ri+1, len(smod.regions) ))
 
             max_ov = 0.0
             max_ov_chm = None
@@ -3193,7 +3287,7 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
                     if (i,j,k) in imap:
                         noverlap += 1
 
-                #print " - ", chm.name, noverlap
+                #debug " - ", chm.name, noverlap
 
                 ov = float(noverlap) / reg.point_count()
                 if ov > max_ov :
@@ -3209,23 +3303,21 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
         from . import regions
 
         for chid, regs in rgroups.items () :
-            print("Chain %s - %d regions" % (chid, len(regs)))
+            debug("Chain %s - %d regions" % (chid, len(regs)))
 
             jregs = regions.TopParentRegions(regs)
             jreg = smod.join_regions ( jregs )
             jreg.make_surface(None, None, smod.regions_scale)
 
 
-        for chmImap in chain_maps :
-            chimera.openModels.close ( chmImap )
-
+        close_models([m for m,i in chain_maps])
 
 
     def GroupRegionsByChains ( self ) :
 
-        dmap = segmentation_map()
+        dmap = self.segmentation_map
         if dmap == None :
-            umsg ( "Please choose map in Segment Dialog" )
+            self.status ( "Please choose map in Segment Dialog" )
             return
 
         #fmap = self.MoleculeMap()
@@ -3233,33 +3325,33 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
         smod = self.CurrentSegmentation()
         if smod is None :
-            umsg ( "Please select a segmentation in Segment Dialog" )
+            self.status ( "Please select a segmentation in Segment Dialog" )
             return
 
-        print("---")
+        debug("---")
 
         #mol = fmap.mols[0]
-        #print mol.name
+        #debug mol.name
 
         #chain_colors = RandColorChains ( mol )
 
 
-        umsg ( "Grouping with chains... making chain maps..." )
+        self.status ( "Grouping with chains... making chain maps..." )
 
 
         chain_maps = []
 
-        res = float ( self.simRes.get() )
-        grid = float ( self.simGridSp.get() )
+        res, grid = self._sim_res_and_grid
 
-        print("_____________ res %2f _______ grid %.2f _________________________________" % (res, grid))
+        debug("_____________ res %2f _______ grid %.2f _________________________________" % (res, grid))
 
 
         mols = []
 
-        for mol in chimera.openModels.list() :
+        from chimerax.atomic import Structure
+        for mol in self._all_models :
 
-            if type(mol) != chimera.Molecule or mol.display == False :
+            if not isinstance(mol, Structure) or mol.display == False :
                 continue
 
             mols.append ( mol )
@@ -3268,12 +3360,12 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
         for i, mol in enumerate (mols) :
 
-            chain_colors = RandColorChains ( mol )
             ci = 1
 
-            for cid, clr in chain_colors.items() :
+            chain_ids = mol.residues.unique_chain_ids
+            for cid in chain_ids :
 
-                umsg ( "Grouping with chains... making map for chain %d/%d of mol %d/%d" % (ci,len(chain_colors),i+1,len(mols)) )
+                self.status ( "Grouping with chains... making map for chain %d/%d of mol %d/%d" % (ci,len(chain_ids),i+1,len(mols)) )
                 ci += 1
                 nchains += 1
 
@@ -3282,24 +3374,12 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
                 cname = basename + "_" + cid
                 #cname = basename.split ("__")[-1]
 
-                sel_str = "#%d:.%s" % (mol.id, cid)
-                print("%s [%s]" % (cname, sel_str), end=' ')
+                sel_str = "#%s/%s" % (mol.id_string, cid)
+                debug("%s [%s]" % (cname, sel_str), end=' ')
 
                 cmd = "molmap %s %f sigmaFactor 0.187 gridSpacing %f replace false" % ( sel_str, res, grid )
-                chimera.runCommand ( cmd )
-
-                mv = None
-                for mod in chimera.openModels.list() :
-                    ts = mod.name.split()
-                    if len(ts) > 1 and mod.name.find("map") >=0 and mod.name.find("res") >=0 :
-                        #print " - found", mod.name
-                        mv = mod
-                        mv.name = cname
-                        break
-
-                if mv == None :
-                    umsg (" - error - could not find chain map")
-                    return
+                mv = self._run_command ( cmd )
+                mv.name = cname
 
                 imap = self.MapIndexesInMap ( dmap, mv )
 
@@ -3308,16 +3388,16 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
             #break
 
-        # print chain_maps
+        # debug chain_maps
 
         rgroups = {}
 
-        print(" - %d regions" % len(smod.regions))
+        debug(" - %d regions" % len(smod.regions))
 
         for ri, reg in enumerate ( smod.regions ) :
 
             if ri % 100 == 0 :
-                umsg ( "Grouping regions... %d/%d " % (ri+1, len(smod.regions) ) )
+                self.status ( "Grouping regions... %d/%d " % (ri+1, len(smod.regions) ) )
 
             max_ov = 0.0
             max_ov_chm = None
@@ -3329,7 +3409,7 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
                     if (i,j,k) in imap:
                         noverlap += 1
 
-                #print " - ", chm.name, noverlap
+                #debug " - ", chm.name, noverlap
 
                 ov = float(noverlap) / reg.point_count()
                 if ov > max_ov :
@@ -3342,20 +3422,19 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
                 rgroups[max_ov_chm.chain_id].append ( reg )
 
 
-        from . import regions
-        from Segger.extract_region_dialog import dialog as exdialog
-
+        #from .extract_region_dialog import dialog as exdialog
         base = ""
-        if exdialog() != None :
+        if 0 and exdialog() != None :
             base = exdialog().saveMapsBaseName.get()
 
+        from .regions import TopParentRegions
         for chid, regs in rgroups.items () :
 
             cid = chid.split("_")[-1]
 
-            print("Chain %s - %d regions -> %s" % (chid, len(regs), cid))
+            debug("Chain %s - %d regions -> %s" % (chid, len(regs), cid))
 
-            jregs = regions.TopParentRegions(regs)
+            jregs = TopParentRegions(regs)
             jreg = smod.join_regions ( jregs )
             jreg.make_surface(None, None, smod.regions_scale)
             jreg.chain_id = chid.split("_")[-1]
@@ -3366,46 +3445,45 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
                 exdialog().Extract2 ( dmap, dmap, smod, [jreg] )
 
 
-        for chmImap in chain_maps :
-            chimera.openModels.close ( chmImap )
+        close_models([m for m,i in chain_maps])
 
-
-        umsg ( "Done - total %d chains in %d visible Molecules" % (nchains,len(mols)) )
+        self.status ( "Done - total %d chains in %d visible Molecules" % (nchains,len(mols)) )
 
 
     def MaskWithSel ( self ) :
 
         selats = chimera.selection.currentAtoms()
-        print("%d selected atoms" % len(selats))
+        debug("%d selected atoms" % len(selats))
 
         dmap = None
-        for m in chimera.openModels.list() :
-            if m.display == True and type(m) == VolumeViewer.volume.Volume :
+        for m in self._volumes :
+            if m.display == True :
                 dmap = m
                 break
 
         if dmap == None :
             return
 
-        print("map: %s" % dmap.name)
+        debug("map: %s" % dmap.name)
 
 
-        import _multiscale
-        points = _multiscale.get_atom_coordinates ( selats, transformed = True )
+        points = selats.scene_coords
 
-        import _contour
-        _contour.affine_transform_vertices ( points, Matrix.xform_matrix( dmap.openState.xform.inverse() ) )
+        dmap.scene_position.inverse().transform_points ( points, in_place = True )
 
         s = dmap.data.step[0]
         s2 = numpy.sqrt ( s*s + s*s + s*s )
-        mdata = VolumeData.zone_masked_grid_data ( dmap.data, points, numpy.sqrt(s2) )
+        from chimerax.map.data import zone_masked_grid_data
+        mdata = zone_masked_grid_data ( dmap.data, points, numpy.sqrt(s2) )
 
         from chimerax.map.filter import gaussian
         gvm = gaussian.gaussian_convolution ( mdata.full_matrix(), (.1,.1,.1) )
         #gvm = gvol.full_matrix()
 
-        gdata = VolumeData.Array_Grid_Data ( gvm, dmap.data.origin, dmap.data.step, dmap.data.cell_angles, name = dmap.name + "_m" )
-        nvg = VolumeViewer.volume.volume_from_grid_data ( gdata )
+        from chimerax.map.data import ArrayGridData
+        gdata = ArrayGridData ( gvm, dmap.data.origin, dmap.data.step, dmap.data.cell_angles, name = dmap.name + "_m" )
+        from chimerax.map import volume_from_grid_data
+        nvg = volume_from_grid_data ( gdata, self.session )
         nvg.name = dmap.name + "___"
 
 
@@ -3414,8 +3492,8 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
     def GroupRegionsByMols ( self ) :
 
-        dmap = segmentation_map()
-        if dmap == None : print("No segmentation map"); return
+        dmap = self.segmentation_map
+        if dmap == None : debug("No segmentation map"); return
 
         #fmap = self.MoleculeMap()
         #if fmap == None : return
@@ -3423,47 +3501,32 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
         smod = self.CurrentSegmentation()
         if smod is None : return
 
-        print("---")
+        debug("---")
 
         #mol = fmap.mols[0]
-        #print mol.name
+        #debug mol.name
 
         #chain_colors = RandColorChains ( mol )
 
         chain_maps = []
 
-        res = float ( self.simRes.get() )
-        grid = float ( self.simGridSp.get() )
+        res, grid = self._sim_res_and_grid
 
-        print("_____________ res %2f _______ grid %.2f ______________" % (res, grid))
+        debug("_____________ res %2f _______ grid %.2f ______________" % (res, grid))
 
+        from chimerax.atomic import Structure
+        for mol in self._all_models :
 
-        for mol in chimera.openModels.list() :
-
-            if type(mol) != chimera.Molecule or mol.display == False : continue
-
-            chain_colors = RandColorChains ( mol )
+            if not isinstance(mol, Structure) or mol.display == False : continue
 
             basename = os.path.splitext ( mol.name )[0]
             cname = basename
-            sel_str = "#%d" % (mol.id)
-            print("%s [%s]" % (mol.name, sel_str), end=' ')
+            sel_str = "#%s" % (mol.id_string)
+            debug("%s [%s]" % (mol.name, sel_str), end=' ')
 
             cmd = "molmap %s %f sigmaFactor 0.187 gridSpacing %f replace false" % ( sel_str, res, grid )
-            chimera.runCommand ( cmd )
-
-            mv = None
-            for mod in chimera.openModels.list() :
-                ts = mod.name.split()
-                if len(ts) > 1 and mod.name.find("map") >=0 and mod.name.find("res") >=0 :
-                    #print " - found", mod.name
-                    mv = mod
-                    mv.name = cname
-                    break
-
-            if mv == None :
-                umsg (" - error - could not find chain map")
-                return
+            mv = self._run_command ( cmd )
+            mv.name = cname
 
             imap = self.MapIndexesInMap ( dmap, mv )
 
@@ -3472,16 +3535,16 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
             #break
 
-        # print chain_maps
+        # debug chain_maps
 
         rgroups = {}
 
-        print(" - %d regions" % len(smod.regions))
+        debug(" - %d regions" % len(smod.regions))
 
         for ri, reg in enumerate ( smod.regions ) :
 
             if ri % 100 == 0 :
-                status ( " %d/%d " % (ri+1, len(smod.regions) ) )
+                self.status ( " %d/%d " % (ri+1, len(smod.regions) ) )
 
             max_ov = 0.0
             max_ov_chm = None
@@ -3493,7 +3556,7 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
                     if (i,j,k) in imap:
                         noverlap += 1
 
-                #print " - ", chm.name, noverlap
+                #debug " - ", chm.name, noverlap
 
                 ov = float(noverlap) / reg.point_count()
                 if ov > 0.8 and ov > max_ov :
@@ -3509,22 +3572,20 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
         from . import regions
 
         for chid, regs in rgroups.items () :
-            print("Chain %s - %d regions" % (chid, len(regs)))
+            debug("Chain %s - %d regions" % (chid, len(regs)))
 
             jregs = regions.TopParentRegions(regs)
             jreg = smod.join_regions ( jregs )
             jreg.make_surface(None, None, smod.regions_scale)
 
 
-        for chmImap in chain_maps :
-            chimera.openModels.close ( chmImap )
-
+        close_models([m for m,i in chain_maps])
 
 
     def GroupRegionsByFittedMols ( self ) :
 
-        dmap = segmentation_map()
-        if dmap == None : print("No segmentation map"); return
+        dmap = self.segmentation_map
+        if dmap == None : debug("No segmentation map"); return
 
         #fmap = self.MoleculeMap()
         #if fmap == None : return
@@ -3532,19 +3593,18 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
         smod = self.CurrentSegmentation()
         if smod is None : return
 
-        print("---")
+        debug("---")
 
         #mol = fmap.mols[0]
-        #print mol.name
+        #debug mol.name
 
         #chain_colors = RandColorChains ( mol )
 
         chain_maps = []
 
-        res = float ( self.simRes.get() )
-        grid = float ( self.simGridSp.get() )
+        res, grid = self._sim_res_and_grid
 
-        print("_____________ res %2f _______ grid %.2f _________________________________" % (res, grid))
+        debug("_____________ res %2f _______ grid %.2f _________________________________" % (res, grid))
 
 
         #lfits = self.selected_listbox_fits()
@@ -3552,17 +3612,17 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
         lfits = self.list_fits
 
         if len(lfits) == 0:
-            umsg ( "No selected fitted molecules" )
+            self.status ( "No selected fitted molecules" )
             return
 
-        umsg('Looking at %d fitted molecules' % len(lfits))
+        self.status('Looking at %d fitted molecules' % len(lfits))
 
         fit_i = 1
         for fmap, dmap, mat, corr, aI, bI, bC, bO, regions in lfits:
 
             for mol in fmap.mols :
                 if mol.deleted:
-                    umsg('Fit molecule was closed - ')
+                    self.status('Fit molecule was closed - ')
                     return
 
             self.place_molecule(fmap, mat, dmap)
@@ -3571,45 +3631,33 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
             basename = os.path.splitext ( mol.name )[0]
             cname = basename
-            sel_str = "#%d" % (mol.id)
-            print("%s [%s]" % (mol.name, sel_str), end=' ')
+            sel_str = "#%s" % (mol.id_string)
+            debug("%s [%s]" % (mol.name, sel_str), end=' ')
 
             cmd = "molmap %s %f sigmaFactor 0.187 gridSpacing %f replace false" % ( sel_str, res, grid )
-            chimera.runCommand ( cmd )
-
-            mv = None
-            for mod in chimera.openModels.list() :
-                ts = mod.name.split()
-                if len(ts) > 1 and mod.name.find("map") >=0 and mod.name.find("res") >=0 :
-                    #print " - found", mod.name
-                    mv = mod
-                    mv.name = cname
-                    break
-
-            if mv == None :
-                umsg (" - error - could not find chain map")
-                return
+            mv = self._run_command(cmd)
+            mv.name = cname
 
             imap = self.MapIndexesInMap ( dmap, mv )
 
             chain_maps.append ( [fit_i, imap] )
             #mv.chain_id = cname
             fit_i += 1
-            chimera.openModels.close ( mv )
+            close_models ( [mv] )
 
             #break
 
-        # print chain_maps
+        # debug chain_maps
 
         rgroups = {}
 
-        print(" - %d regions" % len(smod.regions))
+        debug(" - %d regions" % len(smod.regions))
 
         for ri, reg in enumerate ( smod.regions ) :
 
             if ri % 1000 == 0 :
-                #print " %d/%d " % (ri, len(smod.regions) )
-                status ( " %d/%d " % (ri, len(smod.regions) ) )
+                #debug " %d/%d " % (ri, len(smod.regions) )
+                self.status ( " %d/%d " % (ri, len(smod.regions) ) )
 
             max_ov = 0.1
             max_ov_chm = 0
@@ -3624,7 +3672,7 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
                 ov = float(noverlap) / reg.point_count()
 
-                #print " - fit %d to reg %d, num ov %d, ov %.2f " % (fit_i, ri, noverlap, ov)
+                #debug " - fit %d to reg %d, num ov %d, ov %.2f " % (fit_i, ri, noverlap, ov)
 
                 if ov > max_ov :
                     max_ov = ov
@@ -3638,12 +3686,12 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
         from . import regions
 
-        print(len( list(rgroups.keys()) ), "groups")
+        debug(len( list(rgroups.keys()) ), "groups")
 
         sregs = []
 
         for chid, regs in rgroups.items () :
-            print("Fit %d - %d regions" % (chid, len(regs)))
+            debug("Fit %d - %d regions" % (chid, len(regs)))
 
             jregs = regions.TopParentRegions(regs)
             jreg = smod.join_regions ( jregs )
@@ -3667,10 +3715,10 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
     def GroupRegionsByVisiMaps ( self ) :
 
-        umsg ( "Grouping by visible maps..." )
+        self.status ( "Grouping by visible maps..." )
 
-        dmap = segmentation_map()
-        if dmap == None : print("No segmentation map"); return
+        dmap = self.segmentation_map
+        if dmap == None : debug("No segmentation map"); return
 
         #fmap = self.MoleculeMap()
         #if fmap == None : return
@@ -3678,26 +3726,25 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
         smod = self.CurrentSegmentation()
         if smod is None : return
 
-        print("---")
+        debug("---")
 
         #mol = fmap.mols[0]
-        #print mol.name
+        #debug mol.name
 
         #chain_colors = RandColorChains ( mol )
 
         chain_maps = []
 
-        res = float ( self.simRes.get() )
-        grid = float ( self.simGridSp.get() )
+        res, grid = self._sim_res_and_grid
 
-        print("_____________ res %2f _______ grid %.2f _________________________________" % (res, grid))
+        debug("_____________ res %2f _______ grid %.2f _________________________________" % (res, grid))
 
 
-        for mmap in chimera.openModels.list() :
+        for mmap in self._volumes:
 
-            if type(mmap) != VolumeViewer.volume.Volume or mmap.display == False : continue
+            if mmap.display == False : continue
 
-            print(" -- map: ", mmap.name)
+            debug(" -- map: ", mmap.name)
 
             imap = self.MapIndexesInMap ( dmap, mmap )
             chain_maps.append ( [mmap, imap] )
@@ -3705,17 +3752,17 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
             #break
 
-        # print chain_maps
+        # debug chain_maps
 
         rgroups = {}
 
-        print(" - %d regions" % len(smod.regions))
+        debug(" - %d regions" % len(smod.regions))
 
         for ri, reg in enumerate ( smod.regions ) :
 
             if ri % 100 == 0 :
-                status ( " %d/%d " % (ri+1, len(smod.regions) ) )
-                print(",", end=' ')
+                self.status ( " %d/%d " % (ri+1, len(smod.regions) ) )
+                debug(",", end=' ')
 
             max_ov = 0.0
             max_ov_chm = None
@@ -3727,7 +3774,7 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
                     if (i,j,k) in imap:
                         noverlap += 1
 
-                #print " - ", chm.name, noverlap
+                #debug " - ", chm.name, noverlap
 
                 ov = float(noverlap) / reg.point_count()
                 if ov > max_ov :
@@ -3741,20 +3788,19 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
 
         from . import regions
-        print(".")
+        debug(".")
 
         for chid, regs in rgroups.items () :
-            print("Chain %s - %d regions" % (chid, len(regs)))
+            debug("Chain %s - %d regions" % (chid, len(regs)))
 
             jregs = regions.TopParentRegions(regs)
             jreg = smod.join_regions ( jregs )
             jreg.make_surface(None, None, smod.regions_scale)
 
-        umsg ( "Done grouping by visible maps" )
+        self.status ( "Done grouping by visible maps" )
 
 
-        #for chmImap in chain_maps :
-        #  chimera.openModels.close ( chmImap )
+        #close_models( chain_maps )
 
 
 
@@ -3763,28 +3809,27 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
     def ZeroMapBySel ( self ) :
 
-        print("0")
+        debug("0")
 
 
     def ZeroMapByMols ( self ) :
 
-        print("0")
+        debug("0")
 
 
 
     def ZeroMapFittedMols ( self ) :
 
-        dmap = segmentation_map()
-        if dmap == None : print("No segmentation map"); return
+        dmap = self.segmentation_map
+        if dmap == None : debug("No segmentation map"); return
 
         vmat = dmap.full_matrix().copy()
 
-        print("---")
+        debug("---")
 
-        res = float ( self.simRes.get() )
-        grid = float ( self.simGridSp.get() )
+        res, grid = self._sim_res_and_grid
 
-        print("_____________ res %2f _______ grid %.2f _________________________________" % (res, grid))
+        debug("_____________ res %2f _______ grid %.2f _________________________________" % (res, grid))
 
 
         #lfits = self.selected_listbox_fits()
@@ -3792,17 +3837,17 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
         lfits = self.list_fits
 
         if len(lfits) == 0:
-            umsg ( "No selected fitted molecules" )
+            self.status ( "No selected fitted molecules" )
             return
 
-        umsg('Looking at %d fitted molecules' % len(lfits))
+        self.status('Looking at %d fitted molecules' % len(lfits))
 
 
         for fmap, dmap, mat, corr, aI, bI, bC, bO, regions in lfits:
 
             for mol in fmap.mols :
                 if mol.deleted:
-                    umsg('Fit molecule was closed - ')
+                    self.status('Fit molecule was closed - ')
                     return
 
             self.place_molecule(fmap, mat, dmap)
@@ -3811,38 +3856,26 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
             basename = os.path.splitext ( mol.name )[0]
             cname = basename
-            sel_str = "#%d" % (mol.id)
-            print("%s [%s]" % (mol.name, sel_str), end=' ')
+            sel_str = "#%s" % (mol.id_string)
+            debug("%s [%s]" % (mol.name, sel_str), end=' ')
 
             cmd = "molmap %s %f sigmaFactor 0.187 gridSpacing %f replace false" % ( sel_str, res, grid )
-            chimera.runCommand ( cmd )
-
-            mv = None
-            for mod in chimera.openModels.list() :
-                ts = mod.name.split()
-                if len(ts) > 1 and mod.name.find("map") >=0 and mod.name.find("res") >=0 :
-                    #print " - found", mod.name
-                    mv = mod
-                    mv.name = cname
-                    break
-
-            if mv == None :
-                umsg (" - error - could not find chain map")
-                return
+            mv = self._run_command ( cmd )
+            mv.name = cname
 
             self.ZeroMatWitMap ( vmat, dmap, mv )
-            chimera.openModels.close ( mv )
+            close_models ( [mv] )
 
             #break
 
-        # print chain_maps
+        # debug chain_maps
 
         nname = os.path.splitext(dmap.name)[0] + "_zeroed"
 
-        from VolumeData import Array_Grid_Data
-        mgrid = Array_Grid_Data ( vmat, dmap.data.origin, dmap.data.step, dmap.data.cell_angles, name=nname)
-        import VolumeViewer
-        nv = VolumeViewer.volume_from_grid_data ( mgrid, show_data = False, show_dialog = False )
+        from chimerax.map.data import ArrayGridData
+        mgrid = ArrayGridData ( vmat, dmap.data.origin, dmap.data.step, dmap.data.cell_angles, name=nname)
+        from chimerax.map import volume_from_grid_data
+        nv = volume_from_grid_data ( mgrid, self.session, show_data = False, show_dialog = False )
         nv.name = nname
         #nv.copy_settings_from(volume)
         nv.show()
@@ -3852,24 +3885,23 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
     def ValuesInMap ( self ) :
 
-        dmap = segmentation_map()
-        if dmap == None : print("No segmentation map"); return
+        dmap = self.segmentation_map
+        if dmap == None : debug("No segmentation map"); return
 
         dmat = dmap.full_matrix().copy()
 
         chain_maps = []
 
-        res = float ( self.simRes.get() )
-        grid = float ( self.simGridSp.get() )
+        res, grid = self._sim_res_and_grid
 
-        print("_____________ res %2f _______ grid %.2f _________________________________" % (res, grid))
+        debug("_____________ res %2f _______ grid %.2f _________________________________" % (res, grid))
 
 
-        for mmap in chimera.openModels.list() :
+        for mmap in self._volumes:
 
-            if type(mmap) != VolumeViewer.volume.Volume or mmap.display == False : continue
+            if mmap.display == False : continue
 
-            print(" -- map: ", mmap.name)
+            debug(" -- map: ", mmap.name)
 
             imap = self.MapIndexesInMap ( dmap, mmap )
             chain_maps.append ( [mmap, imap] )
@@ -3883,19 +3915,19 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
         values = []
 
         for cm, points in chain_maps :
-            print(" --- at map --- : " + cm.name)
+            debug(" --- at map --- : " + cm.name)
             #n += len(points)
             for fi, fj, fk in points :
                 val = dmat[fk,fj,fi]
                 if val < 17 :
                     sumd += dmat[fk,fj,fi]
                     values.append ( dmat[fk,fj,fi] )
-                    #print dmat[fk,fj,fi]
+                    #debug dmat[fk,fj,fi]
                     n += 1.0
 
         avg = sumd / len(points)
 
-        print(" Average value: %.3f"%avg + " at %d"%len(points) + " points")
+        debug(" Average value: %.3f"%avg + " at %d"%len(points) + " points")
 
         return;
 
@@ -3904,7 +3936,7 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
         amax = numpy.max(values)
         max = numpy.min ( [amax, 16] )
         d = 1
-        print("Min: %.2f, max: %.2f (%.2f), step %.2f, avg %.2f" % (min, amax, max, d, numpy.average(values)))
+        debug("Min: %.2f, max: %.2f (%.2f), step %.2f, avg %.2f" % (min, amax, max, d, numpy.average(values)))
         buckets = numpy.zeros ( (max - min) / d )
         for v in values :
             if v > max :
@@ -3915,7 +3947,7 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
         for bi, bnum in enumerate ( buckets ) :
             bv = float (bi) / float(len(buckets)) * (max - min) + min
-            print("%.1f,%d" % (bv,bnum))
+            debug("%.1f,%d" % (bv,bnum))
 
 
 
@@ -3923,42 +3955,37 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
     def MaskMapWithSel ( self ) :
 
-        dmap = segmentation_map()
-        if dmap == None : print("No segmentation map"); return
+        dmap = self.segmentation_map
+        if dmap == None : debug("No segmentation map"); return
 
         fmap = None
         [fmol, fmap2] = self.MolOrMapSelected ();
         if fmol != None :
-            print(" - got molecule map")
+            debug(" - got molecule map")
             fmap = self.MoleculeMap()
         elif fmap2 != None :
-            print(" - got map map")
+            debug(" - got map map")
             fmap = fmap2
         else :
-            umsg ('Please select an open molecule or map in the field above')
+            self.status ('Please select an open molecule or map in the field above')
             return
 
         df_mat = self.Map2Map ( fmap, dmap )
 
-        print(" - using surf level %.5f for mask" % fmap.surface_levels[0])
+        debug(" - using surf level %.5f for mask" % fmap.minimum_surface_level)
 
         if 1 :
 
-            try :
-                res = float ( self.simRes.get() )
-            except :
-                umsg ( "Invalid resolution entered, please enter a number" )
-                return
-
+            res, grid = self._sim_res_and_grid
 
             s = dmap.data.step # A/pixel
             diag_l = numpy.sqrt ( s[0]*s[0] + s[1]*s[1] + s[2]*s[2] ) # A/pixel
             num_it = res / diag_l # how many iterations will reach the desired width
             numit = int ( numpy.ceil ( num_it ) )
 
-            print(" - using res %.4f for dropoff, diag is %.3f, #it: %d" % (res, diag_l, numit))
+            debug(" - using res %.4f for dropoff, diag is %.3f, #it: %d" % (res, diag_l, numit))
 
-            in_mask = numpy.where ( df_mat > fmap.surface_levels[0], numpy.ones_like(df_mat), numpy.zeros_like(df_mat) )
+            in_mask = numpy.where ( df_mat > fmap.minimum_surface_level, numpy.ones_like(df_mat), numpy.zeros_like(df_mat) )
             out_mask = numpy.where ( in_mask > 0, numpy.zeros_like(in_mask), numpy.ones_like(in_mask) )
             gvm = in_mask.copy();
             for i in range (numit) :
@@ -3970,17 +3997,18 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
                 nv_6 = numpy.roll(gvm, -1, axis=2)
                 gvm = 1.0/6.0 * ( nv_1 + nv_2 + nv_3 + nv_4 + nv_5 + nv_6 )
                 gvm = out_mask * gvm + in_mask
-                umsg ("Adding drop-off - iteration %d" % i)
+                self.status ("Adding drop-off - iteration %d" % i)
 
             df_mat = gvm
 
 
         mmat = dmap.data.full_matrix() * df_mat
 
-        df_data = VolumeData.Array_Grid_Data ( df_mat, dmap.data.origin, dmap.data.step, dmap.data.cell_angles, name=(dmap.name + "__MaskedWith__" + fmap.name) )
+        from chimerax.map.data import ArrayGridData
+        df_data = ArrayGridData ( df_mat, dmap.data.origin, dmap.data.step, dmap.data.cell_angles, name=(dmap.name + "__MaskedWith__" + fmap.name) )
 
-        try : df_v = VolumeViewer.volume.add_data_set ( df_data, None )
-        except : df_v = VolumeViewer.volume.volume_from_grid_data ( df_data )
+        from chimerax.map import volume_from_grid_data
+        df_v = volume_from_grid_data ( df_data, self.session )
 
 
         if 0 :
@@ -3989,7 +4017,7 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
 
         df_v.name = dmap.name + "__MaskedWith__" + fmap.name
-        df_v.openState.xform = dmap.openState.xform
+        df_v.scene_position = dmap.scene_position
 
 
 
@@ -4002,32 +4030,15 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
     def MolOrMapSelected ( self ) :
 
-        label = self.struc.get()
-
-        if len(label) == 0 :
-            umsg ( "No structure selected" )
+        fmol = self._struct_to_fit
+        if fmol is None:
+            self.status ( "No structure selected" )
             return [None, None]
 
-        mod_num = label [ label.rfind("(")+1 : label.rfind(")") ]
-
-        if len(mod_num) == 0 :
-            # this isn't possible given a (#) is added to each name...
-            umsg ( "An internal error that shouldn't happen did." )
-            return [None, None]
-
-        sel_str = "#" + mod_num
-
-        fmol = None
-        try :
-            fmol = chimera.selection.OSLSelection ( sel_str ).molecules()[0]
-        except :
-            print ( "Selected model is not a molecule..." )
-
-        fmap = None
-        try :
-            fmap = chimera.selection.OSLSelection ( sel_str ).models()[0]
-        except :
-            print ( "Selected model is not a map..." )
+        from chimerax.map import Volume
+        if isinstance(fmol, Volume):
+            fmap = fmol
+            fmol = None
 
         return [fmol, fmap]
 
@@ -4035,26 +4046,26 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
     def Map2Map ( self, densitiesFromMap, toGridOfMap, mask = False ) :
 
-        #print "Taking densities from %s with grid of %s" % ( densitiesFromMap.name, toGridOfMap.name )
+        #debug "Taking densities from %s with grid of %s" % ( densitiesFromMap.name, toGridOfMap.name )
 
         #mmc = fmap.writable_copy ( require_copy = True )
         #mmc.name = rname
-        #print " - cloned", fmap.name
+        #debug " - cloned", fmap.name
 
         fmap = toGridOfMap
         dmap = densitiesFromMap
 
-        import _contour
         n1, n2, n3 = fmap.data.size[0], fmap.data.size[1], fmap.data.size[2]
-        f_points = VolumeData.grid_indices( (n1,n2,n3), numpy.single )  # i,j,k indices
-        _contour.affine_transform_vertices( f_points, fmap.data.ijk_to_xyz_transform )
+        from chimerax.map.data import grid_indices
+        f_points = grid_indices( (n1,n2,n3), numpy.single )  # i,j,k indices
+        fmap.data.ijk_to_xyz_transform.transform_points( f_points, in_place = True )
 
-        d_vals = dmap.interpolated_values ( f_points, fmap.openState.xform )
+        d_vals = dmap.interpolated_values ( f_points, fmap.scene_position )
         df_mat = d_vals.reshape( (n3,n2,n1) )
 
         if mask :
             f_mat = fmap.data.full_matrix()
-            f_mask = numpy.where ( f_mat > fmap.surface_levels[0], numpy.ones_like(f_mat), numpy.zeros_like(f_mat) )
+            f_mask = numpy.where ( f_mat > fmap.minimum_surface_level, numpy.ones_like(f_mat), numpy.zeros_like(f_mat) )
             df_mat = df_mat * f_mask
 
         return df_mat
@@ -4064,15 +4075,14 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
         from . import axes
         fpoints, weights = axes.map_points ( fmap )
-        print("Fit map - got %d points in contour" % len (fpoints))
+        debug("Fit map - got %d points in contour" % len (fpoints))
 
-        from _contour import affine_transform_vertices as transform_vertices
-        #print "Fit map - xf: ", fmap.openState.xform
-        transform_vertices( fpoints,  Matrix.xform_matrix( fmap.openState.xform ) )
-        #print "Seg map - xf: ", dmap.openState.xform
-        transform_vertices( fpoints,  Matrix.xform_matrix( dmap.openState.xform.inverse() ) )
-        transform_vertices ( fpoints, dmap.data.xyz_to_ijk_transform )
-        #print "points in %s ref:" % dmap.name, fpoints
+        #debug "Fit map - xf: ", fmap.scene_position
+        fmap.scene_position.transform_points( fpoints, in_place = True )
+        #debug "Seg map - xf: ", dmap.scene_position
+        dmap.scene_position.inverse().transform_points( fpoints, in_place = True )
+        dmap.data.xyz_to_ijk_transform.transform_points ( fpoints, in_place = True )
+        #debug "points in %s ref:" % dmap.name, fpoints
 
         bound = 5
         li,lj,lk = numpy.min ( fpoints, axis=0 ) - (bound, bound, bound)
@@ -4082,7 +4092,7 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
         n2 = hj - lj + 1
         n3 = hk - lk + 1
 
-        #print " - bounds - %d %d %d --> %d %d %d --> %d %d %d" % ( li, lj, lk, hi, hj, hk, n1,n2,n3 )
+        #debug " - bounds - %d %d %d --> %d %d %d --> %d %d %d" % ( li, lj, lk, hi, hj, hk, n1,n2,n3 )
 
         #nmat = numpy.zeros ( (n1,n2,n3), numpy.float32 )
         #dmat = dmap.full_matrix()
@@ -4095,34 +4105,37 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
         nn3 = int ( round (dmap.data.step[2] * float(n3) / nstep[2]) )
 
         O = dmap.data.origin
-        #print " - %s origin:" % dmap.name, O
+        #debug " - %s origin:" % dmap.name, O
         nO = ( O[0] + float(li) * dmap.data.step[0],
                O[1] + float(lj) * dmap.data.step[1],
                O[2] + float(lk) * dmap.data.step[2] )
 
-        #print " - new map origin:", nO
+        #debug " - new map origin:", nO
 
         nmat = numpy.zeros ( (nn1,nn2,nn3), numpy.float32 )
-        ndata = VolumeData.Array_Grid_Data ( nmat, nO, nstep, dmap.data.cell_angles )
+        from chimerax.map.data import ArrayGridData
+        ndata = ArrayGridData ( nmat, nO, nstep, dmap.data.cell_angles )
 
-        #print " - fmap grid dim: ", numpy.shape ( fmap.full_matrix() )
-        #print " - new map grid dim: ", numpy.shape ( nmat )
+        #debug " - fmap grid dim: ", numpy.shape ( fmap.full_matrix() )
+        #debug " - new map grid dim: ", numpy.shape ( nmat )
 
+        from chimerax.map.data import grid_indices
         npoints = grid_indices ( (nn1, nn2, nn3), numpy.single)  # i,j,k indices
-        transform_vertices ( npoints, ndata.ijk_to_xyz_transform )
+        ndata.ijk_to_xyz_transform.transform_points ( npoints, in_place = True )
 
-        dvals = fmap.interpolated_values ( npoints, dmap.openState.xform )
+        dvals = fmap.interpolated_values ( npoints, dmap.scene_position )
         #dvals = numpy.where ( dvals > threshold, dvals, numpy.zeros_like(dvals) )
         #nze = numpy.nonzero ( dvals )
 
         nmat = dvals.reshape( (nn3,nn2,nn1) )
         #f_mat = fmap.data.full_matrix()
-        #f_mask = numpy.where ( f_mat > fmap.surface_levels[0], numpy.ones_like(f_mat), numpy.zeros_like(f_mat) )
+        #f_mask = numpy.where ( f_mat > fmap.minimum_surface_level, numpy.ones_like(f_mat), numpy.zeros_like(f_mat) )
         #df_mat = df_mat * f_mask
 
-        ndata = VolumeData.Array_Grid_Data ( nmat, nO, nstep, dmap.data.cell_angles )
-        try : nv = VolumeViewer.volume.add_data_set ( ndata, None )
-        except : nv = VolumeViewer.volume.volume_from_grid_data ( ndata )
+        from chimerax.map.data import ArrayGridData
+        ndata = ArrayGridData ( nmat, nO, nstep, dmap.data.cell_angles )
+        from chimerax.map import volume_from_grid_data
+        nv = volume_from_grid_data ( ndata, self.session )
 
 
         fmap_base = os.path.splitext(fmap.name)[0]
@@ -4131,11 +4144,11 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
         dmap_path = os.path.splitext (dmap.data.path)[0]
 
         nv.name = fmap_base + "__in__" + dmap_base
-        nv.openState.xform = dmap.openState.xform
+        nv.scene_position = dmap.scene_position
 
         #npath = dmap_path + fnamesuf
         #nv.write_file ( npath, "mrc" )
-        #print "Wrote ", npath
+        #debug "Wrote ", npath
 
         return nv
 
@@ -4143,54 +4156,56 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
     def TakeDMap_with_FMap ( self ) :
 
-        dmap = segmentation_map()
-        if dmap == None : print("No segmentation map"); return
+        dmap = self.segmentation_map
+        if dmap == None : debug("No segmentation map"); return
 
         fmap = None
         [fmol, fmap2] = self.MolOrMapSelected ();
         if fmol != None :
-            print(" - got molecule map")
+            debug(" - got molecule map")
             fmap = self.MoleculeMap()
         elif fmap2 != None :
-            print(" - got map map")
+            debug(" - got map map")
             fmap = fmap2
         else :
-            umsg ('Please select an open molecule or map in the field above')
+            self.status ('Please select an open molecule or map in the field above')
             return
 
 
         df_mat = self.Map2Map ( dmap, fmap )
-        df_data = VolumeData.Array_Grid_Data ( df_mat, fmap.data.origin, fmap.data.step, fmap.data.cell_angles )
+        from chimerax.map.data import ArrayGridData
+        df_data = ArrayGridData ( df_mat, fmap.data.origin, fmap.data.step, fmap.data.cell_angles )
 
-        try : df_v = VolumeViewer.volume.add_data_set ( df_data, None )
-        except : df_v = VolumeViewer.volume.volume_from_grid_data ( df_data )
+        from chimerax.map import volume_from_grid_data
+        df_v = volume_from_grid_data ( df_data, self.session )
         df_v.name = dmap.name + "_in_" + fmap.name
-        df_v.openState.xform = fmap.openState.xform
+        df_v.scene_position = fmap.scene_position
 
 
 
     def TakeFMap_with_DMap0 ( self ) :
 
-        dmap = segmentation_map()
-        if dmap == None : print("No segmentation map"); return
+        dmap = self.segmentation_map
+        if dmap == None : debug("No segmentation map"); return
 
         fmap = None
         [fmol, fmap2] = self.MolOrMapSelected ();
         if fmol != None :
-            print(" - got molecule map")
+            debug(" - got molecule map")
             fmap = self.MoleculeMap()
         elif fmap2 != None :
-            print(" - got map map")
+            debug(" - got map map")
             fmap = fmap2
         else :
-            umsg ('Please select an open molecule or map in the field above')
+            self.status ('Please select an open molecule or map in the field above')
             return
 
         df_mat = self.Map2Map ( fmap, dmap )
-        df_data = VolumeData.Array_Grid_Data ( df_mat, dmap.data.origin, dmap.data.step, dmap.data.cell_angles )
+        from chimerax.map.data import ArrayGridData
+        df_data = ArrayGridData ( df_mat, dmap.data.origin, dmap.data.step, dmap.data.cell_angles )
 
-        try : df_v = VolumeViewer.volume.add_data_set ( df_data, None )
-        except : df_v = VolumeViewer.volume.volume_from_grid_data ( df_data )
+        from chimerax.map import volume_from_grid_data
+        df_v = volume_from_grid_data ( df_data, self.session )
 
 
         if 0 :
@@ -4199,32 +4214,33 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
 
         df_v.name = fmap.name + "_in_" + dmap.name
-        df_v.openState.xform = dmap.openState.xform
+        df_v.scene_position = dmap.scene_position
 
 
 
     def TakeFMap_with_DMapN ( self ) :
 
-        dmap = segmentation_map()
-        if dmap == None : print("No segmentation map"); return
+        dmap = self.segmentation_map
+        if dmap == None : debug("No segmentation map"); return
 
         fmap = None
         [fmol, fmap2] = self.MolOrMapSelected ();
         if fmol != None :
-            print(" - got molecule map")
+            debug(" - got molecule map")
             fmap = self.MoleculeMap()
         elif fmap2 != None :
-            print(" - got map map")
+            debug(" - got map map")
             fmap = fmap2
         else :
-            umsg ('Please select an open molecule or map in the field above')
+            self.status ('Please select an open molecule or map in the field above')
             return
 
         df_mat = self.Map2Map ( fmap, dmap )
-        df_data = VolumeData.Array_Grid_Data ( df_mat, dmap.data.origin, dmap.data.step, dmap.data.cell_angles )
+        from chimerax.map.data import ArrayGridData
+        df_data = ArrayGridData ( df_mat, dmap.data.origin, dmap.data.step, dmap.data.cell_angles )
 
-        try : df_v = VolumeViewer.volume.add_data_set ( df_data, None )
-        except : df_v = VolumeViewer.volume.volume_from_grid_data ( df_data )
+        from chimerax.map import volume_from_grid_data
+        df_v = volume_from_grid_data ( df_data, self.session )
 
 
         if 1 :
@@ -4233,26 +4249,26 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
 
         df_v.name = fmap.name + "_in_" + dmap.name
-        df_v.openState.xform = dmap.openState.xform
+        df_v.scene_position = dmap.scene_position
 
 
 
 
     def TakeFMap_with_DMap ( self ) :
 
-        dmap = segmentation_map()
-        if dmap == None : print("No segmentation map"); return
+        dmap = self.segmentation_map
+        if dmap == None : debug("No segmentation map"); return
 
         fmap = None
         [fmol, fmap2] = self.MolOrMapSelected ();
         if fmol != None :
-            print(" - got molecule map")
+            debug(" - got molecule map")
             fmap = self.MoleculeMap()
         elif fmap2 != None :
-            print(" - got map map")
+            debug(" - got map map")
             fmap = fmap2
         else :
-            umsg ('Please select an open molecule or map in the field above')
+            self.status ('Please select an open molecule or map in the field above')
             return
 
         nv = self.Map2MapResize ( fmap, dmap )
@@ -4262,25 +4278,28 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
     def FitAllVisMaps ( self ) :
 
-        from VolumeViewer import Volume
-        from chimera import Molecule
-        mlist = OML(modelTypes = [Volume,Molecule])
+        from chimerax.map import Volume
+        from chimerax.atomic import Structure
+        mlist = self.session.models.list(type = (Volume,Structure))
         for m in mlist :
             label = m.name + " (%d)" % m.id
-            print("---------------------", label, "---------------------")
+            debug("---------------------", label, "---------------------")
 
             if m.display == False :
                 continue
 
-            self.struc.set(label)
+            self._struct_to_fit = m
             self.Fit()
 
 
+    @property
+    def _volumes(self):
+        from chimerax.map import Volume
+        return self.session.models.list(type = [Volume])
 
     def AvgFMaps ( self ) :
 
-        from VolumeViewer import Volume
-        mlist = OML(modelTypes = [Volume])
+        mlist = self._volumes
 
         fmap = None
         avgMat = None
@@ -4288,7 +4307,7 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
         for m in mlist :
             if m.display == True :
-                print(m.name)
+                debug(m.name)
 
                 if avgMat == None :
                     avgMat = m.data.full_matrix()
@@ -4300,30 +4319,30 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
         avgMat = avgMat / N
 
-        df_data = VolumeData.Array_Grid_Data ( avgMat, fmap.data.origin, fmap.data.step, fmap.data.cell_angles )
+        from chimerax.map.data import ArrayGridData
+        df_data = ArrayGridData ( avgMat, fmap.data.origin, fmap.data.step, fmap.data.cell_angles )
 
-        try : df_v = VolumeViewer.volume.add_data_set ( df_data, None )
-        except : df_v = VolumeViewer.volume.volume_from_grid_data ( df_data )
+        from chimerax.map import volume_from_grid_data
+        df_v = volume_from_grid_data ( df_data, self.session )
         df_v.name = "Avg"
-        df_v.openState.xform = fmap.openState.xform
+        df_v.scene_position = fmap.scene_position
 
         return
 
 
     def DifFMaps2 ( self ) :
 
-        from VolumeViewer import Volume
-        mlist = OML(modelTypes = [Volume])
+        mlist = self._volumes
 
         smaps = []
         for m in mlist :
             if m.display == True :
-                print(" - ", m.name)
+                debug(" - ", m.name)
                 smaps.append ( m )
 
 
         if len(smaps) != 2 :
-            umsg ( "Need only 2 maps visible" )
+            self.status ( "Need only 2 maps visible" )
             return
 
 
@@ -4335,13 +4354,13 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
         difMat = NormalizeMat ( m1.data.full_matrix() ) - NormalizeMat ( m2_mat )
 
+        from chimerax.map.data import ArrayGridData
+        df_data = ArrayGridData ( difMat, m1.data.origin, m1.data.step, m1.data.cell_angles )
 
-        df_data = VolumeData.Array_Grid_Data ( difMat, m1.data.origin, m1.data.step, m1.data.cell_angles )
-
-        try : df_v = VolumeViewer.volume.add_data_set ( df_data, None )
-        except : df_v = VolumeViewer.volume.volume_from_grid_data ( df_data )
+        from chimerax.map import volume_from_grid_data
+        df_v = volume_from_grid_data ( df_data, self.session )
         df_v.name = m1.name + "__-__" + m2.name
-        df_v.openState.xform = m1.openState.xform
+        df_v.scene_position = m1.scene_position
 
         return
 
@@ -4349,8 +4368,8 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
     def AvgFMaps2 (self) :
 
-        dmap = segmentation_map()
-        if dmap == None : print("No segmentation map"); return
+        dmap = self.segmentation_map
+        if dmap == None : debug("No segmentation map"); return
 
         from . import extract_region_dialog
         importlib.reload ( extract_region_dialog )
@@ -4359,24 +4378,23 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
         if superSampleBy > 1 :
             ndata = extract_region_dialog.MapSS ( dmap, superSampleBy )
-            try : nmap = VolumeViewer.volume.add_data_set ( ndata, None )
-            except : nmap = VolumeViewer.volume.volume_from_grid_data ( ndata )
+            from chimerax.map import volume_from_grid_data
+            nmap = volume_from_grid_data ( ndata, self.session )
             nmap.name = dmap.name + "_M%d" % n
-            nmap.openState.xform = dmap.openState.xform
+            nmap.scene_position = dmap.scene_position
             dmap = nmap
 
 
-        from VolumeViewer import Volume
-        mlist = OML(modelTypes = [Volume])
+        mlist = self._volumes
 
         if 0 :
-            print(" -- making base map -- ")
+            debug(" -- making base map -- ")
 
             bmap = None
             m0 = None
             for m in mlist :
                 if m.display == True :
-                    print(m.name)
+                    debug(m.name)
                     if bmap == None :
                         bmap = m
                         m0 = m
@@ -4384,13 +4402,13 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
                         bmap0 = bmap
                         bmap = self.Map2MapResize (m, bmap)
                         if bmap0 != m0 :
-                            chimera.openModels.close ( [bmap0] )
+                            close_models ( [bmap0] )
 
 
             bmap.name = "base"
             dmap = bmap
 
-        print(" -- finding base map --- ")
+        debug(" -- finding base map --- ")
         largestMap = None
         maxD = 0
         for m in mlist :
@@ -4400,7 +4418,7 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
                     maxD = d
                     largestMap = m
 
-        print(" - largest map: ", largestMap.name)
+        debug(" - largest map: ", largestMap.name)
         dmap = largestMap
         #dmap.display = False
 
@@ -4409,12 +4427,12 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
         avgMat = None
         N = 0.0
 
-        print(" ----------- Averaging... ---------------------")
+        debug(" ----------- Averaging... ---------------------")
 
         for m in mlist :
             #if m.display == True and m != dmap :
             if m.display == True :
-                print(m.name)
+                debug(m.name)
 
                 df_mat = self.Map2Map ( m, dmap )
                 m.display = False
@@ -4425,9 +4443,9 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
                 savg = numpy.average(weights)
                 smax = numpy.max (weights)
 
-                thr = 0 # m.surface_levels[0]
+                thr = 0 # m.minimum_surface_level
 
-                print("%s - (%.4f,%.4f) |%.4f| +/- %.4f -- %.4f" % (m.name, smin, smax, savg, sdev, thr))
+                debug("%s - (%.4f,%.4f) |%.4f| +/- %.4f -- %.4f" % (m.name, smin, smax, savg, sdev, thr))
 
                 N = N + 1.0
                 #df_mat = df_mat - ( numpy.ones_like(df_mat)*thr )
@@ -4439,15 +4457,15 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
                 if 0 :
                     imhist,bins = numpy.histogram ( df_mat.flatten(), 20, normed=True )
-                    print(" ------- Histogram:")
-                    print(imhist)
-                    print(" ------- Bins:")
-                    print(bins)
+                    debug(" ------- Histogram:")
+                    debug(imhist)
+                    debug(" ------- Bins:")
+                    debug(bins)
 
                     cdf = imhist.cumsum() #cumulative distribution function
                     cdf = 10.0 * cdf / cdf[-1] #normalize
 
-                    print(cdf)
+                    debug(cdf)
 
                     #use linear interpolation of cdf to find new pixel values
                     #df_mat = numpy.interp ( df_mat.flatten(), bins[:-1], cdf )
@@ -4462,17 +4480,18 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
                 else :
                     avgMat = avgMat + df_mat
 
-        print(" ----------- n=%f ---------------------" % N)
+        debug(" ----------- n=%f ---------------------" % N)
 
         avgMat = avgMat / N
-        df_data = VolumeData.Array_Grid_Data ( avgMat, dmap.data.origin, dmap.data.step, dmap.data.cell_angles, name="avg" )
-        try : df_v = VolumeViewer.volume.add_data_set ( df_data, None )
-        except : df_v = VolumeViewer.volume.volume_from_grid_data ( df_data )
+        from chimerax.map.data import ArrayGridData
+        df_data = ArrayGridData ( avgMat, dmap.data.origin, dmap.data.step, dmap.data.cell_angles, name="avg" )
+        from chimerax.map import volume_from_grid_data
+        df_v = volume_from_grid_data ( df_data, self.session )
         df_v.name = "Avg"
-        df_v.openState.xform = dmap.openState.xform
+        df_v.scene_position = dmap.scene_position
 
         nv = self.ShrinkMap ( df_v, 1e-3 )
-        chimera.openModels.close ( [df_v] )
+        close_models ( [df_v] )
 
         if 0 :
             stdMat = None
@@ -4480,16 +4499,16 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
             for m in mlist :
                 if m.display == True :
-                    print(m.name)
+                    debug(m.name)
 
                     if m.name == "Avg" :
-                        print("skipping avg vol")
+                        debug("skipping avg vol")
                         continue
 
                     df_mat = self.Map2Map ( m, dmap )
                     N = N + 1.0
 
-                    print(" - sub from avg...")
+                    debug(" - sub from avg...")
                     d = numpy.power ( df_mat - avgMat, 2 )
                     if stdMat == None :
                         stdMat = d
@@ -4497,31 +4516,31 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
                         stdMat = stdMat + d
 
             stdMat = numpy.power ( stdMat / N, 0.5 )
-            df_data = VolumeData.Array_Grid_Data ( stdMat, dmap.data.origin, dmap.data.step, dmap.data.cell_angles )
-            try : df_v = VolumeViewer.volume.add_data_set ( df_data, None )
-            except : df_v = VolumeViewer.volume.volume_from_grid_data ( df_data )
+            from chimerax.map.data import ArrayGridData
+            df_data = ArrayGridData ( stdMat, dmap.data.origin, dmap.data.step, dmap.data.cell_angles )
+            from chimerax.map import volume_from_grid_data
+            df_v = volume_from_grid_data ( df_data, self.session )
             df_v.name = "Stdev"
-            df_v.openState.xform = dmap.openState.xform
+            df_v.scene_position = dmap.scene_position
 
 
 
-        # chimera.openModels.close ( dmap )
+        # close_models ( [dmap] )
 
     def ShrinkMap ( self, dmap, thr ) :
 
         from . import axes
-        dmap.surface_levels[0] = thr
+        dmap.surfaces[0].set_level(thr)
         fpoints, weights = axes.map_points ( dmap )
-        #print "%s / %f - %d points in contour" % (dmap.name, thr, len (fpoints))
+        #debug "%s / %f - %d points in contour" % (dmap.name, thr, len (fpoints))
 
-        from _contour import affine_transform_vertices as transform_vertices
-        #print "Fit map - xf: ", fmap.openState.xform
-        #transform_vertices( fpoints,  Matrix.xform_matrix( fmap.openState.xform ) )
+        #debug "Fit map - xf: ", fmap.scene_position
+        #transform_vertices( fpoints,  fmap.scene_position )
 
-        #print "Seg map - xf: ", dmap.openState.xform
-        #transform_vertices( fpoints,  Matrix.xform_matrix( dmap.openState.xform.inverse() ) )
-        transform_vertices ( fpoints, dmap.data.xyz_to_ijk_transform )
-        #print "points in %s ref:" % dmap.name, fpoints
+        #debug "Seg map - xf: ", dmap.scene_position
+        #transform_vertices( fpoints,  dmap.scene_position.inverse() )
+        dmap.data.xyz_to_ijk_transform.transform_points ( fpoints, in_place = True )
+        #debug "points in %s ref:" % dmap.name, fpoints
 
         bound = 4
         li,lj,lk = numpy.min ( fpoints, axis=0 ) - (bound, bound, bound)
@@ -4531,40 +4550,43 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
         n2 = int(hj - lj + 1)
         n3 = int(hk - lk + 1)
 
-        #print " - bounds - %d %d %d --> %d %d %d --> %d %d %d" % ( li, lj, lk, hi, hj, hk, n1,n2,n3 )
+        #debug " - bounds - %d %d %d --> %d %d %d --> %d %d %d" % ( li, lj, lk, hi, hj, hk, n1,n2,n3 )
 
         #nmat = numpy.zeros ( (n1,n2,n3), numpy.float32 )
         #dmat = dmap.full_matrix()
 
         O = dmap.data.origin
-        #print " - %s origin:" % dmap.name, O
-        #print " - %s step:" % dmap.name, dmap.data.step
+        #debug " - %s origin:" % dmap.name, O
+        #debug " - %s step:" % dmap.name, dmap.data.step
         nO = ( O[0] + float(li) * dmap.data.step[0],
                O[1] + float(lj) * dmap.data.step[1],
                O[2] + float(lk) * dmap.data.step[2] )
 
-        #print " - new map origin:", nO
+        #debug " - new map origin:", nO
 
         nmat = numpy.zeros ( (n1,n2,n3), numpy.float32 )
-        ndata = VolumeData.Array_Grid_Data ( nmat, nO, dmap.data.step, dmap.data.cell_angles )
+        from chimerax.map.data import ArrayGridData
+        ndata = ArrayGridData ( nmat, nO, dmap.data.step, dmap.data.cell_angles )
 
-        #print " - new map grid dim: ", numpy.shape ( nmat )
+        #debug " - new map grid dim: ", numpy.shape ( nmat )
 
+        from chimerax.map.data import grid_indices
         npoints = grid_indices ( (n1, n2, n3), numpy.single)  # i,j,k indices
-        transform_vertices ( npoints, ndata.ijk_to_xyz_transform )
+        ndata.ijk_to_xyz_transform.transform_points ( npoints, in_place = True )
 
-        dvals = dmap.interpolated_values ( npoints, dmap.openState.xform )
+        dvals = dmap.interpolated_values ( npoints, dmap.scene_position )
         #dvals = numpy.where ( dvals > threshold, dvals, numpy.zeros_like(dvals) )
         #nze = numpy.nonzero ( dvals )
 
         nmat = dvals.reshape( (n3,n2,n1) )
         #f_mat = fmap.data.full_matrix()
-        #f_mask = numpy.where ( f_mat > fmap.surface_levels[0], numpy.ones_like(f_mat), numpy.zeros_like(f_mat) )
+        #f_mask = numpy.where ( f_mat > fmap.minimum_surface_level, numpy.ones_like(f_mat), numpy.zeros_like(f_mat) )
         #df_mat = df_mat * f_mask
 
-        ndata = VolumeData.Array_Grid_Data ( nmat, nO, dmap.data.step, dmap.data.cell_angles, name = dmap.name )
-        try : nv = VolumeViewer.volume.add_data_set ( ndata, None )
-        except : nv = VolumeViewer.volume.volume_from_grid_data ( ndata )
+        from chimerax.map.data import ArrayGridData
+        ndata = ArrayGridData ( nmat, nO, dmap.data.step, dmap.data.cell_angles, name = dmap.name )
+        from chimerax.map import volume_from_grid_data
+        nv = volume_from_grid_data ( ndata, self.session )
 
         return nv
 
@@ -4573,24 +4595,24 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
     def TakeFMapsVis ( self ) :
 
-        dmap = segmentation_map()
-        if dmap == None : print("No segmentation map"); return
+        dmap = self.segmentation_map
+        if dmap == None : debug("No segmentation map"); return
 
-        from VolumeViewer import Volume
-        mlist = OML(modelTypes = [Volume])
+        mlist = self._volumes
         for m in mlist :
             if m.display == True :
 
                 df_mat = self.Map2Map ( m, dmap )
-                df_data = VolumeData.Array_Grid_Data ( df_mat, dmap.data.origin, dmap.data.step, dmap.data.cell_angles )
-                try : df_v = VolumeViewer.volume.add_data_set ( df_data, None )
-                except : df_v = VolumeViewer.volume.volume_from_grid_data ( df_data )
-                df_v.openState.xform = dmap.openState.xform
+                from chimerax.map.data import ArrayGridData
+                df_data = ArrayGridData ( df_mat, dmap.data.origin, dmap.data.step, dmap.data.cell_angles )
+                from chimerax.map import volume_from_grid_data
+                df_v = volume_from_grid_data ( df_data, self.session )
+                df_v.scene_position = dmap.scene_position
 
                 mdir, mfile = os.path.split(m.data.path)
                 df_v.name = "f_" + mfile
 
-                print(m.name, "->", df_v.name)
+                debug(m.name, "->", df_v.name)
 
                 dpath = mdir + "/" + df_v.name
                 df_v.write_file ( dpath, "mrc" )
@@ -4599,23 +4621,23 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
     def DifferenceMap ( self ) :
 
-        dmap = segmentation_map()
-        if dmap == None : print("No segmentation map"); return
+        dmap = self.segmentation_map
+        if dmap == None : debug("No segmentation map"); return
 
         fmap = None
         [fmol, fmap2] = self.MolOrMapSelected ();
         if fmol != None :
-            print(" - using molecule map")
+            debug(" - using molecule map")
             fmap = self.MoleculeMap()
         elif fmap2 != None :
-            print(" - using map map")
+            debug(" - using map map")
             fmap = fmap2
         else :
-            umsg ('Please select an open molecule or map in the field above')
+            self.status ('Please select an open molecule or map in the field above')
             return
 
 
-        print("\n\nDiff map ", dmap.name, " <=> ", fmap.name)
+        debug("\n\nDiff map ", dmap.name, " <=> ", fmap.name)
 
         closeDMap = False
 
@@ -4628,31 +4650,32 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
 
         df_mat = self.Map2Map ( fmap, dmap )
-        df_data = VolumeData.Array_Grid_Data ( df_mat, dmap.data.origin, dmap.data.step, dmap.data.cell_angles )
+        from chimerax.map.data import ArrayGridData
+        df_data = ArrayGridData ( df_mat, dmap.data.origin, dmap.data.step, dmap.data.cell_angles )
 
         #MapStats ( dmap )
         #MapDataStats ( df_data )
 
-        print("")
-        print("Normalizing", dmap.name)
+        debug("")
+        debug("Normalizing", dmap.name)
         dmap_data_n = NormalizeData ( dmap.data )
 
         if 0 :
-            try : nv = VolumeViewer.volume.add_data_set ( dmap_data_n, None )
-            except : nv = VolumeViewer.volume.volume_from_grid_data ( dmap_data_n )
+            from chimerax.map import volume_from_grid_data
+            nv = volume_from_grid_data ( dmap_data_n, self.session )
             nv.name = os.path.splitext(dmap.name)[0] + "_norm.mrc"
-            nv.openState.xform = dmap.openState.xform
+            nv.scene_position = dmap.scene_position
         #fmapn = NormalizeMap ( fmap )
 
-        print("")
-        print("Normalizing transferred fit map")
+        debug("")
+        debug("Normalizing transferred fit map")
         df_data_n = NormalizeData (  df_data )
 
         if 0 :
-            try : nv = VolumeViewer.volume.add_data_set ( df_data_n, None )
-            except : nv = VolumeViewer.volume.volume_from_grid_data ( df_data_n )
+            from chimerax.map import volume_from_grid_data
+            nv = volume_from_grid_data ( df_data_n, self.session )
             nv.name = os.path.splitext(dmap.name)[0] + "_fmap_norm.mrc"
-            nv.openState.xform = dmap.openState.xform
+            nv.scene_position = dmap.scene_position
 
 
         diff_mat = numpy.fabs ( dmap_data_n.full_matrix () - df_data_n.full_matrix () )
@@ -4662,43 +4685,43 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
         savg = numpy.average(weights)
         smax = numpy.max(weights)
 
-        print("")
-        print("Difference map:")
-        #print " -", len(nz), " nonzero"
-        print(" - range: %.3f -> %.3f, avg=%.3f, sdev=%.3f" % (smin, smax, savg, sdev))
+        debug("")
+        debug("Difference map:")
+        #debug " -", len(nz), " nonzero"
+        debug(" - range: %.3f -> %.3f, avg=%.3f, sdev=%.3f" % (smin, smax, savg, sdev))
 
-        diff_data = VolumeData.Array_Grid_Data ( diff_mat, df_data.origin, df_data.step, df_data.cell_angles )
+        from chimerax.map.data import ArrayGridData
+        diff_data = ArrayGridData ( diff_mat, df_data.origin, df_data.step, df_data.cell_angles )
 
-        try : nv = VolumeViewer.volume.add_data_set ( diff_data, None )
-        except : nv = VolumeViewer.volume.volume_from_grid_data ( diff_data )
+        from chimerax.map import volume_from_grid_data
+        nv = volume_from_grid_data ( diff_data, self.session )
 
         nv.name = os.path.splitext(dmap.name)[0] + "_--_" + fmap.name
-        nv.openState.xform = dmap.openState.xform
+        nv.scene_position = dmap.scene_position
 
-        if closeDMap :
-            chimera.openModels.close ( [closeDMap] )
+        close_models ( [closeDMap] )
 
 
 
     def IntersectionMap ( self ) :
 
-        dmap = segmentation_map()
-        if dmap == None : print("No segmentation map"); return
+        dmap = self.segmentation_map
+        if dmap == None : debug("No segmentation map"); return
 
         fmap = None
         [fmol, fmap2] = self.MolOrMapSelected ();
         if fmol != None :
-            print(" - using molecule map")
+            debug(" - using molecule map")
             fmap = self.MoleculeMap()
         elif fmap2 != None :
-            print(" - using map map")
+            debug(" - using map map")
             fmap = fmap2
         else :
-            umsg ('Please select an open molecule or map in the field above')
+            self.status ('Please select an open molecule or map in the field above')
             return
 
 
-        print("\n\nDiff map ", dmap.name, " <=> ", fmap.name)
+        debug("\n\nDiff map ", dmap.name, " <=> ", fmap.name)
 
         closeDMap = False
 
@@ -4710,31 +4733,32 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
 
         df_mat = self.Map2Map ( fmap, dmap )
-        df_data = VolumeData.Array_Grid_Data ( df_mat, dmap.data.origin, dmap.data.step, dmap.data.cell_angles )
+        from chimerax.map.data import ArrayGridData
+        df_data = ArrayGridData ( df_mat, dmap.data.origin, dmap.data.step, dmap.data.cell_angles )
 
         #MapStats ( dmap )
         #MapDataStats ( df_data )
 
-        print("")
-        print("Normalizing", dmap.name)
+        debug("")
+        debug("Normalizing", dmap.name)
         dmap_data_n = NormalizeData ( dmap.data )
 
         if 0 :
-            try : nv = VolumeViewer.volume.add_data_set ( dmap_data_n, None )
-            except : nv = VolumeViewer.volume.volume_from_grid_data ( dmap_data_n )
+            from chimerax.map import volume_from_grid_data
+            nv = volume_from_grid_data ( dmap_data_n, self.session )
             nv.name = os.path.splitext(dmap.name)[0] + "_norm.mrc"
-            nv.openState.xform = dmap.openState.xform
+            nv.scene_position = dmap.scene_position
         #fmapn = NormalizeMap ( fmap )
 
-        print("")
-        print("Normalizing transferred fit map")
+        debug("")
+        debug("Normalizing transferred fit map")
         df_data_n = NormalizeData (  df_data )
 
         if 0 :
-            try : nv = VolumeViewer.volume.add_data_set ( df_data_n, None )
-            except : nv = VolumeViewer.volume.volume_from_grid_data ( df_data_n )
+            from chimerax.map import volume_from_grid_data            
+            nv = volume_from_grid_data ( df_data_n, self.session )
             nv.name = os.path.splitext(dmap.name)[0] + "_fmap_norm.mrc"
-            nv.openState.xform = dmap.openState.xform
+            nv.scene_position = dmap.scene_position
 
 
         diff_mat = numpy.fabs ( dmap_data_n.full_matrix () - df_data_n.full_matrix () )
@@ -4744,42 +4768,42 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
         savg = numpy.average(weights)
         smax = numpy.max(weights)
 
-        print("")
-        print("Difference map:")
-        #print " -", len(nz), " nonzero"
-        print(" - range: %.3f -> %.3f, avg=%.3f, sdev=%.3f" % (smin, smax, savg, sdev))
+        debug("")
+        debug("Difference map:")
+        #debug " -", len(nz), " nonzero"
+        debug(" - range: %.3f -> %.3f, avg=%.3f, sdev=%.3f" % (smin, smax, savg, sdev))
 
-        diff_data = VolumeData.Array_Grid_Data ( diff_mat, df_data.origin, df_data.step, df_data.cell_angles )
+        from chimerax.map.data import ArrayGridData
+        diff_data = ArrayGridData ( diff_mat, df_data.origin, df_data.step, df_data.cell_angles )
 
-        try : nv = VolumeViewer.volume.add_data_set ( diff_data, None )
-        except : nv = VolumeViewer.volume.volume_from_grid_data ( diff_data )
+        from chimerax.map import volume_from_grid_data
+        nv = volume_from_grid_data ( diff_data, self.session )
 
         nv.name = os.path.splitext(dmap.name)[0] + "_--_" + fmap.name
-        nv.openState.xform = dmap.openState.xform
+        nv.scene_position = dmap.scene_position
 
-        if closeDMap :
-            chimera.openModels.close ( [closeDMap] )
+        close_models ( [closeDMap] )
 
 
     def ShapeMatch ( self ) :
 
-        dmap = segmentation_map()
-        if dmap == None : print("No segmentation map"); return
+        dmap = self.segmentation_map
+        if dmap == None : debug("No segmentation map"); return
 
         fmap = None
         [fmol, fmap2] = self.MolOrMapSelected ();
         if fmol != None :
-            print(" - using molecule map")
+            debug(" - using molecule map")
             fmap = self.MoleculeMap()
         elif fmap2 != None :
-            print(" - using map map")
+            debug(" - using map map")
             fmap = fmap2
         else :
-            umsg ('Please select an open molecule or map in the field above')
+            self.status ('Please select an open molecule or map in the field above')
             return
 
 
-        print("\n\nDiff map ", dmap.name, " <=> ", fmap.name)
+        debug("\n\nDiff map ", dmap.name, " <=> ", fmap.name)
 
         closeDMap = False
         realDMap = dmap
@@ -4793,27 +4817,29 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
 
         df_mat = self.Map2Map ( fmap, dmap )
-        #df_data = VolumeData.Array_Grid_Data ( df_mat, dmap.data.origin, dmap.data.step, dmap.data.cell_angles )
+        #from chimerax.map.data import ArrayGridData
+        #df_data = ArrayGridData ( df_mat, dmap.data.origin, dmap.data.step, dmap.data.cell_angles )
 
 
-        thr = dmap.surface_levels[0]
+        thr = dmap.minimum_surface_level
 
-        umsg ("Generating 1/-1 map for " + dmap.name + " thr: %.3f" % thr)
+        self.status ("Generating 1/-1 map for " + dmap.name + " thr: %.3f" % thr)
 
         m0 = dmap.data.full_matrix()
-        m1 = numpy.where ( m0 > realDMap.surface_levels[0], numpy.ones_like(m0)*1, numpy.zeros_like(m0) )
+        m1 = numpy.where ( m0 > realDMap.minimum_surface_level, numpy.ones_like(m0)*1, numpy.zeros_like(m0) )
 
-        m2 = numpy.where ( df_mat > fmap.surface_levels[0], numpy.ones_like(df_mat)*1, numpy.zeros_like(df_mat) )
+        m2 = numpy.where ( df_mat > fmap.minimum_surface_level, numpy.ones_like(df_mat)*1, numpy.zeros_like(df_mat) )
 
         mi = m1 * m2
         mu = m1 + m2
 
         if 0 :
-            mid = VolumeData.Array_Grid_Data ( mi, realDMap.data.origin, realDMap.data.step, realDMap.data.cell_angles, name="inter" )
-            mud = VolumeData.Array_Grid_Data ( mu, realDMap.data.origin, realDMap.data.step, realDMap.data.cell_angles, name="union" )
-
-            nv = VolumeViewer.volume_from_grid_data ( mid )
-            nv = VolumeViewer.volume_from_grid_data ( mud )
+            from chimerax.map.data import ArrayGridData
+            mid = ArrayGridData ( mi, realDMap.data.origin, realDMap.data.step, realDMap.data.cell_angles, name="inter" )
+            mud = ArrayGridData ( mu, realDMap.data.origin, realDMap.data.step, realDMap.data.cell_angles, name="union" )
+            from chimerax.map import volume_from_grid_data
+            nv = volume_from_grid_data ( mid, self.session )
+            nv = volume_from_grid_data ( mud, self.session )
 
 
         nz_int =  numpy.shape ( (mi).nonzero () )[1]
@@ -4821,63 +4847,51 @@ class Fit_Segments_Dialog ( chimera.baseDialog.ModelessDialog, Fit_Devel ):
 
         sm_score = float(nz_int) / float (nz_uni)
 
-        print(" - intersection %d, union %d - sm: %.3f" % (nz_int, nz_uni, sm_score))
+        debug(" - intersection %d, union %d - sm: %.3f" % (nz_int, nz_uni, sm_score))
 
 
-        ndata = VolumeData.Array_Grid_Data ( mi, dmap.data.origin, dmap.data.step, dmap.data.cell_angles )
+        from chimerax.map.data import ArrayGridData
+        ndata = ArrayGridData ( mi, dmap.data.origin, dmap.data.step, dmap.data.cell_angles )
 
-        try : nv = VolumeViewer.volume.add_data_set ( ndata, None )
-        except : nv = VolumeViewer.volume.volume_from_grid_data ( ndata )
+        from chimerax.map import volume_from_grid_data
+        nv = volume_from_grid_data ( ndata, dmap.session )
 
         nv.name = os.path.splitext(dmap.name)[0] + "_--_" + fmap.name
-        nv.openState.xform = dmap.openState.xform
+        nv.scene_position = dmap.scene_position
 
 
-        if closeDMap :
-            chimera.openModels.close ( [dmap] )
+        close_models ( [dmap] )
 
 
+def close_models(models):
+
+    if models:
+        ses = models[0].session
+        ses.models.close(models)
 
 
+def fit_segments_dialog ( session, create = True ) :
 
-def fit_segments_dialog ( create=False ) :
+    return Fit_Segments_Dialog.get_singleton(session, create = create)
 
-    from chimera import dialogs
-    return dialogs.find ( Fit_Segments_Dialog.name, create=create )
+def close_fit_segments_dialog ( session ):
 
-
-def close_fit_segments_dialog ():
-
-    from chimera import dialogs
-    d = fit_segments_dialog ()
+    d = fit_segments_dialog (session, create = False)
     if d :
-        d.toplevel_widget.update_idletasks ()
         d.Close()
-        d.toplevel_widget.update_idletasks ()
 
-def show_fit_segments_dialog ():
+def show_fit_segments_dialog ( session ):
 
-    from chimera import dialogs
-    d = fit_segments_dialog ( create = True )
-    # Avoid transient dialog resizing when created and mapped for first time.
-    d.toplevel_widget.update_idletasks ()
-    d.enter()
+    d = fit_segments_dialog ( session, create = True )
+    d.show()
     return d
 
 
-def new_fit_segments_dialog ( closeExisting = True ):
+def new_fit_segments_dialog ( session, close_existing = True ):
 
-    if closeExisting : close_fit_segments_dialog ()
-    show_fit_segments_dialog ()
-
-
-# -----------------------------------------------------------------------------
-#
-from chimera import dialogs
-dialogs.register (Fit_Segments_Dialog.name, Fit_Segments_Dialog,
-                  replace = True)
-
-
+    if close_existing : close_fit_segments_dialog ( session )
+    d = fit_segments_dialog ( session )
+    return d
 
 # -----------------------------------------------------------------------------
 #
@@ -4899,15 +4913,15 @@ def optimize_fits(fpoints, fpoint_weights, mlist, dmap,
         fits = []
         for i, Mi in enumerate(mlist):
             #if names:
-            #    print "%d/%d : %s" % ( i+1, len(mlist), names[i] )
+            #    debug "%d/%d : %s" % ( i+1, len(mlist), names[i] )
             if status_text:
-                status ( "%s %d/%d" % (status_text, i+1, len(mlist)) )
+                debug ( "%s %d/%d" % (status_text, i+1, len(mlist)) )
             Mfit, corr, stats = FitMap_T(fpoints, fpoint_weights, Mi, darray, xyz_to_ijk_tf, optimize = optimize)
-            #print "Fit ", i, ":", "Shift: ", stats['totShift'], "Angle:", stats['totAngle'], "height", stats['difCC'], "Final", corr
+            #debug "Fit ", i, ":", "Shift: ", stats['totShift'], "Angle:", stats['totAngle'], "height", stats['difCC'], "Final", corr
             fits.append((Mfit, corr, stats))
 
     c1 = time()
-    print('%d fits took %.2f seconds' % (len(fits), c1-c0))
+    debug('%d fits took %.2f seconds' % (len(fits), c1-c0))
 
     return fits
 
@@ -4927,7 +4941,7 @@ def parallel_fitting(fpoints, fpoint_weights, mlist, darray, xyz_to_ijk_tf,
     #
     import multiprocessing
     threads = multiprocessing.cpu_count() / 2
-    print('parallel fitting using %d threads' % threads)
+    debug('parallel fitting using %d threads' % threads)
 
     # Avoid periodic Python context switching.
     import sys
@@ -4973,12 +4987,13 @@ def parallel_fitting(fpoints, fpoint_weights, mlist, darray, xyz_to_ijk_tf,
 def FitMap_T ( fpoints, fpoint_weights, M, darray, xyz_to_ijk_transform,
                bTrans=True, bRot=True, optimize=True ) :
 
-    xyz_to_ijk_tf = multiply_matrices(xyz_to_ijk_transform, M.tolist())
+    xyz_to_ijk_tf = xyz_to_ijk_transform * M
 
     if optimize:
-        from FitMap import locate_maximum
+        from chimerax.map.fit import locate_maximum
         totShift = 0.0
         totAngle = 0.0
+        from chimerax.map.data import interpolate_volume_data
         map_values, outside = interpolate_volume_data(fpoints, xyz_to_ijk_tf, darray)
         initOlap, initCC = overlap_and_correlation ( fpoint_weights, map_values )
 
@@ -4993,11 +5008,10 @@ def FitMap_T ( fpoints, fpoint_weights, M, darray, xyz_to_ijk_transform,
                                             metric = 'sum product',
                                             request_stop_cb = None)
 
-            xT, xR = xf_2_M ( chimera_xform ( move_tf ) )
-            M = M * xT * xR
+            M = M * move_tf
             corr = stats['correlation']
 
-            #print ' \t%d steps: d %.3g, r %.3g, cor %f' % (stats['steps'], stats['shift'], stats['angle'], corr )
+            #debug ' \t%d steps: d %.3g, r %.3g, cor %f' % (stats['steps'], stats['shift'], stats['angle'], corr )
 
             totShift = totShift + stats['shift']
             totAngle = totAngle + stats['angle']
@@ -5005,13 +5019,14 @@ def FitMap_T ( fpoints, fpoint_weights, M, darray, xyz_to_ijk_transform,
             if ( stats['shift'] < 0.1 and stats['angle'] < 0.1 ) :
                 break
 
-            xyz_to_ijk_tf = multiply_matrices(xyz_to_ijk_transform, M.tolist())
+            xyz_to_ijk_tf = xyz_to_ijk_transform * M
 
         stats['totAngle'] = totAngle
         stats['totShift'] = totShift
         stats['difCC'] = corr - initCC
 
     else:
+        from chimerax.map.data import interpolate_volume_data
         map_values, outside = interpolate_volume_data(fpoints, xyz_to_ijk_tf,
                                                       darray )
         olap, corr = overlap_and_correlation ( fpoint_weights, map_values )
@@ -5026,17 +5041,9 @@ def FitMap_T ( fpoints, fpoint_weights, M, darray, xyz_to_ijk_transform,
 
 def molApplyT ( mol, T ) :
 
-    xf = chimera.Xform.xform ( T[0,0], T[0,1], T[0,2], T[0,3], T[1,0], T[1,1], T[1,2], T[1,3], T[2,0], T[2,1], T[2,2], T[2,3], True )
-    # print xf
-
-    mol.COM = chimera.Vector (0,0,0)
-
-    for at in mol.atoms :
-        c = xf.apply ( at.coord() )
-        at.setCoord ( c )
-        mol.COM = mol.COM + c.toVector()
-
-    mol.COM = mol.COM / float ( len(mol.atoms) )
+    atoms = mol.atoms
+    atoms.coords = xyz = T * atoms.coords
+    mol.COM = xyz.mean()
 
 #
 # Change atom coordinates so the center of mass is at the origin and
@@ -5044,67 +5051,56 @@ def molApplyT ( mol, T ) :
 # of the molecule coordinate system so the molecule does not move in the
 # graphics window.
 #
-def centerMol ( sel_str ):
-
-    sel = chimera.selection.OSLSelection (sel_str)
-    mols = sel.molecules ()
-    atoms = sel.atoms()
+def centerMol ( mols ):
 
     if len(mols) == 0 :
-        print("Failed to center molecule")
+        debug("Failed to center molecule")
         return []
 
     if hasattr(mols[0], 'centered') :
         return mols
 
-    umsg ( "Centering %d structures, %d atoms" % (len(mols), len(atoms) ) )
+    from chimerax.atomic import concatenate, Atoms
+    atoms = concatenate([m.atoms for m in mols], Atoms)
+    
+    debug ( "Centering %d structures, %d atoms" % (len(mols), len(atoms) ) )
 
-    points = get_atom_coordinates ( atoms, transformed = False )
+    points = atoms.coords
     COM, U, S, V = prAxes ( points )
 
     # move COM to origin and align pr. axes with XYZ
-    tAO = numpy.matrix ( [
+    from chimerax.core.geometry import Place, identity
+    tAO = Place ( [
         [ 1, 0, 0, -COM[0] ],
         [ 0, 1, 0, -COM[1] ],
-        [ 0, 0, 1, -COM[2] ],
-        [ 0, 0, 0,       1 ]  ] )
+        [ 0, 0, 1, -COM[2] ] ] )
 
-    tAR = numpy.matrix ( [
+    tAR = Place ( [
         [ V[0,0], V[0,1], V[0,2], 0 ],
         [ V[1,0], V[1,1], V[1,2], 0 ],
-        [ V[2,0], V[2,1], V[2,2], 0 ],
-        [      0,      0,      0, 1 ]  ] )
+        [ V[2,0], V[2,1], V[2,2], 0 ] ] )
 
     # Adjust coordinate system so molecule does not appear to move.
-    tf = invert_matrix((tAR*tAO).tolist()[:3])
+    tf = (tAR*tAO).inverse()
 
     for fmol in mols :
 
         fmol.COM, fmol.U, fmol.S, fmol.V = COM, U, S, V
 
-        print("Mol %s .%d" % (fmol.name, fmol.subid))
+        debug("Mol %s" % (fmol.id_string))
         molApplyT ( fmol, tAO )
-        print(" - COM after translation:", fmol.COM)
+        debug(" - COM after translation:", fmol.COM)
         molApplyT ( fmol, tAR )
-        print(" - COM after rotation:", fmol.COM)
+        debug(" - COM after rotation:", fmol.COM)
 
-        fmol.openState.localXform(chimera_xform(tf))
+        fmol.position = fmol.position * tf
 
-        fmol.mT = numpy.matrix ( [
-            [ 1, 0, 0, 0 ],
-            [ 0, 1, 0, 0 ],
-            [ 0, 0, 1, 0 ],
-            [ 0, 0, 0, 1 ]  ] )
-
-        fmol.mR = numpy.matrix ( [
-            [ 1, 0, 0, 0 ],
-            [ 0, 1, 0, 0 ],
-            [ 0, 0, 1, 0 ],
-            [ 0, 0, 0, 1 ]  ] )
+        fmol.mT = identity()
+        fmol.mR = identity()
 
         fmol.M = fmol.mT * fmol.mR
 
-    points = get_atom_coordinates ( atoms, transformed = False )
+    points = atoms.coords
 
     for fmol in mols :
         fmol.COM, fmol.U, fmol.S, fmol.V = prAxes ( points )
@@ -5120,8 +5116,8 @@ def centerMol ( sel_str ):
 
         fmol.centered = True
 
-        umsg ( "Centered %s .%d (radius %.2fA, extents %.2fA %.2fA %.2fA)" % (
-            fmol.name, fmol.subid, fmol.BoundRad, fmol.Extents[0], fmol.Extents[1], fmol.Extents[2] ) )
+        debug ( "Centered %s (%s) (radius %.2fA, extents %.2fA %.2fA %.2fA)" % (
+            fmol.name, fmol.id_string, fmol.BoundRad, fmol.Extents[0], fmol.Extents[1], fmol.Extents[2] ) )
 
     return mols
 
@@ -5129,14 +5125,14 @@ def centerMol ( sel_str ):
 def fit_points(fmap, useThreshold = True):
 
     mat = fmap.data.full_matrix()
-    threshold = fmap.surface_levels[0]
+    threshold = fmap.minimum_surface_level
 
     if useThreshold == False :
         threshold = -1e9
-        print(" - not using threshold")
+        debug(" - not using threshold")
 
-    import _volume
-    points = _volume.high_indices(mat, threshold)
+    from chimerax.map import high_indices
+    points = high_indices(mat, threshold)
     fpoints = points.astype(numpy.single)
     fpoint_weights = mat[points[:,2],points[:,1],points[:,0]]
 
@@ -5145,9 +5141,9 @@ def fit_points(fmap, useThreshold = True):
         fpoints = numpy.take( fpoints, nz, axis=0 )
         fpoint_weights = numpy.take(fpoint_weights, nz, axis=0)
 
-    transform_vertices( fpoints, fmap.data.ijk_to_xyz_transform )
+    fmap.data.ijk_to_xyz_transform.transform_points( fpoints, in_place = True )
 
-    if 0 : print("FitPoints from %s with threshold %.4f, %d nonzero" % (
+    if 0 : debug("FitPoints from %s with threshold %.4f, %d nonzero" % (
         fmap.name, threshold, len(nz) ))
 
     return fpoints, fpoint_weights
@@ -5156,36 +5152,33 @@ def fit_points(fmap, useThreshold = True):
 
 def move_fit_models(fmap, M, dmap_xform):
 
-    tXO, tXR = xf_2_M ( dmap_xform )
-    T = tXO * tXR * M
-    xfA = chimera.Xform.xform ( T[0,0], T[0,1], T[0,2], T[0,3], T[1,0], T[1,1], T[1,2], T[1,3], T[2,0], T[2,1], T[2,2], T[2,3] )
-    fmap.openState.xform = xfA
+    xfA = dmap_xform * M
+    fmap.scene_position = xfA
 
-    print("moving %d mols to fitted position" % len(fmap.mols))
+    debug("moving %d mols to fitted position" % len(fmap.mols))
     for mol in fmap.mols :
-        mol.openState.xform = xfA
+        mol.scene_position = xfA
 
 
 def principle_axes_alignments ( points, flips, preM ):
 
     COM, U, S, V = prAxes ( points )
 
-    comT = numpy.matrix ( [
+    from chimerax.core.geometry import Place
+    comT = Place ( [
         [ 1, 0, 0, COM[0] ],
         [ 0, 1, 0, COM[1] ],
-        [ 0, 0, 1, COM[2] ],
-        [ 0, 0, 0,      1 ]  ] )
+        [ 0, 0, 1, COM[2] ] ] )
 
     mlist = []
     for j in range( len(flips) ) :
 
         af = flips[j]
 
-        mR = numpy.matrix ( [
+        mR = Place ( [
             [ af[0]*U[0,0], af[1]*U[0,1], af[2]*U[0,2], 0 ],
             [ af[0]*U[1,0], af[1]*U[1,1], af[2]*U[1,2], 0 ],
-            [ af[0]*U[2,0], af[1]*U[2,1], af[2]*U[2,2], 0 ],
-            [            0,            0,            0, 1 ] ] )
+            [ af[0]*U[2,0], af[1]*U[2,1], af[2]*U[2,2], 0 ] ] )
 
         M = comT * mR * preM
         mlist.append(M)
@@ -5220,72 +5213,32 @@ def uniform_rotation_angles(N, M) :
 def rotation_from_angles(theta, phi, rot) :
 
     from math import sin, cos, pi
-    v = chimera.Vector (sin(phi)*cos(theta), sin(phi)*sin(theta), cos(phi))
-    xfR = chimera.Xform.rotation ( v, rot*180/pi )
-    Mt, Mr = xf_2_M ( xfR )
-    return Mr
-
-
-def xf_2_M (xf) :
-
-    X = ( numpy.matrix (xf.getOpenGLMatrix()) ).reshape([4,4]).transpose()
-
-    tXO = numpy.matrix ( [
-        [ 1, 0, 0, X[0,3] ],
-        [ 0, 1, 0, X[1,3] ],
-        [ 0, 0, 1, X[2,3] ],
-        [ 0, 0, 0,      1 ]  ] )
-
-    tXR = numpy.matrix ( [
-        [ X[0,0], X[0,1], X[0,2], 0 ],
-        [ X[1,0], X[1,1], X[1,2], 0 ],
-        [ X[2,0], X[2,1], X[2,2], 0 ],
-        [      0,      0,      0, 1 ]  ] )
-
-    return [tXO, tXR]
-
-
-def xf_2_MM (xf) :
-
-    X = ( numpy.matrix (xf.getOpenGLMatrix()) ).reshape([4,4]).transpose()
-
-    tXO = numpy.matrix ( [
-        [ 1, 0, 0, X[0,3] ],
-        [ 0, 1, 0, X[1,3] ],
-        [ 0, 0, 1, X[2,3] ],
-        [ 0, 0, 0,      1 ]  ] )
-
-    tXR = numpy.matrix ( [
-        [ X[0,0], X[0,1], X[0,2], 0 ],
-        [ X[1,0], X[1,1], X[1,2], 0 ],
-        [ X[2,0], X[2,1], X[2,2], 0 ],
-        [      0,      0,      0, 1 ]  ] )
-
-    return tXO * tXR
-
-
+    v = (sin(phi)*cos(theta), sin(phi)*sin(theta), cos(phi))
+    from chimerax.core.geometry import rotation
+    xfR = rotation ( v, rot*180/pi )
+    return xfR
 
 
 def place_map_resample ( fmap, dmap, fnamesuf ) :
 
     # get bounds of points above threshold
+    from chimerax.map.data import grid_indices
     fpoints = grid_indices (fmap.data.size, numpy.single)  # i,j,k indices
-    transform_vertices ( fpoints, fmap.data.ijk_to_xyz_transform )
+    fmap.data.ijk_to_xyz_transform.transform_points ( fpoints, in_place = True )
     mat = fmap.data.full_matrix ()
     fpoint_weights = numpy.ravel(mat).astype(numpy.single)
-    threshold = fmap.surface_levels[0]
+    threshold = fmap.minimum_surface_level
     ge = numpy.greater_equal(fpoint_weights, threshold)
     fpoints = numpy.compress(ge, fpoints, 0)
     fpoint_weights = numpy.compress(ge, fpoint_weights)
     nz = numpy.nonzero( fpoint_weights )[0]
-    print(" - %d above %f in %s" % (len(nz), threshold, fmap.name))
-    #print "points: ", fpoints
-    #print "weights: ", fpoint_weights
+    debug(" - %d above %f in %s" % (len(nz), threshold, fmap.name))
+    #debug "points: ", fpoints
+    #debug "weights: ", fpoint_weights
 
-    transform_vertices ( fpoints, Matrix.xform_matrix( fmap.openState.xform ) )
-    transform_vertices ( fpoints, Matrix.xform_matrix( dmap.openState.xform.inverse() ) )
-    transform_vertices ( fpoints, dmap.data.xyz_to_ijk_transform )
-    #print "points in %s ref:" % dmap.name, fpoints
+    tf = dmap.data.xyz_to_ijk_transform * dmap.scene_position.inverse() * fmap.scene_position
+    tf.transform_points ( fpoints, in_place = True )
+    #debug "points in %s ref:" % dmap.name, fpoints
 
     bound = 2
     li,lj,lk = numpy.min ( fpoints, axis=0 ) - (bound, bound, bound)
@@ -5295,7 +5248,7 @@ def place_map_resample ( fmap, dmap, fnamesuf ) :
     n2 = hj - lj + 1
     n3 = hk - lk + 1
 
-    print(" - bounds - %d %d %d --> %d %d %d --> %d %d %d" % ( li, lj, lk, hi, hj, hk, n1,n2,n3 ))
+    debug(" - bounds - %d %d %d --> %d %d %d --> %d %d %d" % ( li, lj, lk, hi, hj, hk, n1,n2,n3 ))
 
     #nmat = numpy.zeros ( (n1,n2,n3), numpy.float32 )
     #dmat = dmap.full_matrix()
@@ -5305,29 +5258,31 @@ def place_map_resample ( fmap, dmap, fnamesuf ) :
     nn3 = int ( round (dmap.data.step[2] * float(n3) / fmap.data.step[2]) )
 
     O = dmap.data.origin
-    print(" - %s origin:" % dmap.name, O)
+    debug(" - %s origin:" % dmap.name, O)
     nO = ( O[0] + float(li) * dmap.data.step[0],
            O[1] + float(lj) * dmap.data.step[1],
            O[2] + float(lk) * dmap.data.step[2] )
 
-    print(" - new map origin:", nO)
+    debug(" - new map origin:", nO)
 
     nmat = numpy.zeros ( (nn1,nn2,nn3), numpy.float32 )
-    ndata = VolumeData.Array_Grid_Data ( nmat, nO, fmap.data.step, dmap.data.cell_angles )
+    from chimerax.map.data import ArrayGridData
+    ndata = ArrayGridData ( nmat, nO, fmap.data.step, dmap.data.cell_angles )
 
-    print(" - fmap grid dim: ", numpy.shape ( fmap.full_matrix() ))
-    print(" - new map grid dim: ", numpy.shape ( nmat ))
+    debug(" - fmap grid dim: ", numpy.shape ( fmap.full_matrix() ))
+    debug(" - new map grid dim: ", numpy.shape ( nmat ))
 
+    from chimerax.map.data import grid_indices
     npoints = grid_indices ( (nn1, nn2, nn3), numpy.single)  # i,j,k indices
-    transform_vertices ( npoints, ndata.ijk_to_xyz_transform )
+    ndata.ijk_to_xyz_transform.transform_points ( npoints, in_place = True )
 
-    dvals = fmap.interpolated_values ( npoints, dmap.openState.xform )
+    dvals = fmap.interpolated_values ( npoints, dmap.scene_position )
     #dvals = numpy.where ( dvals > threshold, dvals, numpy.zeros_like(dvals) )
     #nze = numpy.nonzero ( dvals )
 
     nmat = dvals.reshape( (nn3,nn2,nn1) )
     #f_mat = fmap.data.full_matrix()
-    #f_mask = numpy.where ( f_mat > fmap.surface_levels[0], numpy.ones_like(f_mat), numpy.zeros_like(f_mat) )
+    #f_mask = numpy.where ( f_mat > fmap.minimum_surface_level, numpy.ones_like(f_mat), numpy.zeros_like(f_mat) )
     #df_mat = df_mat * f_mask
 
 
@@ -5338,71 +5293,39 @@ def place_map_resample ( fmap, dmap, fnamesuf ) :
     dmap_path = os.path.splitext (dmap.data.path)[0]
 
 
-    ndata = VolumeData.Array_Grid_Data ( nmat, nO, fmap.data.step, dmap.data.cell_angles, name=(dmap_base + fnamesuf) )
-    try : nv = VolumeViewer.volume.add_data_set ( ndata, None )
-    except : nv = VolumeViewer.volume.volume_from_grid_data ( ndata )
+    from chimerax.map.data import ArrayGridData
+    ndata = ArrayGridData ( nmat, nO, fmap.data.step, dmap.data.cell_angles, name=(dmap_base + fnamesuf) )
+    from chimerax.map import volume_from_grid_data
+    nv = volume_from_grid_data ( ndata, dmap.session )
 
 
     nv.name = dmap_base + fnamesuf
-    nv.openState.xform = dmap.openState.xform
+    nv.scene_position = dmap.scene_position
 
     npath = dmap_path + fnamesuf
-    nv.write_file ( npath, "mrc" )
-    print("Wrote ", npath)
+#    nv.write_file ( npath, "mrc" )
+    from chimerax.core.commands import run, quote_if_necessary
+    cmd = 'save %s model #%s format mrc' % (quote_if_necessary(npath), nv.id_string)
+    run(dmap.session, cmd)
+    debug("Wrote ", npath)
 
     return nv
 
 
 
 
-def CopyMol ( mol ) :
-
-    nmol = chimera.Molecule()
-    nmol.name = mol.name
-
-    aMap = dict()
-    clr = ( rand(), rand(), rand() )
-
-    for res in mol.residues :
-        nres = nmol.newResidue (res.type, chimera.MolResId(res.id.chainId, res.id.position))
-        # print "New res: %s %d" % (nres.id.chainId, nres.id.position)
-        for at in res.atoms :
-            nat = nmol.newAtom (at.name, chimera.Element(at.element.number))
-            aMap[at] = nat
-            nres.addAtom( nat )
-            nat.setCoord ( at.coord() )
-            nat.drawMode = nat.Sphere
-            nat.color = chimera.MaterialColor( clr[0], clr[1], clr[2], 1.0 )
-            nat.display = True
-
-        nres.isHelix = res.isHelix
-        nres.isHet = res.isHet
-        nres.isSheet = res.isSheet
-        nres.isStrand = res.isStrand
-        nres.ribbonDisplay = True
-        nres.ribbonDrawMode = 2
-        nres.ribbonColor = chimera.MaterialColor( clr[0], clr[1], clr[2], 1.0 );
-
-    for bond in mol.bonds :
-        nb = nmol.newBond ( aMap[bond.atoms[0]], aMap[bond.atoms[1]] )
-        nb.display = nb.Smart
-
-    return nmol
-
-
-
 def map_overlap_and_correlation (map1, map2, above_threshold):
 
-    import FitMap
-    olap, cor = FitMap.map_overlap_and_correlation ( v1, v2, above_threshold )[:2]
+    from chimerax.map.fit import map_overlap_and_correlation
+    olap, cor = map_overlap_and_correlation ( v1, v2, above_threshold )[:2]
     return olap, cor
 
 
 
 def overlap_and_correlation ( v1, v2 ):
 
-    import FitMap
-    olap, cor = FitMap.overlap_and_correlation ( v1, v2 )[:2]
+    from chimerax.map.fit import overlap_and_correlation
+    olap, cor = overlap_and_correlation ( v1, v2 )[:2]
     return olap, cor
 
 
@@ -5412,13 +5335,12 @@ def reportFitRegions(map_name, regs):
     r = ', '.join(str(reg.rid) for reg in regs[:5])
     if len(regs) > 5:
         r += '...'
-    umsg ( "Fitting %s to %d regions (%s)" % ( map_name, len(regs), r ) )
+    debug ( "Fitting %s to %d regions (%s)" % ( map_name, len(regs), r ) )
 
 
-def getMod ( name ) :
+def getMod ( session, name ) :
 
-    import chimera
-    mlist = chimera.openModels.list ()
+    mlist = session.models.list ()
     for mol in mlist :
         if mol.name == name :
             return mol
@@ -5427,32 +5349,32 @@ def getMod ( name ) :
 
 
 
-def ShapeMatchScore ( atoms, dmap, bPrint=False ) :
+def ShapeMatchScore ( atoms, dmap, bDebug=False ) :
 
     #fmol = fmap.mol
-    #print "atoms from", fmol.name
-    #points = get_atom_coordinates ( fmol.atoms, transformed = True )
+    #debug "atoms from", fmol.name
+    #points = fmol.atoms.scene_coords
 
-    print("shape match of %d atoms with map %s" % (len(atoms), dmap.name))
-    points = get_atom_coordinates ( atoms, transformed = True )
-    transform_vertices ( points, xform_matrix ( dmap.openState.xform.inverse() ) )
+    debug("shape match of %d atoms with map %s" % (len(atoms), dmap.name))
+    points = atoms.scene_coords
+    dmap.scene_position.inverse().transform_points ( points, in_place = True )
     points0 = points.copy()
-    transform_vertices ( points, dmap.data.xyz_to_ijk_transform )
-    #print "points in %s ref:" % dmap.name, fpoints
+    dmap.data.xyz_to_ijk_transform.transform_points ( points, in_place = True )
+    #debug "points in %s ref:" % dmap.name, fpoints
 
     bound = int ( numpy.ceil (3.0 * max(dmap.data.step)) ) + 2
-    print(" - bound:", bound)
+    debug(" - bound:", bound)
     lo = numpy.floor ( numpy.min ( points, axis=0 ) ) - (bound, bound, bound)
     hi = numpy.ceil  ( numpy.max ( points, axis=0 ) ) + (bound, bound, bound)
-    print(" - min:", lo)
-    print(" - max:", hi)
+    debug(" - min:", lo)
+    debug(" - max:", hi)
 
 
     O = list ( dmap.data.origin )
     n = list ( dmap.data.size )
     s = dmap.data.step
-    print(" - dmap size:", n)
-    print(" - dmap O:", O)
+    debug(" - dmap size:", n)
+    debug(" - dmap O:", O)
 
     for i in (0,1,2) :
         if lo[i] < 0 :
@@ -5463,34 +5385,39 @@ def ShapeMatchScore ( atoms, dmap, bPrint=False ) :
         if hi[i] > n[i] :
             n[i] = hi[i]
 
-    print(" - dmap size:", n)
-    print(" - dmap O:", O)
+    debug(" - dmap size:", n)
+    debug(" - dmap O:", O)
 
     nmat = numpy.ones ( (n[2], n[1], n[0]) )
     eps = 0.5 * numpy.sqrt ( (s[0] * s[0]) + (s[1] * s[1]) + (s[2] * s[2]) )
-    ndata = VolumeData.Array_Grid_Data ( nmat, O, s, dmap.data.cell_angles )
-    amap_data = VolumeData.zone_masked_grid_data ( ndata, points0, max(3.0, eps) )
+    from chimerax.map.data import ArrayGridData, zone_masked_grid_data
+    ndata = ArrayGridData ( nmat, O, s, dmap.data.cell_angles )
+    amap_data = zone_masked_grid_data ( ndata, points0, max(3.0, eps) )
     amat = amap_data.full_matrix()
     if 0 :
-        amap = VolumeViewer.volume_from_grid_data ( amap_data )
+        from chimerax.map import volume_from_grid_data
+        amap = volume_from_grid_data ( amap_data, dmap.session )
         amap.name = dmap.name + "_()_" + atoms[0].molecule.name
-        amap.openState.xform = dmap.openState.xform
+        amap.scene_position = dmap.scene_position
 
+    from chimerax.map.data import grid_indices
     npoints = grid_indices ( (int(n[0]), int(n[1]), int(n[2])), numpy.single)  # i,j,k indices
-    transform_vertices ( npoints, ndata.ijk_to_xyz_transform )
-    dvals = dmap.interpolated_values ( npoints, dmap.openState.xform )
+    ndata.ijk_to_xyz_transform.transform_points ( npoints, in_place = True )
+    dvals = dmap.interpolated_values ( npoints, dmap.scene_position )
     #dvals = numpy.where ( dvals > threshold, dvals, numpy.zeros_like(dvals) )
     #nze = numpy.nonzero ( dvals )
 
     nmat = dvals.reshape( (n[2], n[1], n[0]) )
-    nmatm = numpy.where ( nmat > dmap.surface_levels[0], numpy.ones_like(nmat), numpy.zeros_like(nmat) )
+    nmatm = numpy.where ( nmat > dmap.minimum_surface_level, numpy.ones_like(nmat), numpy.zeros_like(nmat) )
     #df_mat = df_mat * f_mask
 
     if 0 :
-        ndata = VolumeData.Array_Grid_Data ( nmatm, O, s, dmap.data.cell_angles )
-        nmap = VolumeViewer.volume_from_grid_data ( ndata )
+        from chimerax.map.data import ArrayGridData
+        ndata = ArrayGridData ( nmatm, O, s, dmap.data.cell_angles )
+        from chimerax.map import volume_from_grid_data
+        nmap = volume_from_grid_data ( ndata, dmap.session )
         nmap.name = dmap.name + "_(2)"
-        nmap.openState.xform = dmap.openState.xform
+        nmap.scene_position = dmap.scene_position
 
     nmatm = nmatm.astype ( numpy.int )
     amat = amat.astype ( numpy.int )
@@ -5498,15 +5425,17 @@ def ShapeMatchScore ( atoms, dmap, bPrint=False ) :
     umat = nmatm | amat
 
     if 0 :
-        ndata = VolumeData.Array_Grid_Data ( umat, O, s, dmap.data.cell_angles )
-        nmap = VolumeViewer.volume_from_grid_data ( ndata )
+        from chimerax.map.data import ArrayGridData
+        ndata = ArrayGridData ( umat, O, s, dmap.data.cell_angles )
+        from chimerax.map import volume_from_grid_data
+        nmap = volume_from_grid_data ( ndata, dmap.session )
         nmap.name = dmap.name + "_(U)_" + atoms[0].molecule.name
-        nmap.openState.xform = dmap.openState.xform
+        nmap.scene_position = dmap.scene_position
 
-        ndata = VolumeData.Array_Grid_Data ( imat, O, s, dmap.data.cell_angles )
-        nmap = VolumeViewer.volume_from_grid_data ( ndata )
+        ndata = ArrayGridData ( imat, O, s, dmap.data.cell_angles )
+        nmap = volume_from_grid_data ( ndata, dmap.session )
         nmap.name = dmap.name + "_(I)_" + atoms[0].molecule.name
-        nmap.openState.xform = dmap.openState.xform
+        nmap.scene_position = dmap.scene_position
 
 
     nz_int =  numpy.shape ( (imat).nonzero () )[1]
@@ -5514,49 +5443,41 @@ def ShapeMatchScore ( atoms, dmap, bPrint=False ) :
 
     sm_score = float(nz_int) / float (nz_uni)
 
-    print(" - intersection %d, union %d - sm: %.3f" % (nz_int, nz_uni, sm_score))
+    debug(" - intersection %d, union %d - sm: %.3f" % (nz_int, nz_uni, sm_score))
 
     return sm_score
 
 
 
-def makeMap ( sel_str, res, gridSpacing, clr, map_name ) :
+def makeMap ( session, sel_str, res, gridSpacing, clr, map_name ) :
 
     cmd = "molmap %s %.3f sigmaFactor 0.187 gridSpacing %.3f replace false" % (
         sel_str, res, gridSpacing )
-    #print ">>>", cmd
-    chimera.runCommand ( cmd )
+    #debug ">>>", cmd
+    from chimerax.core.commands import run
+    mv = run ( session, cmd )
+    mv.name = map_name
+    if 0 :
+        #debug " - saving to:", map_name
+        mv.write_file ( map_name, "mrc" )
+        xf = mv.scene_position
+        #debug " - closing:", map_name
+        session.models.close ( [mv] )
+        from chimerax.map.volume import open_volume_file
+        mv = open_volume_file ( map_name, session )[0]
+        #debug " - opened:", mv.name
+        mv.scene_position = xf
 
-    mv = None
-    for mod in chimera.openModels.list() :
-        ts = mod.name.split()
-        if len(ts) > 1 and mod.name.find("map") >=0 and mod.name.find("res") >=0 :
-            #print " - found", mod.name
-            mv = mod
-            mv.name = map_name
-            if 0 :
-                #print " - saving to:", map_name
-                mv.write_file ( map_name, "mrc" )
-                xf = mv.openState.xform
-                #print " - closing:", map_name
-                chimera.openModels.close ( mv )
-                mv = VolumeViewer.open_volume_file ( map_name )[0]
-                #print " - opened:", mv.name
-                mv.openState.xform = xf
-            break
+    mv.surfaces[0].set_level(0.001)
 
-    if mv == None :
-        umsg ("Map not generated.")
-        return
-
-    mv.surface_levels[0] = 0.001
-
-    ro = VolumeViewer.volume.Rendering_Options()
+    from chimerax.map import RenderingOptions
+    ro = RenderingOptions()
     mv.update_surface ( False, ro )
+    from .regions import float_to_8bit_color
     for sp in mv.surfacePieces :
         v, t = sp.geometry
         if len(v) == 8 and len(t) == 12 : sp.display = False
-        sp.color = ( clr[0], clr[1], clr[2], clr[3] )
+        sp.single_color = float_to_8bit_color( clr )
 
     return mv
 
@@ -5578,24 +5499,23 @@ def cc_by_residue ( fmap, dmap, w ) :
 
                 xf = None
                 if rmap == None :
-                    rmap = makeMap ( "#%d:%d@CA" % (mol.id, res.id.position)
+                    rmap = makeMap ( mol.session, "#%d:%d@CA" % (mol.id, res.id.position)
                                      , 16.0, 1.0, (.5, .5, .5, 1.0), "resmap" )
                     rmap_pos = cat.coord()
                     rpoints, rpoint_weights = fit_points(rmap)
-                    xf = rmap.openState.xform
+                    xf = rmap.scene_position
 
                 else :
                     #new_rmap_pos = cat.coord()
                     d = cat.coord() - rmap_pos
-                    xf = rmap.openState.xform
-                    xf.multiply ( chimera.Xform.translation ( d ) )
+                    xf = rmap.scene_position * translation ( d )
 
                 rmap_values = dmap.interpolated_values ( rpoints, xf )
                 olap, corr = overlap_and_correlation ( rpoint_weights, rmap_values )
-                #print " - overlap: %f, cross-correlation: %f" % (olap, corr)
-                #chimera.openModels.close ( rmap )
+                #debug " - overlap: %f, cross-correlation: %f" % (olap, corr)
+                #close_models ( [rmap] )
                 rccs.append ( corr )
-                #print corr,
+                #debug corr,
 
         fp = open ( "ff_prcc_w%d.txt" % w, "a" )
         fp.write ( "%s" % fmap.mols[0].name )
@@ -5608,37 +5528,25 @@ def cc_by_residue ( fmap, dmap, w ) :
                 fp.write ( "\t%f" % wscore )
         fp.write ( "\n" )
         fp.close ()
-        if rmap : chimera.openModels.close ( rmap )
+        close_models ( [rmap] )
 
 
 
 
 def RandColorChains ( m ) :
 
-    ct = {}
-    for r in m.residues: ct[r.id.chainId] = 1
-    clist = list(ct.keys())
-    clist.sort()
-    chains_clrs = {}
-    cnames = ""
-
-    for ci, cid in enumerate ( clist ) :
-        clr = ( rand()*.7, rand()*.7, rand()*.7 )
-        #print "- %s: clr(%.2f, %.2f, %.2f)" % (cid, clr[0], clr[1], clr[2])
-        chains_clrs[cid] = chimera.MaterialColor ( clr[0], clr[1], clr[2], 1.0 )
-        cnames = cnames + cid
-
-    print("%s - color ribbon for %d chains -" % ( m.name, len(cnames) ), cnames)
-
-    # color atoms
-    for r in m.residues :
-        clr = chains_clrs[r.id.chainId]
-        r.ribbonDrawMode = 2
-        r.ribbonColor = clr
-        r.ribbonDisplay = True
-        for at in r.atoms :
-            at.display = False
-            at.color = clr
+    chain_clrs = {}
+    
+    # color ribbons and atoms
+    from .regions import float_to_8bit_color
+    for s, cid, res in m.residues.by_chain :
+        clr = float_to_8bit_color ( ( rand()*.7, rand()*.7, rand()*.7, 1.0 ) )
+        chains_clrs[cid] = clr
+        r.ribbon_color = clr
+        r.ribbon_display = True
+        ratoms = r.atoms
+        ratoms.displays = False
+        ratoms.color = clr
 
     return chains_clrs
 
@@ -5646,7 +5554,7 @@ def RandColorChains ( m ) :
 
 def MapStats ( dmap, aboveZero = True ) :
 
-    print("map: %s" % (dmap.name))
+    debug("map: %s" % (dmap.name))
 
     MapDataStats ( dmap.data )
 
@@ -5668,22 +5576,22 @@ def MapDataStats ( data, aboveZero = True ) :
     savg = numpy.average(weights)
     smax = numpy.max(weights)
 
-    #print " -", len(nz), " nonzero"
-    print(" - range: %.3f -> %.3f, avg=%.3f, sdev=%.3f" % (smin, smax, savg, sdev))
+    #debug " -", len(nz), " nonzero"
+    debug(" - range: %.3f -> %.3f, avg=%.3f, sdev=%.3f" % (smin, smax, savg, sdev))
 
 
 
 def NormalizeMap ( dmap ) :
 
-    print("Normalizing map: %s" % (dmap.name))
+    debug("Normalizing map: %s" % (dmap.name))
 
     ndata = NormalizeData ( dmap.data )
 
-    try : nv = VolumeViewer.volume.add_data_set ( ndata, None )
-    except : nv = VolumeViewer.volume.volume_from_grid_data ( ndata )
+    from chimerax.map import volume_from_grid_data
+    nv = volume_from_grid_data ( ndata, dmap.session )
 
     nv.name = os.path.splitext(dmap.name)[0] + "_norm.mrc"
-    nv.openState.xform = dmap.openState.xform
+    nv.scene_position = dmap.scene_position
 
     return nv
 
@@ -5706,7 +5614,7 @@ def NormalizeData ( data ) :
     savg = numpy.average(weights)
     smax = numpy.max(weights)
 
-    print(" - initial - range: %.3f -> %.3f, avg=%.3f, sdev=%.3f" % (smin, smax, savg, sdev))
+    debug(" - initial - range: %.3f -> %.3f, avg=%.3f, sdev=%.3f" % (smin, smax, savg, sdev))
 
     #mat0 = mat0 - savg
     mat0 = mat / sdev
@@ -5720,9 +5628,10 @@ def NormalizeData ( data ) :
     savg = numpy.average(weights)
     smax = numpy.max(weights)
 
-    print(" - normalized - range: %.3f -> %.3f, avg=%.3f, sdev=%.3f" % (smin, smax, savg, sdev))
+    debug(" - normalized - range: %.3f -> %.3f, avg=%.3f, sdev=%.3f" % (smin, smax, savg, sdev))
 
-    return VolumeData.Array_Grid_Data ( mat0, O, data.step, data.cell_angles )
+    from chimerax.map.data import ArrayGridData
+    return ArrayGridData ( mat0, O, data.step, data.cell_angles )
 
 
 def NormalizeMat ( mat ) :
@@ -5739,7 +5648,7 @@ def NormalizeMat ( mat ) :
     savg = numpy.average(weights)
     smax = numpy.max(weights)
 
-    print(" - initial - range: %.3f -> %.3f, avg=%.3f, sdev=%.3f" % (smin, smax, savg, sdev))
+    debug(" - initial - range: %.3f -> %.3f, avg=%.3f, sdev=%.3f" % (smin, smax, savg, sdev))
 
     #mat0 = mat0 - savg
     mat0 = mat / sdev
@@ -5753,7 +5662,7 @@ def NormalizeMat ( mat ) :
     savg = numpy.average(weights)
     smax = numpy.max(weights)
 
-    print(" - normalized - range: %.3f -> %.3f, avg=%.3f, sdev=%.3f" % (smin, smax, savg, sdev))
+    debug(" - normalized - range: %.3f -> %.3f, avg=%.3f, sdev=%.3f" % (smin, smax, savg, sdev))
 
     return mat0
 
@@ -5761,9 +5670,9 @@ def NormalizeMat ( mat ) :
 
 def OneMinusOneMap ( dmap ) :
 
-    thr = dmap.surface_levels[0]
+    thr = dmap.minimum_surface_level
 
-    umsg ("Generating 1/-1 map for " + dmap.name + " thr: %.3f" % thr)
+    debug ("Generating 1/-1 map for " + dmap.name + " thr: %.3f" % thr)
 
     m2 = None
 
@@ -5789,18 +5698,18 @@ def OneMinusOneMap ( dmap ) :
             gvm = outside_mask * gvm + inside_start
 
 
-    from VolumeData import Array_Grid_Data
-    mgrid = Array_Grid_Data ( m2, dmap.data.origin, dmap.data.step, dmap.data.cell_angles, name="map_one_minus_one")
+    from chimerax.map.data import ArrayGridData
+    mgrid = ArrayGridData ( m2, dmap.data.origin, dmap.data.step, dmap.data.cell_angles, name="map_one_minus_one")
 
-    import VolumeViewer
-    #nv = VolumeViewer.volume_from_grid_data ( mgrid, show_data = False, show_dialog = False )
-    return VolumeViewer.volume_from_grid_data ( mgrid )
+    from chimerax.map import volume_from_grid_data
+    #nv = volume_from_grid_data ( mgrid, show_data = False, show_dialog = False )
+    return volume_from_grid_data ( mgrid, dmap.session )
 
 
 
 def MapStats ( dmap, aboveZero = False ) :
 
-    print("Map Stats: %s" % (dmap.name))
+    debug("Map Stats: %s" % (dmap.name))
 
     mat = dmap.data.full_matrix ()
 
@@ -5817,8 +5726,8 @@ def MapStats ( dmap, aboveZero = False ) :
     savg = numpy.average(weights)
     smax = numpy.max(weights)
 
-    #print " -", len(nz), " nonzero"
-    print(" - range: %.3f -> %.3f, avg=%.3f, sdev=%.3f" % (smin, smax, savg, sdev))
+    #debug " -", len(nz), " nonzero"
+    debug(" - range: %.3f -> %.3f, avg=%.3f, sdev=%.3f" % (smin, smax, savg, sdev))
 
     return savg, sdev
 
@@ -5826,7 +5735,7 @@ def MapStats ( dmap, aboveZero = False ) :
 
 def AddNoiseToMap ( mv, mean, stdev ) :
 
-    print("\n---adding noise mean:",mean, " stdev:", stdev, "---\n")
+    debug("\n---adding noise mean:",mean, " stdev:", stdev, "---\n")
 
     nvm = mv.full_matrix()
     #f_mask = numpy.where ( nvm > 0, numpy.zeros_like(nvm), numpy.ones_like(nvm) )
@@ -5837,10 +5746,11 @@ def AddNoiseToMap ( mv, mean, stdev ) :
     noisem = srand ( (s[2],s[1],s[0]) ) * stdev - (numpy.ones_like(nvm) * mean)
     ngvm = noisem + nvm
 
-    ndata = VolumeData.Array_Grid_Data ( ngvm, mv.data.origin, mv.data.step, mv.data.cell_angles )
-    try : nvg = VolumeViewer.volume.add_data_set ( ndata, None )
-    except : nvg = VolumeViewer.volume.volume_from_grid_data ( ndata )
+    from chimerax.map.data import ArrayGridData
+    ndata = ArrayGridData ( ngvm, mv.data.origin, mv.data.step, mv.data.cell_angles )
+    from chimerax.map import volume_from_grid_data
+    nvg = volume_from_grid_data ( ndata, mv.session )
     nvg.name = mv.name
 
-    chimera.openModels.close ( [mv] )
+    session.models.close ( [mv] )
     return nvg

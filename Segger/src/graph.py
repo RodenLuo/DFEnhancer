@@ -195,19 +195,19 @@ def save_skeleton ( smod ) :
         initdir, initfile = os.path.split(smod.adj_graph.path)
     else:
         initdir, initfile = smod.path, smod.name + ' skeleton'
-    import OpenSave
-    d = OpenSave.SaveModal(title = 'Save skeleton',
-                           initialdir = initdir,
-                           initialfile = initfile,
-                           filters = [('Chimera Markers', '*.cmm', '')])
-    from chimera.tkgui import app
-    paths_and_types = d.run(app)
-    if paths_and_types:
-        path = paths_and_types[0][0]
+
+    def save(path, smod=smod):
         out = open(path, 'w')
         from VolumePath import markerset
         markerset.save_marker_sets([smod.adj_graph], out)
         out.close()
+
+    from .opensave import SaveFileDialog
+    SaveFileDialog(title = 'Save skeleton',
+                   initialdir = initdir,
+                   initialfile = initfile,
+                   filters = [('Chimera Markers', '*.cmm', '')],
+                   command = save)
 
 
 def close ( smod ) :

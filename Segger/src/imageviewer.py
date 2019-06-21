@@ -122,17 +122,11 @@ class ImageViewer(ModelessDialog):
         if self.image is None:
             return
 
-        def save(okay, dialog, self = self):
-            if not okay:
-                return
-            paths_and_types = dialog.getPathsAndTypes()
-            if len(paths_and_types) == 0:
-                return
-            path, format = paths_and_types[0]
-            self.image.save(path, format)
+        def save(path):
+            self.image.save(path)
 
-        from OpenSave import SaveModeless
-        SaveModeless(title = 'Save Image',
+        from .opensave import SaveFileDialog
+        SaveFileDialog(title = 'Save Image',
                      filters = [('JPEG', '*.jpg', '.jpg'),
                                 ('PNG', '*.png', '.png'),
                                 ('TIFF', '*.tif', '.tif')],

@@ -1,7 +1,7 @@
 import numpy
 
-def AxesMod ( COM=[0,0,0], U=None, Extents=[30,30,30], rad=1.0, f=1.0,
-              alignTo = None, session = None ) :
+def AxesMod ( session, COM=[0,0,0], U=None, Extents=[30,30,30], rad=1.0, f=1.0,
+              alignTo = None ) :
 
     from chimerax.core.models import Model
     mol = Model('axes', session)
@@ -657,8 +657,8 @@ def map_points (fmap, useThreshold = True):
         threshold = 1e-5
         #print " - not using threshold"
 
-    from chimerax.map import _map
-    points = _map.high_indices(mat, threshold)
+    from chimerax.map import high_indices
+    points = high_indices(mat, threshold)
     fpoints = points.astype(numpy.single)
     fpoint_weights = mat[points[:,2],points[:,1],points[:,0]]
 

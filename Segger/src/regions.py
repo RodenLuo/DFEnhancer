@@ -8,6 +8,7 @@ from .segment_dialog import debug
 
 from chimerax.core.models import Surface
 class Segmentation ( Surface ):
+    SESSION_SAVE = False
 
     def __init__(self, name, session, volume = None):
 
@@ -1066,6 +1067,11 @@ class Region:
         if self.surface_piece:
             self.surface_piece.color = float_to_8bit_color(color)
 
+    def show_transparent( self, opacity ):
+        '''Opacity in range 0-1.'''
+        if self.surface_piece:
+            self.surface_piece.color = float_to_8bit_color(tuple(self.color[:3]) + (opacity,))
+        
     def surface ( self ) :
 
         return self.surface_piece

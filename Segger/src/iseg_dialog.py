@@ -753,19 +753,15 @@ class ISeg_Dialog ( chimera.baseDialog.ModelessDialog ):
         self.updateIcos2 ( rS )
 
 
-        def save ( okay, dialog ):
-            if okay:
-                paths = dialog.getPaths ( )
-                if paths:
-                    path = paths[0]
-                    self.umsg ( "Saved CCs to: " + path )
-                    f = open ( path, "w" )
-                    for rad,cc in ccs :
-                        f.write ( "%d\t%f\n" % (rad, cc) )
-                    f.close()
+        def save ( path ):
+            self.umsg ( "Saved CCs to: " + path )
+            f = open ( path, "w" )
+            for rad,cc in ccs :
+                f.write ( "%d\t%f\n" % (rad, cc) )
+            f.close()
 
-        from OpenSave import SaveModeless
-        SaveModeless ( title = 'Save Cross Correlations',
+        from .opensave import SaveFileDialog
+        SaveFileDialog ( title = 'Save Cross Correlations',
                        filters = [('TXT', '*.txt', '.txt')],
                        initialfile = "rad_cc.txt", command = save )
 
@@ -1415,29 +1411,18 @@ def makeMap ( sel_str, res, gridSpacing, clr, map_name ) :
     cmd = "molmap %s %.3f sigmaFactor 0.187 gridSpacing %.3f replace false" % (
         sel_str, res, gridSpacing )
     #print ">>>", cmd
-    chimera.runCommand ( cmd )
+    mv = chimera.runCommand ( cmd )
 
-    mv = None
-    for mod in chimera.openModels.list() :
-        ts = mod.name.split()
-        if len(ts) > 1 and mod.name.find("map") >=0 and mod.name.find("res") >=0 :
-            #print " - found", mod.name
-            mv = mod
-            mv.name = map_name
-            if 0 :
-                #print " - saving to:", map_name
-                mv.write_file ( map_name, "mrc" )
-                xf = mv.openState.xform
-                #print " - closing:", map_name
-                chimera.openModels.close ( mv )
-                mv = VolumeViewer.open_volume_file ( map_name )[0]
-                #print " - opened:", mv.name
-                mv.openState.xform = xf
-            break
-
-    if mv == None :
-        umsg ("Map not generated.")
-        return
+    mv.name = map_name
+    if 0 :
+        #print " - saving to:", map_name
+        mv.write_file ( map_name, "mrc" )
+        xf = mv.openState.xform
+        #print " - closing:", map_name
+        chimera.openModels.close ( mv )
+        mv = VolumeViewer.open_volume_file ( map_name )[0]
+        #print " - opened:", mv.name
+        mv.openState.xform = xf
 
     mv.surface_levels[0] = 0.001
 

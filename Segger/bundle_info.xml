@@ -26,6 +26,7 @@
     <PythonClassifier>Development Status :: 2 - Pre-Alpha</PythonClassifier>
     <PythonClassifier>License :: Free for non-commercial use</PythonClassifier>
     <ChimeraXClassifier>Tool :: Segment Map :: Volume Data :: Segment density maps using Segger algorithms</ChimeraXClassifier>
+    <ChimeraXClassifier>Tool :: Fit to Segments :: Volume Data :: Fit atomic models in segmented maps</ChimeraXClassifier>
     <ChimeraXClassifier>Command :: volume segment :: Segment density maps :: Segment density maps using Segger algorithms</ChimeraXClassifier>
   </Classifiers>
 

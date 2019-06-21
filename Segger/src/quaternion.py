@@ -1,16 +1,16 @@
 
-import chimera
 import numpy
 
 
 class Quaternion :
 
-    def __init__ ( self, s=1.0, v=chimera.Vector(0,0,0) ) :
+    def __init__ ( self, s=1.0, v=(0,0,0) ) :
         self.s = s
-        self.v = v
+        self.v = numpy.array(v, numpy.float32)
 
     def length (self) :
-        return numpy.sqrt ( (self.s*self.s) + self.v.sqlength() )
+        vx,vy,vz = self.v
+        return numpy.sqrt ( (self.s*self.s) + (vx*vx + vy*vy + vz*vz) )
 
 
     def rotation (self, angDegrees, axis) :
@@ -24,11 +24,14 @@ class Quaternion :
 
 
     def fromXform ( self, xf ) :
-        axis, angle = xf.getRotation ()
-        self.rotation ( angle, axis )
+        axis, angle = xf.rotation_axis_and_angle ()
+        angle_deg = (180 / numpy.pi) * angle
+        self.rotation ( angle_deg, axis )
 
     def dot ( self, q ) :
-        return self.s * q.s + self.v * q.v
+        vx,vy,vz = self.v
+        qvx, qvy, qvz = q.v
+        return self.s * q.s + vx*qvx + vy+qvy + vz*qvz
 
     def angleTo ( self, q2 ) :
         self.normalize()
@@ -57,27 +60,29 @@ class Quaternion :
         return Quaternion ( self.s - x.s, self.v - x.v )
 
     def __copy__ (self) :
-        return Quaternion ( self.s, self.v.__copy__() )
+        return Quaternion ( self.s, self.v )
 
     def Xform (self) :
         #self.normalize()
         s = self.s
-        v = self.v
-        return chimera.Xform.xform (
-            1-2*v.y*v.y-2*v.z*v.z, 2*v.x*v.y-2*s*v.z, 2*v.x*v.z+2*s*v.y, 0,
-            2*v.x*v.y+2*s*v.z, 1-2*v.x*v.x-2*v.z*v.z, 2*v.y*v.z-2*s*v.x, 0,
-            2*v.x*v.z-2*s*v.y, 2*v.y*v.z+2*s*v.x, 1-2*v.x*v.x-2*v.y*v.y, 0
+        vx,vy,vz = self.v
+        from chimerax.core.geometry import Place
+        return Place (
+            [(1-2*vy*vy-2*vz*vz, 2*vx*vy-2*s*vz, 2*vx*vz+2*s*vy, 0),
+             (2*vx*vy+2*s*vz, 1-2*vx*vx-2*vz*vz, 2*vy*vz-2*s*vx, 0),
+             (2*vx*vz-2*s*vy, 2*vy*vz+2*s*vx, 1-2*vx*vx-2*vy*vy, 0)]
         )
 
     def matrix (self) :
         #self.normalize()
         s = self.s
-        v = self.v
-        return [
-            [1-2*v.y*v.y-2*v.z*v.z, 2*v.x*v.y-2*s*v.z, 2*v.x*v.z+2*s*v.y],
-            [2*v.x*v.y+2*s*v.z, 1-2*v.x*v.x-2*v.z*v.z, 2*v.y*v.z-2*s*v.x],
-            [2*v.x*v.z-2*s*v.y, 2*v.y*v.z+2*s*v.x, 1-2*v.x*v.x-2*v.y*v.y],
-        ]
+        vx,vy,vz = self.v
+        from chimerax.core.geometry import Place
+        return Place( [
+            [1-2*vy*vy-2*vz*vz, 2*vx*vy-2*s*vz, 2*vx*vz+2*s*vy],
+            [2*vx*vy+2*s*vz, 1-2*vx*vx-2*vz*vz, 2*vy*vz-2*s*vx],
+            [2*vx*vz-2*s*vy, 2*vy*vz+2*s*vx, 1-2*vx*vx-2*vy*vy] ]
+        )
 
 
     def fromMatrix ( self, rkRot ) :
@@ -116,7 +121,8 @@ class Quaternion :
 
 
 def mult (a, b) :
-    return Quaternion (a.s*b.s - a.v*b.v, b.v*a.s + a.v*b.s + chimera.cross(a.v,b.v))
+    from chimerax.core.geometry import cross_product
+    return Quaternion (a.s*b.s - a.v*b.v, b.v*a.s + a.v*b.s + cross_product(a.v,b.v))
 
 
 def slerp (p, q, t) :
@@ -138,4 +144,4 @@ def slerp (p, q, t) :
         return Quaternion (p.s*c0+q.s*c1, p.v*c0 + q.v*c1)
 
     else :
-        return Quaternion (p.s, chimera.Vector(p.v[0], p.v[1], p.v[2]))
+        return Quaternion (p.s, (p.v[0], p.v[1], p.v[2]))

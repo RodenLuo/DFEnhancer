@@ -35,10 +35,10 @@ showDevTools = False
 
 REG_OPACITY = 0.45
 
-def debug(*args):
+def debug(*args, **kw):
     from . import debug
     if debug:
-        print(*args)
+        print(*args, **kw)
 
 
 from chimerax.core.tools import ToolInstance
@@ -46,7 +46,6 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
 
     title = "Segment Map (Segger v" + seggerVersion + ")"
     name = "segment map"
-    buttons = ('Segment', 'Group', 'Ungroup', 'Options', 'Shortcuts', "Close")
     help = 'https://cryoem.slac.stanford.edu/ncmi/resources/software/segger'
     def __init__(self, session, tool_name):
         self.cur_seg = None
@@ -96,10 +95,14 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
 
         tw.manage(placement="side")
 
-        session.triggers.add_handler('remove models', self.model_closed_cb)
+        self._model_close_handler = session.triggers.add_handler('remove models', self.model_closed_cb)
 
         from PyQt5.QtCore import QTimer
         QTimer.singleShot(1000, self._help_line)
+
+    def delete(self):
+        self.session.triggers.remove_handler(self._model_close_handler)
+        ToolInstance.delete(self)
         
     def _create_map_menu(self, parent):
         from PyQt5.QtWidgets import QFrame, QHBoxLayout, QLabel
@@ -221,7 +224,6 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
         rb = QPushButton('Regions', mbar)
         rb.setStyleSheet(button_style)
         layout.addWidget(rb)
-        layout.addStretch(1)
         rmenu = QMenu(rb)
         rb.setMenu(rmenu)
         for text, func in regions_menu_entries:
@@ -285,6 +287,8 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
             smenu = Hybrid.cascade_menu(menubar, 'Graph',
                                         graph_menu_entries)
 
+        layout.addStretch(1)
+        
         return mbar
     
     def _create_options_gui(self, parent):
@@ -304,10 +308,10 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
             entries_row(f, 'Keep regions having at least', 1, 'voxels,', 0, 'contact voxels')
         
         self._group_smooth, self._num_steps, self._step_size, self._target_num_regions = \
-            entries_row(f, False, 'Group by smoothing', 4, 'steps of size', 1.0, ', stop at', 1, 'regions')
+            entries_row(f, True, 'Group by smoothing', 4, 'steps of size', 1.0, ', stop at', 1, 'regions')
 
         self._group_con, self._num_steps_con, self._target_num_regions_con, self._group_by_con_only_visible = \
-            entries_row(f, True, 'Group by connectivity', 20, 'steps, stop at', 1, 'regions', False, 'only visible')
+            entries_row(f, False, 'Group by connectivity', 20, 'steps, stop at', 1, 'regions', False, 'only visible')
 
         radio_buttons(self._group_smooth, self._group_con)
         
@@ -343,7 +347,7 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
                                     ("Not-Grp", self.RegSurfsShowNotGrouped),
                                     ("Grouped", self.RegSurfsShowGrouped))),
 
-                ('Other tools: ', (("Fit", None), #self.FitDialog),
+                ('Other tools: ', (("Fit", self.FitDialog),
                                    ("Extract", None), #self.ExtractDensities),
                                    ("iSeg", None), #self.ISeg),
                                    #("SegLoop", self.SegLoop),
@@ -365,21 +369,15 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
         blayout.setContentsMargins(0,0,0,0)
         blayout.setSpacing(10)
 
-        sb = QPushButton('Segment', bf)
-        sb.clicked.connect(self._segment)
-        blayout.addWidget(sb)
-
-        gb = QPushButton('Group', bf)
-        gb.clicked.connect(self._group)
-        blayout.addWidget(gb)
-        
-        ugb = QPushButton('Ungroup', bf)
-        ugb.clicked.connect(self._ungroup)
-        blayout.addWidget(ugb)
-        
-        hb = QPushButton('Help', bf)
-        hb.clicked.connect(self._help)
-        blayout.addWidget(hb)
+        buttons = [('Segment', self._segment),
+                   ('Group', self._group),
+                   ('Ungroup', self._ungroup),
+                   ('Fit', self.FitDialog),
+                   ('Help', self._help)]
+        for name, callback in buttons:
+            b = QPushButton(name, bf)
+            b.clicked.connect(callback)
+            blayout.addWidget(b)
 
         blayout.addStretch(1)    # Extra space at end
 
@@ -431,9 +429,9 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
 
     @property
     def group_mode(self):
-        if self._group_smooth.value:
+        if self._group_smooth.enabled:
             return 'smooth'
-        if self._group_con.value:
+        if self._group_con.enabled:
             return 'connected'
         return None
     
@@ -1548,8 +1546,8 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
     def FitDialog ( self ) :
 
         from . import fit_dialog
-        fit_dialog.close_fit_segments_dialog();
-        fit_dialog.new_fit_segments_dialog()
+        fit_dialog.close_fit_segments_dialog( self.session );
+        fit_dialog.new_fit_segments_dialog( self.session )
 
 
     def GeoSegDialog ( self ) :
@@ -2384,7 +2382,7 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
             return
 
         regions = None
-        if  self._group_by_con_only_visible.value :
+        if  self._group_by_con_only_visible.enabled :
             regions = smod.visible_regions()
             if len(regions) == 0 :
                 self.status ("Grouping by connections: no visible regions found or they are from a different model" )
@@ -3120,11 +3118,9 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
             # for ribosome direction
                 sp.Extents[1] = sp.Extents[1] * float(self.axesFactor.get())
 
-                sp.axes = axes.AxesMod ( sp.COM, sp.U, sp.Extents, 6, 1.0, alignTo = sp,
-                                         session = self.session )
+                sp.axes = axes.AxesMod ( self.session, sp.COM, sp.U, sp.Extents, 6, 1.0, alignTo = sp )
             else :
-                sp.axes = axes.AxesMod ( sp.COM, sp.U, sp.Extents, 1.0, 1.1, alignTo = sp,
-                                         session = self.session )
+                sp.axes = axes.AxesMod ( self.session, sp.COM, sp.U, sp.Extents, 1.0, 1.1, alignTo = sp )
 
             sp.axes.name = "region_%d_axes" % r.rid
 
@@ -3387,24 +3383,23 @@ def NothingSelected(session):
     return session.selection.empty()
 
 
-def volume_segmentation_dialog ( create=False ) :
+def volume_segmentation_dialog ( session, create=False ) :
 
-    from chimera import dialogs
-    return dialogs.find ( Volume_Segmentation_Dialog.name, create=create )
+    return Volume_Segmentation_Dialog.get_singleton(session, create=create)
 
 
-def current_segmentation(warn = True):
+def current_segmentation( session, warn = True ):
 
-    d = volume_segmentation_dialog()
+    d = volume_segmentation_dialog( session )
     if d:
         return d.CurrentSegmentation(warn)
     elif warn:
         d.status ( "No segmentation opened" )
     return None
 
-def segmentation_map():
+def segmentation_map( session ):
 
-    d = volume_segmentation_dialog()
+    d = volume_segmentation_dialog( session )
     if d:
         return d.SegmentationMap()
     return None
@@ -3440,20 +3435,37 @@ def button_row(parent, title, name_and_callback_list, hspacing = 3):
 
     return f
 
-def entries_row(parent, *args):
-    from PyQt5.QtWidgets import QFrame, QHBoxLayout, QLabel
+def _row_frame(parent):
+    from PyQt5.QtWidgets import QFrame, QHBoxLayout
     f = QFrame(parent)
     parent.layout().addWidget(f)
 
     layout = QHBoxLayout(f)
     layout.setContentsMargins(0,0,0,0)
     layout.setSpacing(10)
+    return f, layout
+
+def entries_row(parent, *args):
+    f, layout = _row_frame(parent)
+    from PyQt5.QtWidgets import QLabel, QPushButton
 
     values = []
     for a in args:
         if isinstance(a, str):
-            l = QLabel(a, f)
-            layout.addWidget(l)
+            if a == '':
+                s = StringEntry(f)
+                layout.addWidget(s.widget)
+                values.append(s)
+            else:
+                newline = a.endswith('\n')
+                if newline:
+                    a = a[:-1]
+                l = QLabel(a, f)
+                layout.addWidget(l)
+                if newline:
+                    # String ends in newline so make new row.
+                    layout.addStretch(1)
+                    f, layout = _row_frame(parent)
         elif isinstance(a, bool):
             cb = BooleanEntry(f, a)
             layout.addWidget(cb.widget)
@@ -3466,6 +3478,11 @@ def entries_row(parent, *args):
             fe = FloatEntry(f, a)
             layout.addWidget(fe.widget)
             values.append(fe)
+        elif isinstance(a, tuple):
+            b = QPushButton(a[0], f)
+            layout.addWidget(b)
+            b.clicked.connect(a[1])
+            
     layout.addStretch(1)    # Extra space at end
 
     return values
@@ -3475,10 +3492,24 @@ def radio_buttons(*check_boxes):
         cb.widget.stateChanged.connect(lambda state, cb=cb, others=check_boxes: _uncheck_others(cb, others))
 
 def _uncheck_others(check_box, other_check_boxes):
-    if check_box.value:
+    if check_box.enabled:
         for ocb in other_check_boxes:
             if ocb is not check_box:
-                ocb.value = False
+                ocb.enabled = False
+
+class StringEntry:
+    def __init__(self, parent, value = '', pixel_width = 100):
+        from PyQt5.QtWidgets import QLineEdit
+        self._line_edit = le = QLineEdit(value, parent)
+        le.setMaximumWidth(pixel_width)
+    def _get_value(self):
+        return self._line_edit.text()
+    def _set_value(self, value):
+        self._line_edit.setText(value)
+    value = property(_get_value, _set_value)
+    @property
+    def widget(self):
+        return self._line_edit
 
 class NumberEntry:
     format = '%d'
@@ -3513,6 +3544,7 @@ class BooleanEntry:
     def _set_value(self, value):
         self._check_box.setChecked(value)
     value = property(_get_value, _set_value)
+    enabled = value
     @property
     def widget(self):
         return self._check_box

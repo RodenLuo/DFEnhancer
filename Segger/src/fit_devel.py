@@ -77,17 +77,13 @@ class Fit_Devel:
             #print ""
             ccs.append ( cc )
 
-        def save ( okay, dialog, ccs = ccs ):
-            if okay:
-                paths = dialog.getPaths ( )
-                if paths:
-                    path = paths[0]
-                    f = open ( path, "a" )
-                    for cc in ccs :
-                        f.write ( "%f\t" % cc )
-                    f.write ( "\n" )
-                    f.close ()
-                    umsg ( "Wrote %d fits to %s" % ( len(ccs), path ) )
+        def save ( path, ccs = ccs ):
+            f = open ( path, "a" )
+            for cc in ccs :
+                f.write ( "%f\t" % cc )
+            f.write ( "\n" )
+            f.close ()
+            umsg ( "Wrote %d fits to %s" % ( len(ccs), path ) )
 
 
         idir = None
@@ -103,8 +99,8 @@ class Fit_Devel:
             map_base, map_suf = os.path.splitext( mmap.name )
             ifile = base + "_fits_in_%s" % map_base
 
-        from OpenSave import SaveModeless
-        SaveModeless ( title = 'Save Fit Scores',
+        from .opensave import SaveFileDialog
+        SaveFileDialog ( title = 'Save Fit Scores',
                        filters = [('TXT', '*.txt', '.txt')],
                        initialdir = idir, initialfile = ifile, command = save )
 
@@ -151,15 +147,11 @@ class Fit_Devel:
 
                 cmd = "molmap %s %f sigmaFactor 0.187 gridSpacing %f replace false" % ( sel_str, res, grid )
                 print(" -", cmd)
-                chimera.runCommand ( cmd )
+                mod = chimera.runCommand ( cmd )
 
-                for mod in chimera.openModels.list() :
-                    ts = mod.name.split()
-                    if len(ts) > 1 and mod.name.find("map") >=0 and mod.name.find("res") >=0 :
-                        print(" - saving to:", path + cname)
-                        mod.write_file ( path + cname, "mrc" )
-                        chimera.openModels.close ( mod )
-                        break
+                print(" - saving to:", path + cname)
+                mod.write_file ( path + cname, "mrc" )
+                chimera.openModels.close ( mod )
 
                 mv = VolumeViewer.open_volume_file ( path + cname )[0]
                 print(" - loaded:", mv.name)

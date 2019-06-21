@@ -156,11 +156,8 @@ class Attribute_Dialog(ToolInstance):
 
     def export_cb(self):
 
-        def save ( okay, dialog, self=self ):
-            if okay:
-                paths = dialog.getPaths ( )
-                if paths:
-                    self.write_comma_separated_values(paths[0])
+        def save ( path, self=self ):
+            self.write_comma_separated_values(path)
 
         from .segment_dialog import current_segmentation
         seg = current_segmentation()
@@ -175,8 +172,8 @@ class Attribute_Dialog(ToolInstance):
             idir = None
             ifile = os.path.splitext(seg.name)[0] + '.csv'
 
-        from OpenSave import SaveModeless
-        SaveModeless ( title = 'Export Comma Separated Values',
+        from .opensave import SaveFileDialog
+        SaveFileDialog ( title = 'Export Comma Separated Values',
                      initialdir = idir, initialfile = ifile, command = save )
 
     def write_comma_separated_values(self, path):
