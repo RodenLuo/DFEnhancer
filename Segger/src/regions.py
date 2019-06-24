@@ -8,7 +8,6 @@ from .segment_dialog import debug
 
 from chimerax.core.models import Surface
 class Segmentation ( Surface ):
-    SESSION_SAVE = False
 
     def __init__(self, name, session, volume = None):
 
@@ -958,15 +957,45 @@ class Segmentation ( Surface ):
         if self.adj_graph :
             self.adj_graph.close()
 
-class Region:
+    # State save/restore in ChimeraX
+    _save_attrs = ['mask', 'seg_map', 'regions', 'id_to_region', 'max_region_id',
+                   'smoothing_level', 'map_level', 'surface_resolution']
+  
+    def take_snapshot(self, session, flags):
+        data = {
+            'model state': Surface.take_snapshot(self, session, flags),
+            'version': 1,
+        }
+        for attr in Segmentation._save_attrs:
+            data[attr] = getattr(self, attr)
+        return data
+
+    @staticmethod
+    def restore_snapshot(session, data):
+        s = Segmentation('', session, volume = data['seg_map'])
+        Surface.set_state_from_snapshot(s, session, data['model state'])
+        for attr in Segmentation._save_attrs:
+            setattr(s, attr, data[attr])
+        for r in s.id_to_region.values():
+            r.segmentation = s
+            if getattr(r, '_session_restore_make_surface', False):
+                r.make_surface()
+        return s
+
+# State base class handles session save and restore using
+# take_snapshot() and restore_snapshot() methods.
+from chimerax.core.state import State
+
+class Region ( State ):
 
     def __init__( self, segmentation, rid, max_point = None, children = None ) :
 
         self.segmentation = segmentation
         self.rid = rid
-        segmentation.id_to_region[rid] = self
-        segmentation.regions.add(self)
-        segmentation.max_region_id = max(rid, segmentation.max_region_id)
+        if segmentation:	# Segmentation is None during session restore.
+            segmentation.id_to_region[rid] = self
+            segmentation.regions.add(self)
+            segmentation.max_region_id = max(rid, segmentation.max_region_id)
         if children is None:
             children = []  # Don't use [] as default since appends change it.
         self.mask_id = None if children else rid
@@ -976,7 +1005,7 @@ class Region:
 
         self.rbounds = None      # (imin, jmin, kmin), (imax, jmax, kmax)
         self.npoints = None
-        self.max_point = None     # Position of local maximum
+        self.max_point = max_point     # Position of local maximum
         self.surface_piece = None       # Displayed surface.
 
         self.color = random_color()         # Surface color, rgba 0-1 values
@@ -985,8 +1014,8 @@ class Region:
         if children:
             for reg in children :
                 reg.preg = self
-                segmentation.regions.remove(reg)
-        self.max_point = max_point
+                if segmentation:
+                    segmentation.regions.remove(reg)
 
     def bounds ( self ):
 
@@ -1305,6 +1334,27 @@ class Region:
 
         return self.attrib if hasattr(self, 'attrib') else {}
 
+    # State save/restore in ChimeraX
+    _save_attrs = ['rid', 'cregs', 'mask_id', 'smoothing_level',
+                   'rbounds', 'npoints', 'max_point', 'color', 'placed']
+  
+    def take_snapshot(self, session, flags):
+        data = { 'version': 1 }
+        for attr in Region._save_attrs:
+            data[attr] = getattr(self, attr)
+            data['_show_surface'] = self.has_surface()
+        return data
+
+    @staticmethod
+    def restore_snapshot(session, data):
+        seg = None	# Segmentation.restore_snapshot() will set segmentation
+        r = Region(seg, data['rid'], max_point = data['max_point'], children = data['cregs'])
+        for attr in Region._save_attrs:
+            setattr(r, attr, data[attr])
+        if data['_show_surface']:
+            r._session_restore_make_surface = True	# Will be created by Segmentation.restore_snapshot()
+        return r
+    
 
 class Contact:
 

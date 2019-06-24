@@ -42,11 +42,13 @@ def debug(*args, **kw):
 
 
 from chimerax.core.tools import ToolInstance
-class Volume_Segmentation_Dialog ( ToolInstance ):
+class VolumeSegmentationDialog ( ToolInstance ):
 
     title = "Segment Map (Segger v" + seggerVersion + ")"
     name = "segment map"
     help = 'https://cryoem.slac.stanford.edu/ncmi/resources/software/segger'
+    SESSION_SAVE = True
+
     def __init__(self, session, tool_name):
         self.cur_seg = None
 
@@ -387,7 +389,7 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
     @classmethod
     def get_singleton(self, session, create=True):
         from chimerax.core import tools
-        return tools.get_singleton(session, Volume_Segmentation_Dialog, 'Segment Map', create=create)
+        return tools.get_singleton(session, VolumeSegmentationDialog, 'Segment Map', create=create)
 
     def status(self, message, log = True):
         self._status_label.setText(message)
@@ -3378,6 +3380,27 @@ class Volume_Segmentation_Dialog ( ToolInstance ):
         return bspec
 
 
+    # State save/restore in ChimeraX
+    _save_attrs = ['_map_menu', '_segmentation_menu',
+                   '_max_num_regions', '_surface_granularity',
+                   '_min_region_size', '_min_contact_size',
+                   '_group_smooth', '_num_steps', '_step_size', '_target_num_regions',
+                   '_group_con', '_num_steps_con', '_target_num_regions_con', '_group_by_con_only_visible']
+  
+    def take_snapshot(self, session, flags):
+        data = { 'version': 1 }
+        for attr in VolumeSegmentationDialog._save_attrs:
+            data[attr] = getattr(self, attr).value
+        return data
+
+    @staticmethod
+    def restore_snapshot(session, data):
+        d = VolumeSegmentationDialog.get_singleton(session)
+        for attr in VolumeSegmentationDialog._save_attrs:
+            getattr(d, attr).value = data[attr]
+        return d
+    
+
 def NothingSelected(session):
 
     return session.selection.empty()
@@ -3385,7 +3408,7 @@ def NothingSelected(session):
 
 def volume_segmentation_dialog ( session, create=False ) :
 
-    return Volume_Segmentation_Dialog.get_singleton(session, create=create)
+    return VolumeSegmentationDialog.get_singleton(session, create=create)
 
 
 def current_segmentation( session, warn = True ):

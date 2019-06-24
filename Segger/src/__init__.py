@@ -10,8 +10,8 @@ class _SeggerAPI(BundleAPI):
     @staticmethod
     def start_tool(session, tool_name):
         if tool_name == 'Segment Map':
-            from .segment_dialog import Volume_Segmentation_Dialog
-            d = Volume_Segmentation_Dialog.get_singleton(session)
+            from .segment_dialog import VolumeSegmentationDialog
+            d = VolumeSegmentationDialog.get_singleton(session)
         elif tool_name == 'Fit to Segments':
             from .fit_dialog import Fit_Segments_Dialog
             d = Fit_Segments_Dialog.get_singleton(session)
@@ -22,6 +22,18 @@ class _SeggerAPI(BundleAPI):
         # 'register_command' is lazily called when the command is referenced
         from . import segcmd
         segcmd.register_segger_command(logger)
+
+    @staticmethod
+    def get_class(class_name):
+        # 'get_class' is called by session code to get class saved in a session
+        from .regions import Segmentation, Region
+        from .segment_dialog import VolumeSegmentationDialog
+        ct = {
+            'Segmentation': Segmentation,
+            'Region': Region,
+            'VolumeSegmentationDialog': VolumeSegmentationDialog,
+        }
+        return ct.get(class_name)
 
 bundle_api = _SeggerAPI()
 

@@ -117,8 +117,8 @@ def open_segmentation(session, path, name = None, **kw):
     if name is not None:
         seg.name = name
 
-    from .segment_dialog import Volume_Segmentation_Dialog
-    d = Volume_Segmentation_Dialog.get_singleton(session)
+    from .segment_dialog import volume_segmentation_dialog
+    d = volume_segmentation_dialog(session, create=True)
     d.show_segmentation(seg)
 
     return [seg], ''
