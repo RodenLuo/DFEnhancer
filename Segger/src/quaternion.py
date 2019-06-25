@@ -36,7 +36,13 @@ class Quaternion :
     def angleTo ( self, q2 ) :
         self.normalize()
         q2.normalize()
-        return 2.0 * numpy.arccos ( self * q2 )
+        ca = self * q2
+        if ca > 1:
+            ca = 1
+        elif ca < -1:
+            ca = -1
+        a = 2.0 * numpy.arccos ( ca )
+        return a
 
 
     def normalize (self) :

@@ -45,12 +45,13 @@ MAX_NUM_GROUPS = 1000
 from .fit_devel import Fit_Devel
 
 from chimerax.core.tools import ToolInstance
-class Fit_Segments_Dialog ( ToolInstance, Fit_Devel ):
+class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
 
     title = "Fit to Segments (Segger v" + seggerVersion + ")"
     name = "fit segments"
     buttons = ( 'Fit', 'Stop', 'Options', "Close")
     help = 'https://cryoem.slac.stanford.edu/ncmi/resources/software/segger'
+    SESSION_SAVE = True
 
     def __init__(self, session, tool_name):
 
@@ -234,7 +235,7 @@ class Fit_Segments_Dialog ( ToolInstance, Fit_Devel ):
 
     def _create_fit_list(self, parent):
         
-        self.list_fits = []
+        self.list_fits = []	# List of Fit instances
 
         from PyQt5.QtWidgets import QFrame, QVBoxLayout, QLabel, QListWidget
 
@@ -300,7 +301,7 @@ class Fit_Segments_Dialog ( ToolInstance, Fit_Devel ):
     @classmethod
     def get_singleton(self, session, create=True):
         from chimerax.core import tools
-        return tools.get_singleton(session, Fit_Segments_Dialog, 'Fit to Segments', create=create)
+        return tools.get_singleton(session, FitSegmentsDialog, 'Fit to Segments', create=create)
 
     def status(self, message, log = True):
         self._status_label.setText(message)
@@ -666,7 +667,8 @@ class Fit_Segments_Dialog ( ToolInstance, Fit_Devel ):
 
         minCorr = 1e9
         maxCorr = 0
-        for fmap, dmap, M, corr, atomI, bbI, bbC, hdo, regions in self.list_fits :
+        for fit in self.list_fits :
+            corr = fit.correlation
             if maxCorr < corr : maxCorr = corr
             if minCorr > corr : minCorr = corr
 
@@ -695,8 +697,7 @@ class Fit_Segments_Dialog ( ToolInstance, Fit_Devel ):
         draw.rectangle((10, 10, 10, h-10), fill=lineClr, outline=lineClr)
 
         xAt = chartX
-        for fmap, dmap, M, corr, atomI, bbI, bbC, hdo, regions in self.list_fits :
-
+        for fit in self.list_fits :
             barWidth = int ( float(chartW) / float(len(self.list_fits)) )
             xPos = int ( xAt + barWidth/2 )
 
@@ -706,13 +707,13 @@ class Fit_Segments_Dialog ( ToolInstance, Fit_Devel ):
                 x1 = x1 + 1
                 x2 = x2 - 2
 
-            yTop = int ( h - ( chartY + (corr - minCorr) * chartH / (maxCorr - minCorr) ) )
+            yTop = int ( h - ( chartY + (fit.correlation - minCorr) * chartH / (maxCorr - minCorr) ) )
             yBot = int ( h - chartY )
 
             lineClr = ( int(rand()*255.0), int(rand()*255.0), int(rand()*255.0) )
             draw.rectangle((x1, yTop, x2, yBot), fill=lineClr, outline=lineClr)
 
-            debug("x:%d barW %.2f cor %.2f height %.3f yTop %d yBot %d" % ( xAt, barWidth, corr, chartH, yTop, yBot ))
+            debug("x:%d barW %.2f cor %.2f height %.3f yTop %d yBot %d" % ( xAt, barWidth, fit.correlation, chartH, yTop, yBot ))
 
             xAt = xAt + barWidth
 
@@ -826,8 +827,9 @@ class Fit_Segments_Dialog ( ToolInstance, Fit_Devel ):
 
         # (fmap, dmap, fmap.M, corr, atomI, bbI, regions)
 
-        for lf in self.list_fits :
-            scores.append ( [ lf[3], lf[4], lf[5], lf[6], lf[7] ] )
+        for fit in self.list_fits :
+            scores.append ( [ fit.correlation, fit.atom_inclusion, fit.backbone_inclusion,
+                              fit.backbone_clash, fit.high_density_occupancy ] )
 
         def ZZ ( scs ) :
             if len(scs) < 3 :
@@ -875,9 +877,9 @@ class Fit_Segments_Dialog ( ToolInstance, Fit_Devel ):
         ifile = None
 
         first_fit = self.list_fits[0]
-        fit_map = first_fit[0]
-        ref_map = first_fit[1]
-        regions = first_fit[8]
+        fit_map = first_fit.fit_map
+        ref_map = first_fit.target_map
+        regions = first_fit.regions
 
         fit_path = ""
         try : fit_path = fit_map.mols[0].openedAs[0]
@@ -907,10 +909,18 @@ class Fit_Segments_Dialog ( ToolInstance, Fit_Devel ):
         bbC = fmap.bbClashes
         hdo = fmap.hdoScore
 
-        ids = ','.join(['%d' % r.rid for r in regions])
-        line = '%8.4f %8.4f %8.4f %8.4f %8.4f %15s %15s %10s' % (corr, atomI, bbI, bbC, hdo, fmap.struc_name, dmap.name, ids)
-        self.list_fits.append((fmap, dmap, fmap.M, corr, atomI, bbI, bbC, hdo, regions))
+        fit = Fit(fmap, dmap, fmap.M, corr, atomI, bbI, bbC, hdo, regions)
+        self.list_fits.append(fit)
 
+        self._add_fit_to_listbox(fit)
+
+    def _add_fit_to_listbox(self, fit):
+
+        ids = ','.join(['%d' % r.rid for r in fit.regions])
+        line = ('%8.4f %8.4f %8.4f %8.4f %8.4f %15s %15s %10s'
+                % (fit.correlation, fit.atom_inclusion, fit.backbone_inclusion,
+                   fit.backbone_clash, fit.high_density_occupancy,
+                   fit.fit_map.struc_name, fit.target_map.name, ids))
         self._fit_listbox.addItem(line)
 
     def fit_selection_cb (self) :
@@ -919,13 +929,13 @@ class Fit_Segments_Dialog ( ToolInstance, Fit_Devel ):
         if len(lfits) == 0:
             return
 
-        fmap, dmap, mat, corr, aI, bI, bC, hdo, regions = lfits[0]
-        for mol in fmap.mols :
+        fit = lfits[0]
+        for mol in fit.fit_map.mols :
             if mol.deleted:
                 self.status('Fit molecule was closed')
         else:
-            self.place_molecule(fmap, mat, dmap)
-        self.make_regions_transparent(regions)
+            self.place_molecule(fit.fit_map, fit.position, fit.target_map)
+        self.make_regions_transparent(fit.regions)
 
 
     def place_molecule(self, fmap, mat, dmap):
@@ -3618,16 +3628,15 @@ class Fit_Segments_Dialog ( ToolInstance, Fit_Devel ):
         self.status('Looking at %d fitted molecules' % len(lfits))
 
         fit_i = 1
-        for fmap, dmap, mat, corr, aI, bI, bC, bO, regions in lfits:
-
+        for fit in lfits:
             for mol in fmap.mols :
                 if mol.deleted:
                     self.status('Fit molecule was closed - ')
                     return
 
-            self.place_molecule(fmap, mat, dmap)
+            self.place_molecule(fit.fit_map, fit.position, fit.target_map)
 
-            mol = fmap.mols[0]
+            mol = fit.fit_map.mols[0]
 
             basename = os.path.splitext ( mol.name )[0]
             cname = basename
@@ -3638,7 +3647,7 @@ class Fit_Segments_Dialog ( ToolInstance, Fit_Devel ):
             mv = self._run_command(cmd)
             mv.name = cname
 
-            imap = self.MapIndexesInMap ( dmap, mv )
+            imap = self.MapIndexesInMap ( fit.target_map, mv )
 
             chain_maps.append ( [fit_i, imap] )
             #mv.chain_id = cname
@@ -3843,16 +3852,16 @@ class Fit_Segments_Dialog ( ToolInstance, Fit_Devel ):
         self.status('Looking at %d fitted molecules' % len(lfits))
 
 
-        for fmap, dmap, mat, corr, aI, bI, bC, bO, regions in lfits:
+        for fit in lfits:
 
-            for mol in fmap.mols :
+            for mol in fit.fit_map.mols :
                 if mol.deleted:
                     self.status('Fit molecule was closed - ')
                     return
 
-            self.place_molecule(fmap, mat, dmap)
+            self.place_molecule(fit.fit_map, fit.position, fit.target_map)
 
-            mol = fmap.mols[0]
+            mol = fit.fit_map.mols[0]
 
             basename = os.path.splitext ( mol.name )[0]
             cname = basename
@@ -4862,6 +4871,76 @@ class Fit_Segments_Dialog ( ToolInstance, Fit_Devel ):
 
         close_models ( [dmap] )
 
+    # State save/restore in ChimeraX
+    _save_attrs = ['_lump_subids', 
+                   '_sim_res', '_sim_grid_sp',
+                   '_combined_selected_regions', '_each_selected_region', '_around_selected', '_all_groups',
+                   '_prin_axes_search', '_rota_search', '_rota_search_num',
+                   '_mask_map_when_fitting',
+                   '_use_laplace',
+                   '_optimize_fits',
+                   '_do_cluster_fits', '_position_tol', '_angle_tol',
+                   '_num_fits_to_add',
+                   '_calc_symmetry_clashes', '_symmetry']
+  
+    def take_snapshot(self, session, flags):
+        data = {
+            'fits': self.list_fits,
+            'version': 1
+        }
+        for attr in FitSegmentsDialog._save_attrs:
+            data[attr] = getattr(self, attr).value
+        return data
+
+    @staticmethod
+    def restore_snapshot(session, data):
+        d = FitSegmentsDialog.get_singleton(session)
+        for attr in FitSegmentsDialog._save_attrs:
+            getattr(d, attr).value = data[attr]
+        d.list_fits = fits = data['fits']
+        for fit in fits:
+            d._add_fit_to_listbox(fit)
+        return d
+
+
+# State base class handles session save and restore using
+# take_snapshot() and restore_snapshot() methods.
+from chimerax.core.state import State
+
+class Fit ( State ):
+    def __init__(self, fit_map, target_map, position, correlation,
+                 atom_inclusion, backbone_inclusion, backbone_clash, high_density_occupancy,
+                 regions):
+        self.fit_map = fit_map
+        self.target_map = target_map
+        self.position = position
+        self.correlation = correlation
+        self.atom_inclusion = atom_inclusion
+        self.backbone_inclusion = backbone_inclusion
+        self.backbone_clash = backbone_clash
+        self.high_density_occupancy = high_density_occupancy
+        self.regions = regions
+
+    # State save/restore in ChimeraX
+    _save_attrs = ['fit_map', 'target_map', 'position', 'correlation', 'atom_inclusion',
+                   'backbone_inclusion', 'backbone_clash', 'high_density_occupancy', 'regions']
+  
+    def take_snapshot(self, session, flags):
+        data = { 'version': 1 }
+        for attr in Fit._save_attrs:
+            data[attr] = getattr(self, attr)
+        data['fit_name'] = self.fit_map.struc_name
+        data['fit_mols'] = self.fit_map.mols
+        return data
+
+    @staticmethod
+    def restore_snapshot(session, data):
+        kw = {attr: data[attr] for attr in Fit._save_attrs }
+        f = Fit(**kw)
+        f.fit_map.struc_name = data['fit_name']
+        f.fit_map.mols = data['fit_mols']
+        return f
+
 
 def close_models(models):
 
@@ -4872,7 +4951,7 @@ def close_models(models):
 
 def fit_segments_dialog ( session, create = True ) :
 
-    return Fit_Segments_Dialog.get_singleton(session, create = create)
+    return FitSegmentsDialog.get_singleton(session, create = create)
 
 def close_fit_segments_dialog ( session ):
 

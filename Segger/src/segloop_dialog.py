@@ -1856,9 +1856,9 @@ class Segloop_Dialog ( chimera.baseDialog.ModelessDialog ):
 
         f = []
         ccs = []
-        for fmap, dmap, mat, corr, aI, bI, bC, bO, regions in dlg.list_fits :
-            f.append ( [corr, fmap] )
-            ccs.append ( corr )
+        for fit in dlg.list_fits :
+            f.append ( [fit.correlation, fit.fit_map] )
+            ccs.append ( fig.correlation )
 
         f.sort ( reverse=True, key=lambda x: x[0] )
 
@@ -1903,8 +1903,8 @@ class Segloop_Dialog ( chimera.baseDialog.ModelessDialog ):
         from . import fit_dialog
         dlg = fit_dialog.fit_segments_dialog ()
 
-        for fmap, dmap, mat, corr, aI, bI, bC, bO, regions in dlg.list_fits :
-            fmap.openState.xform = segMap.openState.xform
+        for fit in dlg.list_fits :
+            fit.fit_map.openState.xform = segMap.openState.xform
 
 
     def FitsToFit ( self ) :
@@ -1917,8 +1917,8 @@ class Segloop_Dialog ( chimera.baseDialog.ModelessDialog ):
         from . import fit_dialog
         dlg = fit_dialog.fit_segments_dialog ()
 
-        for fmap, dmap, mat, corr, aI, bI, bC, bO, regions in dlg.list_fits :
-            self.place_map ( fmap, fmap.M, segMap )
+        for fit in dlg.list_fits :
+            self.place_map ( fit.fit_map, fit.position, segMap )
 
 
     def FitsHide ( self ) :
@@ -1945,19 +1945,19 @@ class Segloop_Dialog ( chimera.baseDialog.ModelessDialog ):
         import Surface
 
         if self.what.get() == "selected" :
-            for fmap, dmap, mat, corr, aI, bI, bC, bO, regions in dlg.list_fits :
-                for sp in fmap.surfacePieces :
+            for fit in dlg.list_fits :
+                for sp in fit.fit_map.surfacePieces :
                     if sp in Surface.selected_surface_pieces() :
-                        fmap.display = False
+                        fit.fit_map.display = False
 
         if self.what.get() == "all" :
-            for fmap, dmap, mat, corr, aI, bI, bC, bO, regions in dlg.list_fits :
-                fmap.display = False
+            for fit in dlg.list_fits :
+                fit.fit_map.display = False
 
         if self.what.get() == "visible" :
-            for fmap, dmap, mat, corr, aI, bI, bC, bO, regions in dlg.list_fits :
-                if fmap.display == True :
-                    fmap.display = False
+            for fit in dlg.list_fits :
+                if fit.fit_map.display == True :
+                    fit.fit_map.display = False
 
 
     def FitsShow ( self ) :
@@ -1971,19 +1971,19 @@ class Segloop_Dialog ( chimera.baseDialog.ModelessDialog ):
         dlg = fit_dialog.fit_segments_dialog ()
 
         if self.what.get() == "selected" :
-            for fmap, dmap, mat, corr, aI, bI, bC, bO, regions in dlg.list_fits :
-                for sp in fmap.surfacePieces :
+            for fit in dlg.list_fits :
+                for sp in fit.fit_map.surfacePieces :
                     if sp in Surface.selected_surface_pieces() :
-                        fmap.display = True
+                        fit.fit_map.display = True
 
         if self.what.get() == "all" :
-            for fmap, dmap, mat, corr, aI, bI, bC, bO, regions in dlg.list_fits :
-                fmap.display = True
+            for fit in dlg.list_fits :
+                fit.fit_map.display = True
 
         if self.what.get() == "visible" :
-            for fmap, dmap, mat, corr, aI, bI, bC, bO, regions in dlg.list_fits :
-                if fmap.display == True :
-                    fmap.display = True
+            for fit in dlg.list_fits :
+                if fit.fit_map.display == True :
+                    fit.fit_map.display = True
 
 
     def SetColor ( self ) :
@@ -2005,8 +2005,9 @@ class Segloop_Dialog ( chimera.baseDialog.ModelessDialog ):
         dlg = fit_dialog.fit_segments_dialog ()
 
 
-        for fmap, dmap, mat, corr, aI, bI, bC, bO, regions in dlg.list_fits :
+        for fit in dlg.list_fits :
 
+            fmap = fit.fit_map
             if self.what.get() == "selected" and self.isSelected (fmap) == False :
                 continue
 

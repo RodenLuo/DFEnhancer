@@ -89,8 +89,8 @@ class Fit_Devel:
         idir = None
         ifile = None
 
-        mol = self.list_fits[0][0].mols[0]
-        mmap = self.list_fits[0][1]
+        mol = self.list_fits[0].fit_map.mols[0]
+        mmap = self.list_fits[0].target_map
 
         if hasattr(mol, 'openedAs'):
             import os.path

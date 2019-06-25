@@ -13,8 +13,8 @@ class _SeggerAPI(BundleAPI):
             from .segment_dialog import VolumeSegmentationDialog
             d = VolumeSegmentationDialog.get_singleton(session)
         elif tool_name == 'Fit to Segments':
-            from .fit_dialog import Fit_Segments_Dialog
-            d = Fit_Segments_Dialog.get_singleton(session)
+            from .fit_dialog import FitSegmentsDialog
+            d = FitSegmentsDialog.get_singleton(session)
         return d
 
     @staticmethod
@@ -28,10 +28,13 @@ class _SeggerAPI(BundleAPI):
         # 'get_class' is called by session code to get class saved in a session
         from .regions import Segmentation, Region
         from .segment_dialog import VolumeSegmentationDialog
+        from .fit_dialog import FitSegmentsDialog, Fit
         ct = {
             'Segmentation': Segmentation,
             'Region': Region,
             'VolumeSegmentationDialog': VolumeSegmentationDialog,
+            'FitSegmentsDialog': FitSegmentsDialog,
+            'Fit': Fit,
         }
         return ct.get(class_name)
 
