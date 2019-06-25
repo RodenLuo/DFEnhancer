@@ -1360,9 +1360,9 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
 
         debug("Symmetry for", dmap.name)
 
-        from Measure.symmetry import find_point_symmetry
+        from chimerax.std_commands.measure_symmetry import find_point_symmetry
 
-        syms, msg = find_point_symmetry ( dmap, nMax=8 )
+        syms, msg = find_point_symmetry ( dmap, n_max=8 )
 
         if syms is None :
             self.status ( "No symmetry detected for %s" % dmap.name )
@@ -1390,7 +1390,7 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
             self.status ( "Please select an open structure to fit" )
             return
 
-        from Measure.symmetry import centers_and_points
+        from chimerax.std_commands.measure_symmetry import centers_and_points
 
         syms = []
         esym = self._symmetry.value
@@ -1410,9 +1410,9 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
                 ax = ( 0, 1, 0 )
                 #ax = dmap.scene_position.inverse().apply ( ax )
 
-                from chimerax.core.geometry import Place
+                from chimerax.core.geometry import Place, rotation
                 syms.append ( Place () )
-                rm1 = Matrix.rotation_transform ( (ax.x,ax.y,ax.z), 360.0/3.0, COM )
+                rm1 = rotation ( (ax.x,ax.y,ax.z), 360.0/3.0, COM )
                 debug(rm1)
                 syms.append ( rm1 )
                 #syms.append ( Matrix.rotation_transform ( (1.0,0.0,0.0), 2.0*360.0/3.0 ) )
@@ -1425,14 +1425,12 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
 
         smols = []
 
-        from chimerax.core.geometry import Place
-        for si, sym in enumerate ( syms [1 : ] ) :
+        for sym in syms [1 : ] :
 
-            M = sym
-            #mols = self.PlaceCopy (fmap.mols, M*fmap.M, dmap, (0,0,0,1) )
-            mols = self.PlaceCopy (fmap.mols, M*fmap.M, dmap, (.4, .8, .4, 1) )
-            for m in mols : m.scene_position = dmap.scene_position
-            smols = smols + mols
+            #mols = self.PlaceCopy (fmap.mols, sym*fmap.M, dmap, (0,0,0,1) )
+            mols = self.PlaceCopy (fmap.mols, sym*fmap.scene_position, dmap, (.4, .8, .4, 1) )
+#            for m in mols : m.scene_position = dmap.scene_position
+            smols.extend(mols)
 
         return smols
 
@@ -1779,6 +1777,7 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
 
             if mat is not None :
                 mol.scene_position = dmap.scene_position * mat
+                print ('placed mol copy at', mol.scene_position.matrix)
                 #molApplyT ( mol, mat )
             new_mols.append ( mol )
 
@@ -1980,7 +1979,7 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
 
                 # compute the new averages
                 self.COM = (0,0,0)
-                from .quaterion import Quaternion
+                from .quaternion import Quaternion
                 self.Q = Quaternion(0, (0,0,0))
 
                 for e in self.entries :
@@ -2162,7 +2161,7 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
 
             included = False
 
-            regs.sort()
+            regs.sort(key = lambda r: r.rid)
             inc_regs_at = inc_regs_map
             for reg in regs :
                 try : included, inc_regs_at = inc_regs_at[reg]
@@ -2203,8 +2202,8 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
         dv_rgroups = []
         maxDepthReached = 0
 
-        debug("Grouping %d regions in %s, target volume %.2f, bounding radius %.2f" % (
-            len(smod.surfacePieces), smod.name, target_volume, bRad ))
+        self.status("Grouping %d regions in %s, target volume %.2f, bounding radius %.2f" % (
+            len(smod.region_surfaces), smod.name, target_volume, bRad ))
 
         ri, nregs = 0, len(smod.regions)
 
@@ -2493,7 +2492,7 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
         bRad = -1.0 # fmap.mol.BoundRad / float(dmap.data.step[0]); # self.MapBoundingRad ( fmap )
         bRad = fmap.mols[0].BoundRad
 
-        debug("\nMaking groups around %d regions - target vol %.3f, b-Rad %.3f" % ( len(regs), tvol, bRad ))
+        self.status("\nMaking groups around %d regions - target vol %.3f, b-Rad %.3f" % ( len(regs), tvol, bRad ))
         smod.rgroups, maxDepthReached = self.GroupAroundReg ( smod, regs, tvol, bRad )
         smod.rgroups.sort()
         debug(" - depth reached: %d" % maxDepthReached)
@@ -2553,6 +2552,7 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
 
         for corr, M, regions, stats in self.cfits [ 0 : nToAdd ] :
             fmap.fit_score, fmap.M, fmap.fit_regions = corr, M, regions
+            fmap.atomInclusion, fmap.bbAtomInclusion, fmap.bbClashes, fmap.hdoScore  = self.FitScores ( fmap )
             self.add_fit (fmap, dmap)
             # TODO - add atom inclusion comp
 
@@ -2683,7 +2683,7 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
         smod = self.CurrentSegmentation()
         if smod == None : return
 
-        for sp in smod.surfacePieces :
+        for sp in smod.region_surfaces :
             sp.region.show_transparent( REG_OPACITY )
             sp.display = False
 
@@ -2693,7 +2693,7 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
         while 1 :
 
             sp = None
-            for spi in smod.surfacePieces :
+            for spi in smod.region_surfaces :
 
                 try :
                     spi.region.placed.display = False
@@ -2970,14 +2970,9 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
             symMols = self.PlaceSym ()
             if symMols:
 
-                otherPoints = None
-                otherAtoms = []
-
-                for m in symMols :
-                    otherAtoms = otherAtoms + m.atoms
-                    mpoints = m.atoms.scene_coords
-                    if otherPoints == None : otherPoints = mpoints
-                    else : otherPoints = numpy.concatenate ( [otherPoints, mpoints], axis=0 )
+                otherPoints = numpy.concatenate([m.atoms.scene_coords for m in symMols], axis=0)
+                from chimerax.atomic import concatenate, Atoms
+                otherAtoms = concatenate([m.atoms for m in symMols], Atoms)
 
                 # debug "Doing tree with %d %d" % ( len(otherPoints), len(otherAtoms) )
 
@@ -3032,7 +3027,7 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
         bRad = fmap.mols[0].BoundRad
 
         smod.rgroups = self.GroupAllRegions ( smod, tvol, bRad )
-        smod.rgroups.sort()
+        smod.rgroups.sort(key = lambda vr: vr[0])
 
         bestFitScore = -1e99
         bestFitM = None
@@ -3058,7 +3053,7 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
             for r in regs : debug(r.rid, end=' ')
             debug("")
 
-            for sp in smod.surfacePieces :
+            for sp in smod.region_surfaces :
                 if regs.count ( sp.region ) > 0 :
                     sp.display = True
                     sp.region.show_transparent( REG_OPACITY )
@@ -3105,6 +3100,7 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
 
         for corr, M, regions, stats in self.cfits [ 0 : nToAdd ] :
             fmap.fit_score, fmap.M, fmap.fit_regions = corr, M, regions
+            fmap.atomInclusion, fmap.bbAtomInclusion, fmap.bbClashes, fmap.hdoScore  = self.FitScores ( fmap )
             self.add_fit (fmap, dmap)
             # TODO - add atom inclusion comp
 
@@ -5554,7 +5550,7 @@ def makeMap ( session, sel_str, res, gridSpacing, clr, map_name ) :
     ro = RenderingOptions()
     mv.update_surface ( False, ro )
     from .regions import float_to_8bit_color
-    for sp in mv.surfacePieces :
+    for sp in mv.surfaces :
         v, t = sp.geometry
         if len(v) == 8 and len(t) == 12 : sp.display = False
         sp.single_color = float_to_8bit_color( clr )
