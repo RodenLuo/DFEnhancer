@@ -1980,7 +1980,8 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
 
                 # compute the new averages
                 self.COM = (0,0,0)
-                self.Q = Segger.quaternion.Quaternion(0, (0,0,0))
+                from .quaterion import Quaternion
+                self.Q = Quaternion(0, (0,0,0))
 
                 for e in self.entries :
                     self.COM = self.COM + e.COM
