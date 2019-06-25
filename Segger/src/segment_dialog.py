@@ -53,7 +53,6 @@ class VolumeSegmentationDialog ( ToolInstance ):
         self.cur_seg = None
 
         ToolInstance.__init__(self, session, tool_name)
-        print('Created segment map tool')
         from chimerax.ui import MainToolWindow
         tw = MainToolWindow(self)
         self.tool_window = tw
