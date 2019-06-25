@@ -979,7 +979,10 @@ class Segmentation ( Surface ):
         for r in s.id_to_region.values():
             r.segmentation = s
             if getattr(r, '_session_restore_make_surface', False):
-                r.make_surface()
+                sp = r.make_surface()
+                scolor = getattr(r, '_session_restore_surface_color', None)
+                if scolor is not None:
+                    sp.color = scolor
         return s
 
 # State base class handles session save and restore using
@@ -1342,7 +1345,10 @@ class Region ( State ):
         data = { 'version': 1 }
         for attr in Region._save_attrs:
             data[attr] = getattr(self, attr)
-            data['_show_surface'] = self.has_surface()
+        data['_show_surface'] = self.has_surface()
+        sp = self.surface_piece
+        if sp:
+            data['_surface_color'] = sp.color
         return data
 
     @staticmethod
@@ -1353,6 +1359,8 @@ class Region ( State ):
             setattr(r, attr, data[attr])
         if data['_show_surface']:
             r._session_restore_make_surface = True	# Will be created by Segmentation.restore_snapshot()
+        if '_surface_color' in data:
+            r._session_restore_surface_color = data['_surface_color']
         return r
     
 
