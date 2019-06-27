@@ -643,6 +643,17 @@ def prAxes ( points ) :
     #U[1,2] = U[1,2] * -1.0
     #U[2,2] = U[2,2] * -1.0
 
+    # The sign of each row of V and column of U is indeterminate and they can
+    # define a left-handed coordinate system.  Make sure they produce a right
+    # handed coordinate system.
+    for r in (0,1,2):
+        if V[r,r] < 0:
+            V[r,:] *= -1
+            U[:,r] *= -1
+    if numpy.linalg.det(V) < 0:
+        V[2,:] *= -1
+        U[:,2] *= -1
+
     return [com, U, S, V]
 
 
