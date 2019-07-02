@@ -92,8 +92,6 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
         self._status_label = sl = QLabel(parent)
         layout.addWidget(sl)
         
-        layout.addStretch(1)    # Extra space at end
-
         tw.manage(placement="side")
 
 #        session.triggers.add_handler('remove models', self.model_closed_cb)
@@ -189,7 +187,7 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
     
     def _create_options_gui(self, parent):
 
-        from .segment_dialog import CollapsiblePanel
+        from chimerax.ui.widgets import CollapsiblePanel
         p = CollapsiblePanel(parent, 'Options')
         f = p.content_area
 
@@ -198,38 +196,46 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
         layout.setContentsMargins(30,0,0,0)
         layout.setSpacing(0)
 
-        from .segment_dialog import entries_row, radio_buttons
-        self._lump_subids, = entries_row(f, False, 'Treat all sub-models as one structure')
+        from chimerax.ui.widgets import EntriesRow, radio_buttons
 
-        self._sim_res, self._sim_grid_sp = \
-            entries_row(f, 'Density map resolution:', 0, 'grid spacing:', 0, ('Calculate Map', self.GenStrucMap))
+        ler = EntriesRow(f, False, 'Treat all sub-models as one structure')
+        self._lump_subids = ler.values[0]
+
+        smer = EntriesRow(f, 'Density map resolution:', 0, 'grid spacing:', 0, ('Calculate Map', self.GenStrucMap))
+        self._sim_res, self._sim_grid_sp = smer.values
+
+        wer = EntriesRow(f, 'Which regions to use for fitting:\n',
+                         '    ', True, 'Combined selected regions\n',
+                         '    ', False, 'Each selected region\n',
+                         '    ', False, 'Groups of regions inculding selected region(s)\n',
+                         '    ', False, 'Groups of regions including all regions')
+        radio_buttons(*tuple(wer.values))
+        self._combined_selected_regions, self._each_selected_region, self._around_selected, self._all_groups = wer.values
         
-        self._combined_selected_regions, self._each_selected_region, self._around_selected, self._all_groups = \
-            entries_row(f, 'Which regions to use for fitting:\n',
-                        '    ', True, 'Combined selected regions\n',
-                        '    ', False, 'Each selected region\n',
-                        '    ', False, 'Groups of regions inculding selected region(s)\n',
-                        '    ', False, 'Groups of regions including all regions')
-        radio_buttons(self._combined_selected_regions, self._each_selected_region, self._around_selected, self._all_groups)
-        
-        self._prin_axes_search, self._rota_search, self._rota_search_num = \
-            entries_row(f, 'Alignment method:\n',
-                        '    ', True, "Align principal axes (faster - only 4 fits will be tried)\n",
-                        '    ', False, "Rotational search (try", 100, 'evenly rotated fits)')
+        amer = EntriesRow(f, 'Alignment method:\n',
+                          '    ', True, "Align principal axes (faster - only 4 fits will be tried)\n",
+                          '    ', False, "Rotational search (try", 100, 'evenly rotated fits)')
+        self._prin_axes_search, self._rota_search, self._rota_search_num =  amer.values
         radio_buttons(self._prin_axes_search, self._rota_search)
 
-        self._mask_map_when_fitting, = entries_row(f, False, 'Mask map with region(s) to prevent large drifts')
-        self._use_laplace, = entries_row(f, False, 'Use Laplacian filter')
-        self._optimize_fits, = entries_row(f, True, 'Optimize fits')
+        mmer = EntriesRow(f, False, 'Mask map with region(s) to prevent large drifts')
+        self._mask_map_when_fitting = mmer.values[0]
+
+        ler = EntriesRow(f, False, 'Use Laplacian filter')
+        self._use_laplace = ler.values[0]
+
+        ofer = EntriesRow(f, True, 'Optimize fits')
+        self._optimize_fits = ofer.values[0]
         
-        self._do_cluster_fits, self._position_tol, self._angle_tol = \
-            entries_row(f, True, 'Cluster fits that are <', 5.0, 'Angstroms and <', 3.0, 'degrees apart')
+        cver = EntriesRow(f, True, 'Cluster fits that are <', 5.0, 'Angstroms and <', 3.0, 'degrees apart')
+        self._do_cluster_fits, self._position_tol, self._angle_tol = cver.values
 
-        self._num_fits_to_add, = entries_row(f, 'Add top', 1, 'fit(s) to list (empty to add all fits to list)')
+        nfer = EntriesRow(f, 'Add top', 1, 'fit(s) to list (empty to add all fits to list)')
+        self._num_fits_to_add = nfer.values[0]
 
-        self._calc_symmetry_clashes, self._symmetry = \
-            entries_row(f, False, 'Clashes with copies from symmetry:', '',
-                        ('Detect', self.DetectSym), ('Show', self.PlaceSym))
+        cler = EntriesRow(f, False, 'Clashes with copies from symmetry:', '',
+                          ('Detect', self.DetectSym), ('Show', self.PlaceSym))
+        self._calc_symmetry_clashes, self._symmetry = cler.values
         
         return p
 
@@ -265,7 +271,6 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
         lb.delete_fit = self.delete_fit_cb
         lb.itemSelectionChanged.connect(self.fit_selection_cb)
         layout.addWidget(lb)
-        layout.addStretch(1)    # Extra space at end
 
         return f
 
