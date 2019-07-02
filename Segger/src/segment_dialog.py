@@ -54,7 +54,7 @@ class VolumeSegmentationDialog ( ToolInstance ):
 
         ToolInstance.__init__(self, session, tool_name)
         from chimerax.ui import MainToolWindow
-        tw = MainToolWindow(self)
+        tw = MainToolWindow(self, close_destroys = False)
         self.tool_window = tw
         parent = tw.ui_area
 
@@ -1546,10 +1546,8 @@ class VolumeSegmentationDialog ( ToolInstance ):
 
     def FitDialog ( self ) :
 
-        from . import fit_dialog
-        fit_dialog.close_fit_segments_dialog( self.session );
-        fit_dialog.new_fit_segments_dialog( self.session )
-
+        from .fit_dialog import show_fit_segments_dialog
+        show_fit_segments_dialog( self.session )
 
     def GeoSegDialog ( self ) :
 

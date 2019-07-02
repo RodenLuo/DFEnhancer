@@ -58,7 +58,7 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
         ToolInstance.__init__(self, session, tool_name)
 
         from chimerax.ui import MainToolWindow
-        tw = MainToolWindow(self)
+        tw = MainToolWindow(self, close_destroys = False)
         self.tool_window = tw
         parent = tw.ui_area
 
@@ -301,7 +301,8 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
     @classmethod
     def get_singleton(self, session, create=True):
         from chimerax.core import tools
-        return tools.get_singleton(session, FitSegmentsDialog, 'Fit to Segments', create=create)
+        d = tools.get_singleton(session, FitSegmentsDialog, 'Fit to Segments', create=create)
+        return d
 
     def status(self, message, log = True):
         self._status_label.setText(message)
@@ -4950,24 +4951,12 @@ def fit_segments_dialog ( session, create = True ) :
 
     return FitSegmentsDialog.get_singleton(session, create = create)
 
-def close_fit_segments_dialog ( session ):
-
-    d = fit_segments_dialog (session, create = False)
-    if d :
-        d.Close()
-
 def show_fit_segments_dialog ( session ):
 
     d = fit_segments_dialog ( session, create = True )
-    d.show()
+    d.display(True)
     return d
 
-
-def new_fit_segments_dialog ( session, close_existing = True ):
-
-    if close_existing : close_fit_segments_dialog ( session )
-    d = fit_segments_dialog ( session )
-    return d
 
 # -----------------------------------------------------------------------------
 #
