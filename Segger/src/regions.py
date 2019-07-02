@@ -1876,7 +1876,8 @@ def color_surface_pieces(plist, mask, ijk_to_xyz, offset, colormap):
         rid, outside = interpolate_volume_data(xyz, xyz_to_ijk, mask, 'nearest')
         rid = rid.astype(numpy.uint32)    # Interpolation gives float32
         colors = colormap[rid,:]
-        p.vertex_colors = colors
+        colors_8bit = (255*colors).astype(numpy.uint8)
+        p.vertex_colors = colors_8bit
 
 def color_solid(v, mask, colormap):
 
