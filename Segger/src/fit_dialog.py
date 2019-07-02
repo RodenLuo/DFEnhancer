@@ -1104,14 +1104,13 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
 
     def close_copies_cb ( self ) :
 
-        try :
-            len ( self.fitted_mols )
-        except :
-            self.status ( "No fitted molecules found" )
+        fmols = getattr(self, 'fitted_mols', [])
+        if len(fmols) == 0:
+            self.status ( "No fitted molecule copies found" )
             return
 
-        self.session.models.close ( self.fitted_mols )
-
+        self.fitted_mols = []
+        self.session.models.close ( fmols )
 
 
     def Options(self):
