@@ -1003,14 +1003,10 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
             self.status('No fits chosen from list')
             return
 
-
-        fmap, dmap = lfits[0][0], lfits[0][1]
-        dmapM = dmap.scene_position
-
         nPlaced = 0
-        for fmap, dmap, mat, corr, aI, bI, bC, bO, regions in lfits:
-            if len ( fmap.mols ) > 0 :
-                self.PlaceCopy(fmap.mols, mat, dmap, (rand(),rand(),rand(),1) )
+        for fit in lfits:
+            if len ( fit.fit_map.mols ) > 0 :
+                self.PlaceCopy(fit.fit_map.mols, fit.position, fit.target_map, (rand(),rand(),rand(),1) )
                 nPlaced += 1
 
         self.status('Placed %d models' % nPlaced)
@@ -1025,13 +1021,10 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
             self.status('No fits chosen from list')
             return
 
-        fmap, dmap = lfits[0][0], lfits[0][1]
-        dmapM = dmap.scene_position
-
-        for fmap, dmap, mat, corr, aI, bI, bC, bO, regions in lfits:
-            self.place_molecule(fmap, mat, dmap)
+        for fit in lfits:
+            self.place_molecule(fit.fit_map, fit.position, fit.target_map)
             sf = "_F2Rid%d.mrc" % regions[0].rid
-            pmap = place_map_resample ( fmap, dmap, sf )
+            pmap = place_map_resample ( fit.fit_map, fit.target_map, sf )
 
             try :
                 self.fitted_mols = self.fitted_mols + [pmap]
@@ -1716,15 +1709,15 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
             if len(lfits) > 1 and path.find('%d') == -1:
                 base, suf = os.path.splitext(path)
                 path = base + '_fit%d' + suf
-            for i, (fmap, dmap, mat, corr, aI, bI, bC, hdo, regions) in enumerate(lfits):
+            for i, fit in enumerate(lfits):
                 p = path if len(lfits) == 1 else path % (i+1)
-                self.place_molecule(fmap, mat, dmap)
+                self.place_molecule(fit.fit_map, fit.position, fit.target_map)
                 cmd = ('save %s models #%s relModel #%s'
-                       % (p, ','.join(s.id_string for s in fmap.mols), dmap.id_string))
+                       % (p, ','.join(s.id_string for s in fit.fit_map.mols), fit.target_map.id_string))
                 from chimerax.core.commands import run
                 run(self.session, cmd)
 
-        mol = lfits[0][0].mols[0]
+        mol = lfits[0].fit_map.mols[0]
         if hasattr(mol, 'filename'):
             import os.path
             idir, ifile = os.path.split(mol.filename)
