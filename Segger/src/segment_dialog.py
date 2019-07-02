@@ -46,7 +46,7 @@ class VolumeSegmentationDialog ( ToolInstance ):
 
     title = "Segment Map (Segger v" + seggerVersion + ")"
     name = "segment map"
-    help = 'https://cryoem.slac.stanford.edu/ncmi/resources/software/segger'
+    help = 'help:user/tools/segment.html'
     SESSION_SAVE = True
 
     def __init__(self, session, tool_name):

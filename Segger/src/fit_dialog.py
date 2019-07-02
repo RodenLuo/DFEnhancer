@@ -47,10 +47,7 @@ from .fit_devel import Fit_Devel
 from chimerax.core.tools import ToolInstance
 class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
 
-    title = "Fit to Segments (Segger v" + seggerVersion + ")"
-    name = "fit segments"
-    buttons = ( 'Fit', 'Stop', 'Options', "Close")
-    help = 'https://cryoem.slac.stanford.edu/ncmi/resources/software/segger'
+    help = 'help:user/tools/fitsegments.html'
     SESSION_SAVE = True
 
     def __init__(self, session, tool_name):
