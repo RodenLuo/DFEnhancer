@@ -130,7 +130,7 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
             ("Save chosen fit molecules", self.SaveStrucFit),
 
             ('separator', None),
-            ('Save fit map relative to segmented map', self.save_map_resample),
+            ('Copy fit map on segmented map grid', self.copy_fit_map),
 
             ('separator', None),
             ('Group regions by visible (Molecule) models', self.GroupRegionsByMols),
@@ -1035,10 +1035,12 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
         self.status('Placed %d models' % len(lfits))
 
 
-    def save_map_resample ( self ) :
+    def copy_fit_map ( self ) :
 
         dmap = self.segmentation_map
-        if dmap == None : self.status ( "%s is not open" % self.dmap.get() ); return
+        if dmap is None :
+            self.status ('No segmentation map is chosen in Segment Map panel')
+            return
 
         fmap = self.StructuresToFit ()
         if len(fmap) == 0 :
@@ -1049,8 +1051,8 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
 
         from chimerax.map import Volume
         if not isinstance(fmap, Volume) :
-            self.status ( "Please select a map to save (molecule is selected)" )
-
+            self.status ("Require map chosen in fit menu, got %s which is not a map."
+                         % self._fit_model_menu.text())
         else :
             place_map_resample ( fmap, dmap, "_F2Rid.mrc" )
 
@@ -1058,7 +1060,9 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
     def extractCubeMap ( self ) :
 
         dmap = self.segmentation_map
-        if dmap == None : self.status ( "%s is not open" % self.dmap.get() ); return
+        if dmap is None :
+            self.status ( "No segmentation map is chosen in Segment Map panel" )
+            return
 
         fmap = self.StructuresToFit ()
 
@@ -1253,11 +1257,6 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
         id =  '%s' % mol.id_string if show_subid else '%d' % mol.id[0]
         mname = "%s (%s)" % (mol.name, id)
         return mname
-
-
-    def Place ( self ) :
-
-        self.save_map_resample ();
 
 
     @property
@@ -5346,26 +5345,23 @@ def place_map_resample ( fmap, dmap, fnamesuf ) :
 
 
     fmap_base = os.path.splitext(fmap.name)[0]
-    dmap_base = os.path.splitext(dmap.name)[0]
-    fmap_path = os.path.splitext (fmap.data.path)[0]
-    dmap_path = os.path.splitext (dmap.data.path)[0]
-
-
     from chimerax.map.data import ArrayGridData
-    ndata = ArrayGridData ( nmat, nO, fmap.data.step, dmap.data.cell_angles, name=(dmap_base + fnamesuf) )
+    ndata = ArrayGridData ( nmat, nO, fmap.data.step, dmap.data.cell_angles, name=(fmap_base + ' resampled') )
     from chimerax.map import volume_from_grid_data
     nv = volume_from_grid_data ( ndata, dmap.session )
-
-
-    nv.name = dmap_base + fnamesuf
     nv.scene_position = dmap.scene_position
+    
 
+    '''
+    # TODO: Not sure why this routine is saving the map to a file.
+    dmap_path = os.path.splitext (dmap.data.path)[0]
     npath = dmap_path + fnamesuf
 #    nv.write_file ( npath, "mrc" )
     from chimerax.core.commands import run, quote_if_necessary
     cmd = 'save %s model #%s format mrc' % (quote_if_necessary(npath), nv.id_string)
     run(dmap.session, cmd)
     debug("Wrote ", npath)
+    '''
 
     return nv
 
