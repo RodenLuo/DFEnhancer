@@ -1174,9 +1174,6 @@ class VolumeSegmentationDialog ( ToolInstance ):
 
     def model_closed_cb(self, trigger, mlist):
 
-        # Clear menus that are showing closed models.
-        if self.chosen_map in mlist:
-            self.SetMapMenu(None)
         if self.cur_seg in mlist:
             self.cur_seg = None
             self.chosen_segmentation = None
