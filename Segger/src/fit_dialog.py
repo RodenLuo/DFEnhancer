@@ -1132,7 +1132,11 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
 
     @property
     def _sim_res_and_grid(self):
-        return self._sim_res.value, self._sim_grid_sp.value
+        res, grid = self._sim_res.value, self._sim_grid_sp.value
+        if res == 0:
+            self.SetResolution()
+            res, grid = self._sim_res.value, self._sim_grid_sp.value
+        return res, grid
 
 
     def CurrentSegmentation ( self, warn = True ):
