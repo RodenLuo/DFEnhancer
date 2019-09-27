@@ -2741,7 +2741,11 @@ class VolumeSegmentationDialog ( ToolInstance ):
     def Group ( self ):
 
 
-        if NothingSelected(self.session):
+        smod = self.CurrentSegmentation()
+        if smod is None : return
+
+        regs = smod.selected_regions()
+        if len(regs) == 0:
 
             if self.group_mode == 'smooth' :
                 self.SmoothAndGroupOneStep()
@@ -3394,11 +3398,6 @@ class VolumeSegmentationDialog ( ToolInstance ):
             getattr(d, attr).value = data[attr]
         return d
     
-
-def NothingSelected(session):
-
-    return session.selection.empty()
-
 
 def volume_segmentation_dialog ( session, create=False ) :
 
