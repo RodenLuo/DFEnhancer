@@ -299,8 +299,8 @@ def read_segmentation(session, path, open = True, task = None):
         for n in ('format', 'format_version', 'name'):
             if not n in a:
                 raise ValueError('Segmentation file does not have "%s" attribute' % n)
-        if a.format != 'segger':
-            raise ValueError('Segmentation file format is not "segger"')
+        if a.format != b'segger':
+            raise ValueError('Segmentation file format is not "segger", got "%s"' % a.format)
         if a.format_version != 2:
             raise ValueError('Segmentation file format is not 2')
 
@@ -311,13 +311,15 @@ def read_segmentation(session, path, open = True, task = None):
         s = Segmentation(fname, session)
 
         if 'map_path' in a:
-            s.map_path = a.map_path
-            debug(" - map path: " + s.map_path)
+            path = a.map_path.decode('utf8')
+            s.map_path = path
+            debug(" - map path: " + path)
         if 'map_level' in a:
             s.map_level = a.map_level
         if 'map_name' in a:
-            s.map_name = a.map_name
-            debug(" - map name: " + s.map_name)
+            name = a.map_name.decode('utf8')
+            s.map_name = name
+            debug(" - map name: " + name)
 
         v = map_for_segmentation(session, s.map_path)
         s.set_volume_data(v)
