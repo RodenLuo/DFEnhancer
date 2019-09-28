@@ -129,10 +129,12 @@ def save_segmentation(session, path, format_name, models = None, **kw):
     if models is None:
         from chimerax.core.errors import UserError
         raise UserError('Must specify segmentation model number to save')
-    elif len(models) != 1:
+    from .regions import Segmentation
+    segs = [m for m in models if isinstance(m, Segmentation)]
+    if len(segs) != 1:
         from chimerax.core.errors import UserError
         raise UserError('Can only save 1 segmentation, got %d' % len(models))
-    seg = tuple(models)[0]
+    seg = segs[0]
     write_segmentation(seg, path)
 
 # -----------------------------------------------------------------------------
@@ -299,7 +301,7 @@ def read_segmentation(session, path, open = True, task = None):
         for n in ('format', 'format_version', 'name'):
             if not n in a:
                 raise ValueError('Segmentation file does not have "%s" attribute' % n)
-        if a.format != b'segger':
+        if a.format not in ('segger', b'segger'):
             raise ValueError('Segmentation file format is not "segger", got "%s"' % a.format)
         if a.format_version != 2:
             raise ValueError('Segmentation file format is not 2')
@@ -311,13 +313,17 @@ def read_segmentation(session, path, open = True, task = None):
         s = Segmentation(fname, session)
 
         if 'map_path' in a:
-            path = a.map_path.decode('utf8')
-            s.map_path = path
-            debug(" - map path: " + path)
+            map_path = a.map_path
+            if isinstance(map_path, bytes):
+                map_path = map_path.decode('utf8')
+            s.map_path = map_path
+            debug(" - map path: " + map_path)
         if 'map_level' in a:
             s.map_level = a.map_level
         if 'map_name' in a:
-            name = a.map_name.decode('utf8')
+            name = a.map_name
+            if isinstance(name, bytes):
+                name = name.decode('utf8')
             s.map_name = name
             debug(" - map name: " + name)
 

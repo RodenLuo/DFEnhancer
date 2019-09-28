@@ -210,9 +210,11 @@ class Segmentation ( Surface ):
 
     def add_region(self, name, vertices, normals, triangles, rgba):
 
-        d = self.new_drawing(name)
+        from chimerax.core.models import Surface
+        d = Surface(name, self.session)
         d.set_geometry(vertices, normals, triangles)
         d.color = float_to_8bit_color(rgba)
+        self.add([d])
         return d
 
 
@@ -1192,7 +1194,7 @@ class Region ( State ):
 
         p = self.surface_piece
         if p and not p.was_deleted:
-            self.segmentation.remove_drawing ( p )
+            p.delete()
         self.surface_piece = None
 
         if including_children:
