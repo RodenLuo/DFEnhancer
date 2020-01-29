@@ -212,6 +212,7 @@ class Segmentation ( Surface ):
 
         from chimerax.core.models import Surface
         d = Surface(name, self.session)
+        d.SESSION_SAVE = False	# Region makes a new surface on session restore
         d.set_geometry(vertices, normals, triangles)
         d.color = float_to_8bit_color(rgba)
         self.add([d])
@@ -1011,7 +1012,7 @@ class Region ( State ):
         self.rbounds = None      # (imin, jmin, kmin), (imax, jmax, kmax)
         self.npoints = None
         self.max_point = max_point     # Position of local maximum
-        self.surface_piece = None       # Displayed surface.
+        self._surface_piece = None       # Displayed surface.
 
         self.color = random_color()         # Surface color, rgba 0-1 values
         self.placed = False
@@ -1105,7 +1106,16 @@ class Region ( State ):
         '''Opacity in range 0-1.'''
         if self.surface_piece:
             self.surface_piece.color = float_to_8bit_color(tuple(self.color[:3]) + (opacity,))
-        
+
+    def _get_surface_piece( self ):
+        sp = self._surface_piece
+        if sp and sp.deleted:
+            self._surface_piece = sp = None
+        return sp
+    def _set_surface_piece( self, surf ):
+        self._surface_piece = surf
+    surface_piece = property(_get_surface_piece, _set_surface_piece)
+    
     def surface ( self ) :
 
         return self.surface_piece
