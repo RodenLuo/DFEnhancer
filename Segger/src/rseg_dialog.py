@@ -687,7 +687,7 @@ def makeMap ( sel_str, res, gridSpacing, clr, map_name ) :
 
     mv.surface_levels[0] = 0.001
 
-    ro = VolumeViewer.volume.Rendering_Options()
+    ro = VolumeViewer.volume.RenderingOptions()
     mv.update_surface ( False, ro )
     for sp in mv.surfacePieces :
         v, t = sp.geometry

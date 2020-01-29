@@ -3347,7 +3347,7 @@ class ModelZ_Dialog ( chimera.baseDialog.ModelessDialog ) :
         dmap.display = False
         nv.region = ( nv.region[0], nv.region[1], [1,1,1] )
         nv.surface_levels[0] = dmap.surface_levels[0]
-        ro = VolumeViewer.volume.Rendering_Options()
+        ro = VolumeViewer.volume.RenderingOptions()
         #ro.smoothing_factor = .5
         #ro.smoothing_iterations = 20
         #ro.surface_smoothing = True
@@ -3434,7 +3434,7 @@ class ModelZ_Dialog ( chimera.baseDialog.ModelessDialog ) :
         dmap.display = False
         nv.region = ( nv.region[0], nv.region[1], [1,1,1] )
         nv.surface_levels[0] = dmap.surface_levels[0]
-        ro = VolumeViewer.volume.Rendering_Options()
+        ro = VolumeViewer.volume.RenderingOptions()
         ro.smoothing_factor = .3
         ro.smoothing_iterations = 2
         ro.surface_smoothing = False
@@ -7707,7 +7707,7 @@ def MapForAtoms ( atoms, dmap, nname, showMesh=False, thrF = 1.0 ) :
 
 def MapUp (dmap, showMesh = False, color=(.7,.7,.7,1)) :
 
-    ro = VolumeViewer.volume.Rendering_Options()
+    ro = VolumeViewer.volume.RenderingOptions()
     ro.smoothing_factor = .3
     ro.smoothing_iterations = 2
     ro.surface_smoothing = False

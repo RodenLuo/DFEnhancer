@@ -1449,7 +1449,7 @@ class Fit_Devel:
                 sms = new_sms
                 #print "- %.2f/%.4f" % (thr_at, sms),
 
-                ro = VolumeViewer.volume.Rendering_Options()
+                ro = VolumeViewer.volume.RenderingOptions()
                 fmap.update_surface ( False, ro )
                 for sp in fmap.surfacePieces :
                     v, t = sp.geometry
@@ -1469,7 +1469,7 @@ class Fit_Devel:
                 sms = new_sms
                 print("- %.2f/%.4f" % (thr_at, sms), end=' ')
 
-                ro = VolumeViewer.volume.Rendering_Options()
+                ro = VolumeViewer.volume.RenderingOptions()
                 fmap.update_surface ( False, ro )
                 for sp in fmap.surfacePieces :
                     v, t = sp.geometry
@@ -1503,7 +1503,7 @@ class Fit_Devel:
             else :
                 break
 
-            ro = VolumeViewer.volume.Rendering_Options()
+            ro = VolumeViewer.volume.RenderingOptions()
             dmap.update_surface ( False, ro )
             for sp in dmap.surfacePieces :
                 v, t = sp.geometry
@@ -1519,7 +1519,7 @@ class Fit_Devel:
             else :
                 break
 
-            ro = VolumeViewer.volume.Rendering_Options()
+            ro = VolumeViewer.volume.RenderingOptions()
             dmap.update_surface ( False, ro )
             for sp in dmap.surfacePieces :
                 v, t = sp.geometry
@@ -1878,7 +1878,7 @@ class Fit_Devel:
         #gv.surface_levels = [20.0]
         gv.surface_colors = [ color ]
         gv.surf_color = color
-        ro = Rendering_Options()
+        ro = RenderingOptions()
         ro.surface_smoothing = True
         #ro.smoothing_factor = .25
         #ro.smoothing_iterations = 2
@@ -2325,7 +2325,7 @@ def TransferChainMap ( a, m ) :
     gv.surface_levels = [ a.d_thr ]
     gv.surf_color = ( rand(), rand(), rand(), 1.0 )
     gv.surface_colors = [ gv.surf_color ]
-    ro = Rendering_Options()
+    ro = RenderingOptions()
     #ro.surface_smoothing = True
     #ro.smoothing_factor = .25
     #ro.smoothing_iterations = 10
