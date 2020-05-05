@@ -1,6 +1,6 @@
 <BundleInfo name="ChimeraX-Segger" version="1.0"
 	    package="chimerax.segger"
-  	    customInit="true" minSessionVersion="1" maxSessionVersion="1">
+  	    minSessionVersion="1" maxSessionVersion="1">
 
   <Author>UCSF RBVI</Author>
   <Email>chimerax@cgl.ucsf.edu</Email>
@@ -22,6 +22,20 @@
     <Dependency name="ChimeraX-Geometry" version=">=1.0"/>
     <Dependency name="ChimeraX-UI" version=">=1.0"/>
   </Dependencies>
+
+  <Providers manager="data formats">
+    <Provider name="Segmentation" synopsis="Segger segmentation" category="Volume Data"
+		suffixes=".seg" nicknames="segger"
+		reference_url="https://cryoem.slac.stanford.edu/ncmi/resources/software/segger" />
+  </Providers>
+
+  <Providers manager="open command">
+    <Provider name="Segmentation" want_path="true" />
+  </Providers>
+
+  <Providers manager="save command">
+    <Provider name="Segmentation" />
+  </Providers>
 
   <Classifiers>
     <PythonClassifier>Development Status :: 2 - Pre-Alpha</PythonClassifier>

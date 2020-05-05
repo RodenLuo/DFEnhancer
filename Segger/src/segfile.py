@@ -121,11 +121,11 @@ def open_segmentation(session, path, name = None, **kw):
     d = volume_segmentation_dialog(session, create=True)
     d.show_segmentation(seg)
 
-    return [seg], ''
+    return [seg], 'Opened %s' % seg.name
   
 # -----------------------------------------------------------------------------
 #
-def save_segmentation(session, path, format_name, models = None, **kw):
+def save_segmentation(session, path, models = None, **kw):
     if models is None:
         from chimerax.core.errors import UserError
         raise UserError('Must specify segmentation model number to save')
@@ -153,9 +153,9 @@ def register_segmentation_file_format(session):
 #
 def show_open_dialog(session, dir):
 
-    mw = session.ui.main_window
-    mw.show_file_open_dialog(session, format_name = 'Segmentation',
-                             initial_directory = dir)
+    from chimerax.open_command import show_open_file_dialog
+    show_open_file_dialog(session, format_name = 'Segmentation',
+                          initial_directory = dir)
 
 # -----------------------------------------------------------------------------
 #
@@ -168,10 +168,12 @@ def show_save_dialog(seg, saved_cb = None):
         idir = None
         ifile = seg.name
 
-    mw = seg.session.ui.main_window
-    sd = mw.save_dialog
-    sd.display(mw, seg.session, format = 'Segmentation',
-               initial_directory = idir, initial_file = ifile, model = seg)
+    from chimerax.save_command import show_save_file_dialog
+    show_save_file_dialog(seg.session)
+    # TODO: New save dialog does not allow setting format, initial dir/file, model.
+    
+#    sd.display(mw, seg.session, format = 'Segmentation',
+#               initial_directory = idir, initial_file = ifile, model = seg)
 
 # -----------------------------------------------------------------------------
 #

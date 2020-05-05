@@ -1,11 +1,6 @@
 from chimerax.core.toolshed import BundleAPI
 
 class _SeggerAPI(BundleAPI):
-    @staticmethod
-    def initialize(session, bundle_info):
-        """Register file formats, commands, and database fetch."""
-        from .segfile import register_segmentation_file_format
-        register_segmentation_file_format(session)
 
     @staticmethod
     def start_tool(session, tool_name):
@@ -31,6 +26,36 @@ class _SeggerAPI(BundleAPI):
             'Fit': Fit,
         }
         return ct.get(class_name)
+
+    @staticmethod
+    def run_provider(session, name, mgr, **kw):
+        '''Handle open and save of segmentation files.'''
+        if mgr == session.open_command:
+            from chimerax.open_command import OpenerInfo
+            class OpenSegmentationInfo(OpenerInfo):
+                def open(self, session, path, file_name, **kw):
+                    from .segfile import open_segmentation
+                    return open_segmentation(session, path, file_name)
+            return OpenSegmentationInfo()
+        elif mgr == session.save_command:
+            from chimerax.save_command import SaverInfo
+            class SaveSegmentationInfo(SaverInfo):
+                def save(self, session, path, models=None):
+                    from .segfile import save_segmentation
+                    save_segmentation(session, path, models = models)
+                @property
+                def save_args(self):
+                    from chimerax.core.commands import ModelsArg
+                    return { 'models': ModelsArg }
+                def save_args_widget(self, session):
+                    from chimerax.save_command import SaveModelOptionWidget
+                    return SaveModelOptionWidget(session, 'Segmentation', Segmentation)
+                def save_args_string_from_widget(self, widget):
+                    return widget.options_string()
+
+            return SaveSegmentationInfo()
+        
+        return None
 
 bundle_api = _SeggerAPI()
 
