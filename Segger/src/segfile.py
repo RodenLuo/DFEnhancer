@@ -169,11 +169,8 @@ def show_save_dialog(seg, saved_cb = None):
         ifile = seg.name
 
     from chimerax.save_command import show_save_file_dialog
-    show_save_file_dialog(seg.session)
-    # TODO: New save dialog does not allow setting format, initial dir/file, model.
-    
-#    sd.display(mw, seg.session, format = 'Segmentation',
-#               initial_directory = idir, initial_file = ifile, model = seg)
+    show_save_file_dialog(seg.session, format = 'Segmentation',
+                          initial_directory = idir, initial_file = ifile)
 
 # -----------------------------------------------------------------------------
 #
