@@ -139,18 +139,6 @@ def save_segmentation(session, path, models = None, **kw):
 
 # -----------------------------------------------------------------------------
 #
-def register_segmentation_file_format(session):
-    from chimerax.core import io, toolshed
-    fmt = io.register_format('Segmentation', toolshed.VOLUME, ['.seg'], nicknames=['segger'],
-                             open_func=open_segmentation, export_func=save_segmentation)
-
-    # Register model menu option for save file dialog.
-    from chimerax.map.savemap import ModelSaveOptionsGUI
-    from .regions import Segmentation
-    ModelSaveOptionsGUI(session, fmt, Segmentation, 'Segmentation').register(session)
-
-# -----------------------------------------------------------------------------
-#
 def show_open_dialog(session, dir):
 
     from chimerax.open_command import show_open_file_dialog
