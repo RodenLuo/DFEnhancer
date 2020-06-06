@@ -70,7 +70,7 @@ class Segmentation ( Surface ):
     def grid_step(self):
 
         tf = self.point_transform()
-        from chimerax.core.geometry import length
+        from chimerax.geometry import length
         step = [length([tf[r][c] for r in (0,1,2)]) for c in (0,1,2)]
         return step
 

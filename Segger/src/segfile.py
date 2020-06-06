@@ -318,7 +318,7 @@ def read_segmentation(session, path, open = True, task = None):
         s.set_volume_data(v)
 
         if 'ijk_to_xyz_transform' in a:
-            from chimerax.core.geometry import Place
+            from chimerax.geometry import Place
             s.ijk_to_xyz_transform = Place(a.ijk_to_xyz_transform)
 
         s.mask = r.mask.read()

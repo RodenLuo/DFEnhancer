@@ -198,7 +198,7 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
         ler = EntriesRow(f, False, 'Treat all sub-models as one structure')
         self._lump_subids = ler.values[0]
 
-        smer = EntriesRow(f, 'Density map resolution:', 0, 'grid spacing:', 0, ('Calculate Map', self.GenStrucMap))
+        smer = EntriesRow(f, 'Density map resolution:', 4, 'grid spacing:', 2, ('Calculate Map', self.GenStrucMap))
         self._sim_res, self._sim_grid_sp = smer.values
 
         wer = EntriesRow(f, 'Which regions to use for fitting:\n',
@@ -1307,7 +1307,7 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
             debug("COM : ", fmap.COM)
             debug("U : ", fmap.U)
 
-            from chimerax.core.geometry import Place
+            from chimerax.geometry import Place
             toCOM = Place ( [
                 [ 1, 0, 0, -fmap.COM[0] ],
                 [ 0, 1, 0, -fmap.COM[1] ],
@@ -1408,7 +1408,7 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
                 ax = ( 0, 1, 0 )
                 #ax = dmap.scene_position.inverse().apply ( ax )
 
-                from chimerax.core.geometry import Place, rotation
+                from chimerax.geometry import Place, rotation
                 syms.append ( Place () )
                 rm1 = rotation ( (ax.x,ax.y,ax.z), 360.0/3.0, COM )
                 debug(rm1)
@@ -1462,7 +1462,7 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
         debug("U: ", U)
         debug("S: ", S)
 
-        from chimerax.core.geometry import Place
+        from chimerax.geometry import Place
         T0 = Place ( [
             [ 1, 0, 0, -COM[0] ],
             [ 0, 1, 0, -COM[1] ],
@@ -1481,7 +1481,7 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
         smols = []
 
         if 0 :
-            from chimerax.core.geometry import rotation
+            from chimerax.geometry import rotation
             M = rotation( (0, 0, 1), 360.0/7.0 )
             mols = self.PlaceCopy (fmap.mols, M*fmap.M, dmap, (0,0,0,1) )
             for m in mols : m.scene_position = dmap.scene_position
@@ -1505,7 +1505,7 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
             smols = smols + mols
 
 
-        from chimerax.core.geometry import rotation
+        from chimerax.geometry import rotation
         M = rotation( (U[0,2], U[1,2], U[2,2]), 360.0/7.0 )
         mols = self.PlaceCopy (fmap.mols, T*M*T0*fmap.M, dmap, (0,0,0,1) )
         for m in mols : m.scene_position = dmap.scene_position
@@ -1622,7 +1622,7 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
 
         # for consistency when fitting maps, which need this pre-transform
         # since they don't get transformed like the molecules
-        from chimerax.core.geometry import Place
+        from chimerax.geometry import Place
         mv.preM = Place()
 
         return mv
@@ -1693,7 +1693,7 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
 
         # for consistency when fitting maps, which need this pre-transform
         # since they don't get transformed like the molecules
-        from chimerax.core.geometry import Place
+        from chimerax.geometry import Place
         mv.preM = Place()
 
         return mv
@@ -1996,7 +1996,7 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
 
 
             def SimilarTo ( self, e, posTol=5.0, angleTol=5.0 ) :
-                from chimerax.core.geometry import norm
+                from chimerax.geometry import norm
                 if ( norm(self.COM - e.COM) < posTol and
                      self.Q.angleTo ( e.Q ) * 180.0 / numpy.pi < angleTol ) :
                     return True
@@ -2051,7 +2051,7 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
         alist = uniform_rotation_angles(N, M)
 
         COM, U, S, V = prAxes ( points )
-        from chimerax.core.geometry import translation
+        from chimerax.geometry import translation
         comT = translation(COM)
 
         mlist = [comT*rotation_from_angles(*angles)*fmap.preM for angles in alist]
@@ -2815,7 +2815,7 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
 
         msg.append(" - making tree, %d atoms" % len(otherAtoms))
 
-        from chimerax.core.geometry import AdaptiveTree
+        from chimerax.geometry import AdaptiveTree
         searchTreeAll = AdaptiveTree (otherPoints.tolist(), otherAtoms, 4.0)
 
         msg.append(" - checking clashes, %d atoms" % len(otherAtoms))
@@ -2895,7 +2895,7 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
         #dmapXfInv = dmap.scene_position.inverse()
         #transform_vertices( points, dmapXfInv )
         points = all_atoms.scene_coords
-        from chimerax.core.geometry import Place
+        from chimerax.geometry import Place
         dvals = dmap.interpolated_values ( points, Place() )
         min_d = dmap.minimum_surface_level
         dvals = numpy.where ( dvals > min_d, dvals, numpy.zeros_like(dvals) )
@@ -2974,7 +2974,7 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
 
                 # debug "Doing tree with %d %d" % ( len(otherPoints), len(otherAtoms) )
 
-                from chimerax.core.geometry import AdaptiveTree
+                from chimerax.geometry import AdaptiveTree
                 searchTreeAll = AdaptiveTree (otherPoints.tolist(), otherAtoms, 4.0)
 
                 #if len ( backbone_atoms ) == 0 :
@@ -5131,7 +5131,7 @@ def centerMol ( mols ):
     COM, U, S, V = prAxes ( points )
 
     # move COM to origin and align pr. axes with XYZ
-    from chimerax.core.geometry import Place, identity
+    from chimerax.geometry import Place, identity
     tAO = Place ( [
         [ 1, 0, 0, -COM[0] ],
         [ 0, 1, 0, -COM[1] ],
@@ -5226,7 +5226,7 @@ def principle_axes_alignments ( points, flips, preM ):
 
     COM, U, S, V = prAxes ( points )
 
-    from chimerax.core.geometry import Place
+    from chimerax.geometry import Place
     comT = Place ( [
         [ 1, 0, 0, COM[0] ],
         [ 0, 1, 0, COM[1] ],
@@ -5276,7 +5276,7 @@ def rotation_from_angles(theta, phi, rot) :
 
     from math import sin, cos, pi
     v = (sin(phi)*cos(theta), sin(phi)*sin(theta), cos(phi))
-    from chimerax.core.geometry import rotation
+    from chimerax.geometry import rotation
     xfR = rotation ( v, rot*180/pi )
     return xfR
 

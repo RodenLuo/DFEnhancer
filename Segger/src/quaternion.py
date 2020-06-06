@@ -72,7 +72,7 @@ class Quaternion :
         #self.normalize()
         s = self.s
         vx,vy,vz = self.v
-        from chimerax.core.geometry import Place
+        from chimerax.geometry import Place
         return Place (
             [(1-2*vy*vy-2*vz*vz, 2*vx*vy-2*s*vz, 2*vx*vz+2*s*vy, 0),
              (2*vx*vy+2*s*vz, 1-2*vx*vx-2*vz*vz, 2*vy*vz-2*s*vx, 0),
@@ -83,7 +83,7 @@ class Quaternion :
         #self.normalize()
         s = self.s
         vx,vy,vz = self.v
-        from chimerax.core.geometry import Place
+        from chimerax.geometry import Place
         return Place( [
             [1-2*vy*vy-2*vz*vz, 2*vx*vy-2*s*vz, 2*vx*vz+2*s*vy],
             [2*vx*vy+2*s*vz, 1-2*vx*vx-2*vz*vz, 2*vy*vz-2*s*vx],
@@ -127,7 +127,7 @@ class Quaternion :
 
 
 def mult (a, b) :
-    from chimerax.core.geometry import cross_product
+    from chimerax.geometry import cross_product
     return Quaternion (a.s*b.s - a.v*b.v, b.v*a.s + a.v*b.s + cross_product(a.v,b.v))
 
 

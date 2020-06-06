@@ -12,7 +12,7 @@ def AxesMod ( session, COM=[0,0,0], U=None, Extents=[30,30,30], rad=1.0, f=1.0,
     axes.name = "Axes"
 
     if U is not None :
-        from chimerax.core.geometry import Place
+        from chimerax.geometry import Place
         R = Place([
             [  U[0,0], U[0,1], U[0,2], 0.0    ],
             [  U[1,0], U[1,1], U[1,2], 0.0    ],
@@ -170,7 +170,7 @@ def AddAxes ( rad, lX, lY, lZ, cF, mol ) :
 
 
 def AlignXf ( pos, v ) :
-    from chimerax.core.geometry import normalize_vector, cross_product, Place
+    from chimerax.geometry import normalize_vector, cross_product, Place
     Z = normalize_vector(v)
     from random import random as rand
     dZ = normalize_vector(( rand(), rand(), rand() ))
