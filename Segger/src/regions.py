@@ -524,7 +524,7 @@ class Segmentation ( Surface ):
 
             if timing: t1 = clock()
             ijk_sdev = (slev, slev, slev)
-            from chimerax.map.filter import gaussian
+            from chimerax.map_filter import gaussian
             sm = gaussian.gaussian_convolution (sm_mat, ijk_sdev, task = task)
             if timing: t2 = clock()
 
@@ -779,7 +779,7 @@ class Segmentation ( Surface ):
                 tpoints = reg.map_points()
                 vt = None
                 debug(" - reg %d, %d voxels" % (reg.rid, len(tpoints)))
-                from chimerax.map.data import zone_masked_grid_data
+                from chimerax.map_data import zone_masked_grid_data
                 sg = zone_masked_grid_data( dmap.data, tpoints, dmap.data.step[0] )
                 m = sg.full_matrix()
 
@@ -1739,7 +1739,7 @@ def mask_data(regions, volume) :
     import os.path
     name = os.path.splitext ( volume.name )[0] + "_masked"
     d = volume.data
-    from chimerax.map.data import ArrayGridData
+    from chimerax.map_data import ArrayGridData
     mgrid = ArrayGridData ( mmat, d.origin, d.step, d.cell_angles, name=name)
 
     #import VolumeViewer
@@ -1794,7 +1794,7 @@ def remove_mask_volume(regions, volume) :
     import os.path
     name = os.path.splitext ( volume.name )[0] + "_imasked"
     d = volume.data
-    from chimerax.map.data import ArrayGridData
+    from chimerax.map_data import ArrayGridData
     mgrid = ArrayGridData ( vmat, d.origin, d.step, d.cell_angles, name=name)
     from chimerax.map import volume_from_grid_data
     nv = volume_from_grid_data ( mgrid, volume.session, show_dialog = False )
@@ -1884,7 +1884,7 @@ def color_surface_pieces(plist, mask, ijk_to_xyz, offset, colormap):
     for p in plist:
         v, n, t = p.vertices, p.normals, p.triangles
         xyz = v - offset*n
-        from chimerax.map.data import interpolate_volume_data
+        from chimerax.map_data import interpolate_volume_data
         rid, outside = interpolate_volume_data(xyz, xyz_to_ijk, mask, 'nearest')
         rid = rid.astype(numpy.uint32)    # Interpolation gives float32
         colors = colormap[rid,:]

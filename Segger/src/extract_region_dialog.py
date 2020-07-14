@@ -795,7 +795,7 @@ class Extract_Region_Dialog ( chimera.baseDialog.ModelessDialog ):
                 s = nv.data.step
                 width = max (nv.data.step) #float ( self.dropOffWidth.get() )
                 width = numpy.sqrt ( s[0]*s[0] + s[1]*s[1] + s[2]*s[2] ) #float ( self.dropOffWidth.get() )
-                from chimerax.map.filter import gaussian
+                from chimerax.map_filter import gaussian
                 gvol = gaussian.gaussian_convolve (nv, width )
                 gvol.name = nv.name # + "_g"
                 gvm = gvol.full_matrix()
@@ -910,7 +910,7 @@ class Extract_Region_Dialog ( chimera.baseDialog.ModelessDialog ):
             lpw = float ( self.gaussLPWidth.get() )
             print(" - gauss lp width:", lpw)
 
-            from chimerax.map.filter import gaussian
+            from chimerax.map_filter import gaussian
             gvol = gaussian.gaussian_convolve (nv, lpw )
             gvm = gvol.full_matrix()
 
@@ -955,7 +955,7 @@ class Extract_Region_Dialog ( chimera.baseDialog.ModelessDialog ):
                 try : maskMap0 = VolumeViewer.volume.add_data_set ( maskData0, None )
                 except : maskMap0 = VolumeViewer.volume.volume_from_grid_data ( maskData0 )
 
-                from chimerax.map.filter import gaussian
+                from chimerax.map_filter import gaussian
                 maskMapG = gaussian.gaussian_convolve (maskMap0, smw )
 
                 smMaskM = maskMapG.full_matrix().copy()
@@ -1096,7 +1096,7 @@ class Extract_Region_Dialog ( chimera.baseDialog.ModelessDialog ):
         data = dmap.data
 
         print(" - smoothing...")
-        from chimerax.map.filter import gaussian
+        from chimerax.map_filter import gaussian
         gvol = gaussian.gaussian_convolve (dmap, 40.0 )
         matg = gvol.full_matrix()
 

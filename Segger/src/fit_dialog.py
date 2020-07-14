@@ -1075,7 +1075,7 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
         fmap = fmap[0]
         debug("Saving ", fmap.name)
 
-        from chimerax.map.data import grid_indices
+        from chimerax.map_data import grid_indices
         npoints = grid_indices ( dmap.data.size, numpy.single)  # i,j,k indices
         dmap.data.ijk_to_xyz_transform.transform_points ( npoints, in_place = True )
 
@@ -1088,7 +1088,7 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
         #f_mask = numpy.where ( f_mat > fmap.minimum_surface_level, numpy.ones_like(f_mat), numpy.zeros_like(f_mat) )
         #df_mat = df_mat * f_mask
 
-        from chimerax.map.data import ArrayGridData
+        from chimerax.map_data import ArrayGridData
         ndata = ArrayGridData ( nmat, dmap.data.origin, dmap.data.step, dmap.data.cell_angles )
         from chimerax.map import volume_from_grid_data
         nv = volume_from_grid_data ( ndata, self.session )
@@ -1442,7 +1442,7 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
             debug("Fit or segmentation map not found")
             return
 
-        from chimerax.map.data import grid_indices
+        from chimerax.map_data import grid_indices
         fpoints = grid_indices(dmap.data.size, numpy.single)  # i,j,k indices
         dmap.data.ijk_to_xyz_transform.transform_points( fpoints, in_place = True )
         mat = dmap.data.full_matrix()
@@ -1610,7 +1610,7 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
 
         if self._use_laplace.enabled :
             self.status ("Generating Laplacian...")
-            from chimerax.map.filter import laplacian
+            from chimerax.map_filter import laplacian
             mvl = laplacian ( mv )
             self.session.models.close ( [mv] )
             mv = mvl
@@ -1679,7 +1679,7 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
 
         if self._use_laplace.enabled :
             self.status ("Generating Laplacian...")
-            from chimerax.map.filter import laplacian
+            from chimerax.map_filter import laplacian
             mvl = laplacian ( mv )
             self.session.models.close ( [mv] )
             mv = mvl
@@ -1842,7 +1842,7 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
 
             if self._use_laplace.enabled :
                 self.status ("Generating Laplace version of " + dmap.name)
-                from chimerax.map.filter import laplacian
+                from chimerax.map_filter import laplacian
                 to_map = laplacian ( dmap )
                 bCloseMap = True
 
@@ -2273,7 +2273,7 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
 
         if self._use_laplace.enabled :
             self.status ("Generating Laplace version of " + dmap.name)
-            from chimerax.map.filter import laplacian
+            from chimerax.map_filter import laplacian
             to_map = laplacian ( dmap )
             bCloseMap = True
 
@@ -2944,7 +2944,7 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
 
             regionMap.scene_position.inverse().transform_points( points, in_place = True )
             s = regionMap.data.step[0]
-            from chimerax.map.data import zone_masked_grid_data
+            from chimerax.map_data import zone_masked_grid_data
             mdata = zone_masked_grid_data ( regionMap.data, points, numpy.sqrt(3*s*s) )
             #gv = volume_from_grid_data ( mdata )
             #gv.scene_position = dmap.scene_position
@@ -3478,14 +3478,14 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
 
         s = dmap.data.step[0]
         s2 = numpy.sqrt ( s*s + s*s + s*s )
-        from chimerax.map.data import zone_masked_grid_data
+        from chimerax.map_data import zone_masked_grid_data
         mdata = zone_masked_grid_data ( dmap.data, points, numpy.sqrt(s2) )
 
-        from chimerax.map.filter import gaussian
+        from chimerax.map_filter import gaussian
         gvm = gaussian.gaussian_convolution ( mdata.full_matrix(), (.1,.1,.1) )
         #gvm = gvol.full_matrix()
 
-        from chimerax.map.data import ArrayGridData
+        from chimerax.map_data import ArrayGridData
         gdata = ArrayGridData ( gvm, dmap.data.origin, dmap.data.step, dmap.data.cell_angles, name = dmap.name + "_m" )
         from chimerax.map import volume_from_grid_data
         nvg = volume_from_grid_data ( gdata, self.session )
@@ -3876,7 +3876,7 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
 
         nname = os.path.splitext(dmap.name)[0] + "_zeroed"
 
-        from chimerax.map.data import ArrayGridData
+        from chimerax.map_data import ArrayGridData
         mgrid = ArrayGridData ( vmat, dmap.data.origin, dmap.data.step, dmap.data.cell_angles, name=nname)
         from chimerax.map import volume_from_grid_data
         nv = volume_from_grid_data ( mgrid, self.session, show_data = False, show_dialog = False )
@@ -4008,7 +4008,7 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
 
         mmat = dmap.data.full_matrix() * df_mat
 
-        from chimerax.map.data import ArrayGridData
+        from chimerax.map_data import ArrayGridData
         df_data = ArrayGridData ( df_mat, dmap.data.origin, dmap.data.step, dmap.data.cell_angles, name=(dmap.name + "__MaskedWith__" + fmap.name) )
 
         from chimerax.map import volume_from_grid_data
@@ -4060,7 +4060,7 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
         dmap = densitiesFromMap
 
         n1, n2, n3 = fmap.data.size[0], fmap.data.size[1], fmap.data.size[2]
-        from chimerax.map.data import grid_indices
+        from chimerax.map_data import grid_indices
         f_points = grid_indices( (n1,n2,n3), numpy.single )  # i,j,k indices
         fmap.data.ijk_to_xyz_transform.transform_points( f_points, in_place = True )
 
@@ -4117,13 +4117,13 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
         #debug " - new map origin:", nO
 
         nmat = numpy.zeros ( (nn1,nn2,nn3), numpy.float32 )
-        from chimerax.map.data import ArrayGridData
+        from chimerax.map_data import ArrayGridData
         ndata = ArrayGridData ( nmat, nO, nstep, dmap.data.cell_angles )
 
         #debug " - fmap grid dim: ", numpy.shape ( fmap.full_matrix() )
         #debug " - new map grid dim: ", numpy.shape ( nmat )
 
-        from chimerax.map.data import grid_indices
+        from chimerax.map_data import grid_indices
         npoints = grid_indices ( (nn1, nn2, nn3), numpy.single)  # i,j,k indices
         ndata.ijk_to_xyz_transform.transform_points ( npoints, in_place = True )
 
@@ -4136,7 +4136,7 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
         #f_mask = numpy.where ( f_mat > fmap.minimum_surface_level, numpy.ones_like(f_mat), numpy.zeros_like(f_mat) )
         #df_mat = df_mat * f_mask
 
-        from chimerax.map.data import ArrayGridData
+        from chimerax.map_data import ArrayGridData
         ndata = ArrayGridData ( nmat, nO, nstep, dmap.data.cell_angles )
         from chimerax.map import volume_from_grid_data
         nv = volume_from_grid_data ( ndata, self.session )
@@ -4177,7 +4177,7 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
 
 
         df_mat = self.Map2Map ( dmap, fmap )
-        from chimerax.map.data import ArrayGridData
+        from chimerax.map_data import ArrayGridData
         df_data = ArrayGridData ( df_mat, fmap.data.origin, fmap.data.step, fmap.data.cell_angles )
 
         from chimerax.map import volume_from_grid_data
@@ -4205,7 +4205,7 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
             return
 
         df_mat = self.Map2Map ( fmap, dmap )
-        from chimerax.map.data import ArrayGridData
+        from chimerax.map_data import ArrayGridData
         df_data = ArrayGridData ( df_mat, dmap.data.origin, dmap.data.step, dmap.data.cell_angles )
 
         from chimerax.map import volume_from_grid_data
@@ -4240,7 +4240,7 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
             return
 
         df_mat = self.Map2Map ( fmap, dmap )
-        from chimerax.map.data import ArrayGridData
+        from chimerax.map_data import ArrayGridData
         df_data = ArrayGridData ( df_mat, dmap.data.origin, dmap.data.step, dmap.data.cell_angles )
 
         from chimerax.map import volume_from_grid_data
@@ -4323,7 +4323,7 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
 
         avgMat = avgMat / N
 
-        from chimerax.map.data import ArrayGridData
+        from chimerax.map_data import ArrayGridData
         df_data = ArrayGridData ( avgMat, fmap.data.origin, fmap.data.step, fmap.data.cell_angles )
 
         from chimerax.map import volume_from_grid_data
@@ -4358,7 +4358,7 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
 
         difMat = NormalizeMat ( m1.data.full_matrix() ) - NormalizeMat ( m2_mat )
 
-        from chimerax.map.data import ArrayGridData
+        from chimerax.map_data import ArrayGridData
         df_data = ArrayGridData ( difMat, m1.data.origin, m1.data.step, m1.data.cell_angles )
 
         from chimerax.map import volume_from_grid_data
@@ -4487,7 +4487,7 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
         debug(" ----------- n=%f ---------------------" % N)
 
         avgMat = avgMat / N
-        from chimerax.map.data import ArrayGridData
+        from chimerax.map_data import ArrayGridData
         df_data = ArrayGridData ( avgMat, dmap.data.origin, dmap.data.step, dmap.data.cell_angles, name="avg" )
         from chimerax.map import volume_from_grid_data
         df_v = volume_from_grid_data ( df_data, self.session )
@@ -4520,7 +4520,7 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
                         stdMat = stdMat + d
 
             stdMat = numpy.power ( stdMat / N, 0.5 )
-            from chimerax.map.data import ArrayGridData
+            from chimerax.map_data import ArrayGridData
             df_data = ArrayGridData ( stdMat, dmap.data.origin, dmap.data.step, dmap.data.cell_angles )
             from chimerax.map import volume_from_grid_data
             df_v = volume_from_grid_data ( df_data, self.session )
@@ -4569,12 +4569,12 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
         #debug " - new map origin:", nO
 
         nmat = numpy.zeros ( (n1,n2,n3), numpy.float32 )
-        from chimerax.map.data import ArrayGridData
+        from chimerax.map_data import ArrayGridData
         ndata = ArrayGridData ( nmat, nO, dmap.data.step, dmap.data.cell_angles )
 
         #debug " - new map grid dim: ", numpy.shape ( nmat )
 
-        from chimerax.map.data import grid_indices
+        from chimerax.map_data import grid_indices
         npoints = grid_indices ( (n1, n2, n3), numpy.single)  # i,j,k indices
         ndata.ijk_to_xyz_transform.transform_points ( npoints, in_place = True )
 
@@ -4587,7 +4587,7 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
         #f_mask = numpy.where ( f_mat > fmap.minimum_surface_level, numpy.ones_like(f_mat), numpy.zeros_like(f_mat) )
         #df_mat = df_mat * f_mask
 
-        from chimerax.map.data import ArrayGridData
+        from chimerax.map_data import ArrayGridData
         ndata = ArrayGridData ( nmat, nO, dmap.data.step, dmap.data.cell_angles, name = dmap.name )
         from chimerax.map import volume_from_grid_data
         nv = volume_from_grid_data ( ndata, self.session )
@@ -4607,7 +4607,7 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
             if m.display == True :
 
                 df_mat = self.Map2Map ( m, dmap )
-                from chimerax.map.data import ArrayGridData
+                from chimerax.map_data import ArrayGridData
                 df_data = ArrayGridData ( df_mat, dmap.data.origin, dmap.data.step, dmap.data.cell_angles )
                 from chimerax.map import volume_from_grid_data
                 df_v = volume_from_grid_data ( df_data, self.session )
@@ -4654,7 +4654,7 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
 
 
         df_mat = self.Map2Map ( fmap, dmap )
-        from chimerax.map.data import ArrayGridData
+        from chimerax.map_data import ArrayGridData
         df_data = ArrayGridData ( df_mat, dmap.data.origin, dmap.data.step, dmap.data.cell_angles )
 
         #MapStats ( dmap )
@@ -4694,7 +4694,7 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
         #debug " -", len(nz), " nonzero"
         debug(" - range: %.3f -> %.3f, avg=%.3f, sdev=%.3f" % (smin, smax, savg, sdev))
 
-        from chimerax.map.data import ArrayGridData
+        from chimerax.map_data import ArrayGridData
         diff_data = ArrayGridData ( diff_mat, df_data.origin, df_data.step, df_data.cell_angles )
 
         from chimerax.map import volume_from_grid_data
@@ -4737,7 +4737,7 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
 
 
         df_mat = self.Map2Map ( fmap, dmap )
-        from chimerax.map.data import ArrayGridData
+        from chimerax.map_data import ArrayGridData
         df_data = ArrayGridData ( df_mat, dmap.data.origin, dmap.data.step, dmap.data.cell_angles )
 
         #MapStats ( dmap )
@@ -4777,7 +4777,7 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
         #debug " -", len(nz), " nonzero"
         debug(" - range: %.3f -> %.3f, avg=%.3f, sdev=%.3f" % (smin, smax, savg, sdev))
 
-        from chimerax.map.data import ArrayGridData
+        from chimerax.map_data import ArrayGridData
         diff_data = ArrayGridData ( diff_mat, df_data.origin, df_data.step, df_data.cell_angles )
 
         from chimerax.map import volume_from_grid_data
@@ -4821,7 +4821,7 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
 
 
         df_mat = self.Map2Map ( fmap, dmap )
-        #from chimerax.map.data import ArrayGridData
+        #from chimerax.map_data import ArrayGridData
         #df_data = ArrayGridData ( df_mat, dmap.data.origin, dmap.data.step, dmap.data.cell_angles )
 
 
@@ -4838,7 +4838,7 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
         mu = m1 + m2
 
         if 0 :
-            from chimerax.map.data import ArrayGridData
+            from chimerax.map_data import ArrayGridData
             mid = ArrayGridData ( mi, realDMap.data.origin, realDMap.data.step, realDMap.data.cell_angles, name="inter" )
             mud = ArrayGridData ( mu, realDMap.data.origin, realDMap.data.step, realDMap.data.cell_angles, name="union" )
             from chimerax.map import volume_from_grid_data
@@ -4854,7 +4854,7 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
         debug(" - intersection %d, union %d - sm: %.3f" % (nz_int, nz_uni, sm_score))
 
 
-        from chimerax.map.data import ArrayGridData
+        from chimerax.map_data import ArrayGridData
         ndata = ArrayGridData ( mi, dmap.data.origin, dmap.data.step, dmap.data.cell_angles )
 
         from chimerax.map import volume_from_grid_data
@@ -5052,10 +5052,10 @@ def FitMap_T ( fpoints, fpoint_weights, M, darray, xyz_to_ijk_transform,
     xyz_to_ijk_tf = xyz_to_ijk_transform * M
 
     if optimize:
-        from chimerax.map.fit import locate_maximum
+        from chimerax.map_fit import locate_maximum
         totShift = 0.0
         totAngle = 0.0
-        from chimerax.map.data import interpolate_volume_data
+        from chimerax.map_data import interpolate_volume_data
         map_values, outside = interpolate_volume_data(fpoints, xyz_to_ijk_tf, darray)
         initOlap, initCC = overlap_and_correlation ( fpoint_weights, map_values )
 
@@ -5088,7 +5088,7 @@ def FitMap_T ( fpoints, fpoint_weights, M, darray, xyz_to_ijk_transform,
         stats['difCC'] = corr - initCC
 
     else:
-        from chimerax.map.data import interpolate_volume_data
+        from chimerax.map_data import interpolate_volume_data
         map_values, outside = interpolate_volume_data(fpoints, xyz_to_ijk_tf,
                                                       darray )
         olap, corr = overlap_and_correlation ( fpoint_weights, map_values )
@@ -5284,7 +5284,7 @@ def rotation_from_angles(theta, phi, rot) :
 def place_map_resample ( fmap, dmap, fnamesuf ) :
 
     # get bounds of points above threshold
-    from chimerax.map.data import grid_indices
+    from chimerax.map_data import grid_indices
     fpoints = grid_indices (fmap.data.size, numpy.single)  # i,j,k indices
     fmap.data.ijk_to_xyz_transform.transform_points ( fpoints, in_place = True )
     mat = fmap.data.full_matrix ()
@@ -5328,13 +5328,13 @@ def place_map_resample ( fmap, dmap, fnamesuf ) :
     debug(" - new map origin:", nO)
 
     nmat = numpy.zeros ( (nn1,nn2,nn3), numpy.float32 )
-    from chimerax.map.data import ArrayGridData
+    from chimerax.map_data import ArrayGridData
     ndata = ArrayGridData ( nmat, nO, fmap.data.step, dmap.data.cell_angles )
 
     debug(" - fmap grid dim: ", numpy.shape ( fmap.full_matrix() ))
     debug(" - new map grid dim: ", numpy.shape ( nmat ))
 
-    from chimerax.map.data import grid_indices
+    from chimerax.map_data import grid_indices
     npoints = grid_indices ( (nn1, nn2, nn3), numpy.single)  # i,j,k indices
     ndata.ijk_to_xyz_transform.transform_points ( npoints, in_place = True )
 
@@ -5350,7 +5350,7 @@ def place_map_resample ( fmap, dmap, fnamesuf ) :
 
 
     fmap_base = os.path.splitext(fmap.name)[0]
-    from chimerax.map.data import ArrayGridData
+    from chimerax.map_data import ArrayGridData
     ndata = ArrayGridData ( nmat, nO, fmap.data.step, dmap.data.cell_angles, name=(fmap_base + ' resampled') )
     from chimerax.map import volume_from_grid_data
     nv = volume_from_grid_data ( ndata, dmap.session )
@@ -5375,7 +5375,7 @@ def place_map_resample ( fmap, dmap, fnamesuf ) :
 
 def map_overlap_and_correlation (map1, map2, above_threshold):
 
-    from chimerax.map.fit import map_overlap_and_correlation
+    from chimerax.map_fit import map_overlap_and_correlation
     olap, cor = map_overlap_and_correlation ( v1, v2, above_threshold )[:2]
     return olap, cor
 
@@ -5383,7 +5383,7 @@ def map_overlap_and_correlation (map1, map2, above_threshold):
 
 def overlap_and_correlation ( v1, v2 ):
 
-    from chimerax.map.fit import overlap_and_correlation
+    from chimerax.map_fit import overlap_and_correlation
     olap, cor = overlap_and_correlation ( v1, v2 )[:2]
     return olap, cor
 
@@ -5449,7 +5449,7 @@ def ShapeMatchScore ( atoms, dmap, bDebug=False ) :
 
     nmat = numpy.ones ( (n[2], n[1], n[0]) )
     eps = 0.5 * numpy.sqrt ( (s[0] * s[0]) + (s[1] * s[1]) + (s[2] * s[2]) )
-    from chimerax.map.data import ArrayGridData, zone_masked_grid_data
+    from chimerax.map_data import ArrayGridData, zone_masked_grid_data
     ndata = ArrayGridData ( nmat, O, s, dmap.data.cell_angles )
     amap_data = zone_masked_grid_data ( ndata, points0, max(3.0, eps) )
     amat = amap_data.full_matrix()
@@ -5459,7 +5459,7 @@ def ShapeMatchScore ( atoms, dmap, bDebug=False ) :
         amap.name = dmap.name + "_()_" + atoms[0].molecule.name
         amap.scene_position = dmap.scene_position
 
-    from chimerax.map.data import grid_indices
+    from chimerax.map_data import grid_indices
     npoints = grid_indices ( (int(n[0]), int(n[1]), int(n[2])), numpy.single)  # i,j,k indices
     ndata.ijk_to_xyz_transform.transform_points ( npoints, in_place = True )
     dvals = dmap.interpolated_values ( npoints, dmap.scene_position )
@@ -5471,7 +5471,7 @@ def ShapeMatchScore ( atoms, dmap, bDebug=False ) :
     #df_mat = df_mat * f_mask
 
     if 0 :
-        from chimerax.map.data import ArrayGridData
+        from chimerax.map_data import ArrayGridData
         ndata = ArrayGridData ( nmatm, O, s, dmap.data.cell_angles )
         from chimerax.map import volume_from_grid_data
         nmap = volume_from_grid_data ( ndata, dmap.session )
@@ -5484,7 +5484,7 @@ def ShapeMatchScore ( atoms, dmap, bDebug=False ) :
     umat = nmatm | amat
 
     if 0 :
-        from chimerax.map.data import ArrayGridData
+        from chimerax.map_data import ArrayGridData
         ndata = ArrayGridData ( umat, O, s, dmap.data.cell_angles )
         from chimerax.map import volume_from_grid_data
         nmap = volume_from_grid_data ( ndata, dmap.session )
@@ -5689,7 +5689,7 @@ def NormalizeData ( data ) :
 
     debug(" - normalized - range: %.3f -> %.3f, avg=%.3f, sdev=%.3f" % (smin, smax, savg, sdev))
 
-    from chimerax.map.data import ArrayGridData
+    from chimerax.map_data import ArrayGridData
     return ArrayGridData ( mat0, O, data.step, data.cell_angles )
 
 
@@ -5757,7 +5757,7 @@ def OneMinusOneMap ( dmap ) :
             gvm = outside_mask * gvm + inside_start
 
 
-    from chimerax.map.data import ArrayGridData
+    from chimerax.map_data import ArrayGridData
     mgrid = ArrayGridData ( m2, dmap.data.origin, dmap.data.step, dmap.data.cell_angles, name="map_one_minus_one")
 
     from chimerax.map import volume_from_grid_data
@@ -5805,7 +5805,7 @@ def AddNoiseToMap ( mv, mean, stdev ) :
     noisem = srand ( (s[2],s[1],s[0]) ) * stdev - (numpy.ones_like(nvm) * mean)
     ngvm = noisem + nvm
 
-    from chimerax.map.data import ArrayGridData
+    from chimerax.map_data import ArrayGridData
     ndata = ArrayGridData ( ngvm, mv.data.origin, mv.data.step, mv.data.cell_angles )
     from chimerax.map import volume_from_grid_data
     nvg = volume_from_grid_data ( ndata, mv.session )

@@ -1392,7 +1392,7 @@ class VolumeSegmentationDialog ( ToolInstance ):
         debug("new origin:", nO)
 
         name = os.path.basename ( path )
-        from chimerax.map.data import ArrayGridData
+        from chimerax.map_data import ArrayGridData
         ndata = ArrayGridData ( nmat, nO, step = dmap.data.step,
                                 cell_angles = dmap.data.cell_angles, name = name )
         from chimerax.map import volume_from_grid_data
@@ -1525,7 +1525,7 @@ class VolumeSegmentationDialog ( ToolInstance ):
               smod.seg_map.data.ijk_to_xyz_transform)
         tf.transform_points ( points, in_place = True )
 
-        from chimerax.map.data import zone_masked_grid_data
+        from chimerax.map_data import zone_masked_grid_data
         sg = zone_masked_grid_data ( dmap.data, points, smod.seg_map.data.step[0] )
 
         from chimerax.map import volume_from_grid_data
@@ -1625,7 +1625,7 @@ class VolumeSegmentationDialog ( ToolInstance ):
 
         debug("new origin:", nO)
 
-        from chimerax.map.data import ArrayGridData
+        from chimerax.map_data import ArrayGridData
         ndata = ArrayGridData ( nmat, nO, dmap.data.step, dmap.data.cell_angles )
         from chimerax.map import volume_from_grid_data
         nv = volume_from_grid_data ( ndata, dmap.session )
@@ -1730,7 +1730,7 @@ class VolumeSegmentationDialog ( ToolInstance ):
                 debug("new origin:", nO)
 
 
-            from chimerax.map.data import ArrayGridData
+            from chimerax.map_data import ArrayGridData
             ndata = ArrayGridData ( nmat, nO, dmap.data.step, dmap.data.cell_angles )
             from chimerax.map import volume_from_grid_data
             nv = volume_from_grid_data ( ndata, dmap.session )
@@ -1817,7 +1817,7 @@ class VolumeSegmentationDialog ( ToolInstance ):
                        -float(n2) * dmap.data.step[2] )
                 debug("new origin:", nO)
 
-            from chimerax.map.data import ArrayGridData
+            from chimerax.map_data import ArrayGridData
             ndata = ArrayGridData ( nmat, nO, dmap.data.step, dmap.data.cell_angles )
             from chimerax.map import volume_from_grid_data
             nv = volume_from_grid_data ( ndata, dmap.session )

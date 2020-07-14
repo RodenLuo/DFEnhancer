@@ -20,8 +20,8 @@ def make_orthoslice_images(
 
     from math import ceil
     from Measure.spine import trace_spine, measure_diameter
-    from chimerax.map.filter.unbend import atom_path, unbend_volume
-    from chimerax.map.filter.tile import tile_planes
+    from chimerax.map_filter.unbend import atom_path, unbend_volume
+    from chimerax.map_filter.tile import tile_planes
     from chimera import openModels
 
     ubgs = unbend_grid_spacing * min(volume.data.step)
