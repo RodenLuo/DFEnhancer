@@ -106,7 +106,7 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
         from PyQt5.QtWidgets import QFrame, QHBoxLayout, QPushButton, QMenu
         
         mbar = QFrame(parent)
-        mbar.setStyleSheet('QFrame { background-color: white; }')
+        mbar.setFrameStyle(QFrame.Box | QFrame.Raised)
         layout = QHBoxLayout(mbar)
         layout.setContentsMargins(0,0,0,0)
         layout.setSpacing(10)
