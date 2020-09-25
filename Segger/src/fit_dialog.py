@@ -23,7 +23,7 @@ import os
 import os.path
 import numpy
 
-from time import clock
+from time import time as clock
 from random import random as rand
 
 from .axes import prAxes

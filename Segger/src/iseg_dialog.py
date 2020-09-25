@@ -33,7 +33,6 @@ import _contour
 import Matrix
 import VolumeViewer
 from sys import stderr
-from time import clock
 import sets
 import FitMap
 

@@ -36,7 +36,6 @@ import Surface
 import VolumeViewer
 import FitMap
 from sys import stderr
-from time import clock
 import _contour
 import chimera.match
 

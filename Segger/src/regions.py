@@ -2,7 +2,7 @@ import numpy
 
 from sys import stderr
 from . import timing
-from time import clock
+from time import time as clock
 
 from .segment_dialog import debug
 

@@ -23,7 +23,7 @@ import os
 import os.path
 import numpy
 from sys import stderr
-from time import clock
+from time import time as clock
 
 from .axes import prAxes
 from . import regions
