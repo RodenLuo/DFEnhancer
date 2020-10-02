@@ -65,13 +65,13 @@ class Segmentation ( Surface ):
     def grid_origin(self):
 
         tf = self.point_transform()
-        return tuple([tf[a][3] for a in (0,1,2)])
+        return tuple(tf.origin())
 
     def grid_step(self):
 
         tf = self.point_transform()
-        from chimerax.geometry import length
-        step = [length([tf[r][c] for r in (0,1,2)]) for c in (0,1,2)]
+        from chimerax.geometry import norm
+        step = [norm(tf.matrix[:,c]) for c in (0,1,2)]
         return step
 
     def voxel_volume(self):

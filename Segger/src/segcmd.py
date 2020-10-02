@@ -4,6 +4,40 @@
 #
 
 # -----------------------------------------------------------------------------
+# Implementation of "volume" command.
+#
+def register_segger_command(logger):
+
+    from chimerax.core.commands import CmdDesc, register
+    from chimerax.core.commands import SaveFileNameArg, BoolArg, EnumOf
+    from chimerax.map.mapargs import Int1or3Arg
+
+    desc = CmdDesc(
+        required = [('segmentation', SegmentationArg)],
+        keyword = [
+            ('save_path', SaveFileNameArg),
+            ('format', EnumOf(('mrc', 'cmap'))),
+            ('bin_size', Int1or3Arg),
+            ('sequential_ids', BoolArg)],
+        synopsis = 'Export mask as mrc file with integer region index values')
+    register('segger exportmask', desc, export_mask, logger=logger)
+
+# -----------------------------------------------------------------------------
+#
+from chimerax.core.commands import ModelsArg
+class SegmentationArg(ModelsArg):
+    name = 'a Segger segmentation specifier'
+
+    @classmethod
+    def parse(cls, text, session):
+        models, used, rest = super().parse(text, session)
+        from .regions import Segmentation
+        segs = [m for m in models if isinstance(m, Segmentation)]
+        if len(segs) != 1:
+            raise UserError('Must specify one segmentation, got %d' % len(segs))
+        return segs[0], used, rest
+
+# -----------------------------------------------------------------------------
 #
 def segment_command(cmdname, args):
 
@@ -275,8 +309,8 @@ def slice_view(**kw):
 
 # -----------------------------------------------------------------------------
 #
-def export_mask(segmentation, savePath = None, format = 'mrc',
-                binSize = (1,1,1), sequentialIds = True):
+def export_mask(session, segmentation, save_path = None, format = 'mrc',
+                bin_size = (1,1,1), sequential_ids = True):
 
     m = segmentation.mask
     origin = segmentation.grid_origin()
@@ -287,7 +321,7 @@ def export_mask(segmentation, savePath = None, format = 'mrc',
     parent = zeros((segmentation.max_region_id+1,), dtype = m.dtype)
     for r in segmentation.all_regions():
         parent[r.rid] = r.top_parent().rid
-    if sequentialIds:
+    if sequential_ids:
         used_ids = list(set(parent))
         used_ids.sort()
         seq_id = zeros((used_ids[-1]+1,), dtype = m.dtype)
@@ -297,30 +331,30 @@ def export_mask(segmentation, savePath = None, format = 'mrc',
     array = parent[m]
 
     # Expand array to match unbinned density map size.
-    if tuple(binSize) != (1,1,1):
-        step = [float(s)/b for s,b in zip(step,binSize)]
-        shape = [a*b for a,b in zip(array.shape,binSize[::-1])]
+    if tuple(bin_size) != (1,1,1):
+        step = [s/b for s,b in zip(step,bin_size)]
+        shape = [a*b for a,b in zip(array.shape,bin_size[::-1])]
         aub = empty(shape, array.dtype)
-        b2, b1, b0 = binSize
+        b2, b1, b0 = bin_size
         for o0 in range(b0):
             for o1 in range(b1):
                 for o2 in range(b2):
                     aub[o0::b0,o1::b1,o2::b2] = array
         array = aub
 
-    from VolumeData import Array_Grid_Data
-    g = Array_Grid_Data(array, origin, step)
+    from chimerax.map_data import ArrayGridData
+    g = ArrayGridData(array, origin, step)
     g.name = segmentation.name + ' region ids'
 
-    if savePath is None:
+    if save_path is None:
         # Open mask map as a volume.
-        import VolumeViewer
-        v = VolumeViewer.volume_from_grid_data(g)
-        v.openState.xform = segmentation.openState.xform
+        from chimerax.map import volume_from_grid_data
+        v = volume_from_grid_data(g, session)
+        v.position = segmentation.position
     else:
         # Write map file.
-        from VolumeData import save_grid_data
-        save_grid_data(g, savePath, format)
+        from chimerax.map_data import save_grid_data
+        save_grid_data(g, save_path, session, format=format)
 
     return g
 

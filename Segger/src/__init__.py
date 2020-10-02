@@ -13,6 +13,13 @@ class _SeggerAPI(BundleAPI):
         return d
 
     @staticmethod
+    def register_command(command_name, logger):
+        # 'register_command' is lazily called when the command is referenced
+        if command_name == 'segger':
+            from . import segcmd
+            segcmd.register_segger_command(logger)
+
+    @staticmethod
     def get_class(class_name):
         # 'get_class' is called by session code to get class saved in a session
         from .regions import Segmentation, Region
