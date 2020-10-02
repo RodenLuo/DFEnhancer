@@ -113,7 +113,7 @@ def write_segmentation(seg, path = None):
 # -----------------------------------------------------------------------------
 #
 def open_segmentation(session, path, name = None, **kw):
-    seg = read_segmentation(session, path, open = True)
+    seg = read_segmentation(session, path, open = False)
     if name is not None:
         seg.name = name
 
