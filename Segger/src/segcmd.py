@@ -34,6 +34,7 @@ class SegmentationArg(ModelsArg):
         from .regions import Segmentation
         segs = [m for m in models if isinstance(m, Segmentation)]
         if len(segs) != 1:
+            from chimerax.core.errors import UserError
             raise UserError('Must specify one segmentation, got %d' % len(segs))
         return segs[0], used, rest
 
