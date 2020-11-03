@@ -1,5 +1,5 @@
-include ../../../Makefile.bundle
-
 TOP = ../../../../..
+
+include ../../../Makefile.bundle
 
 DEVEL_ARGS = test false
