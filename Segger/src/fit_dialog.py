@@ -59,7 +59,7 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
         self.tool_window = tw
         parent = tw.ui_area
 
-        from PyQt5.QtWidgets import QVBoxLayout, QLabel
+        from Qt.QtWidgets import QVBoxLayout, QLabel
         layout = QVBoxLayout(parent)
         layout.setContentsMargins(0,0,0,0)
         layout.setSpacing(0)
@@ -93,17 +93,17 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
 
 #        session.triggers.add_handler('remove models', self.model_closed_cb)
 
-        from PyQt5.QtCore import QTimer
+        from Qt.QtCore import QTimer
         QTimer.singleShot(1000, self._help_line)
     
     def _create_menubar(self, parent):
 
 # Can't use QMenuBar since this takes over main window menu on Mac.
-#        from PyQt5.QtWidgets import QMenuBar
+#        from Qt.QtWidgets import QMenuBar
 #        mbar = QMenuBar(parent)
 #        mbar.setNativeMenuBar(False)	# On Mac keep menu in window, not top of screen.
 
-        from PyQt5.QtWidgets import QFrame, QHBoxLayout, QPushButton, QMenu
+        from Qt.QtWidgets import QFrame, QHBoxLayout, QPushButton, QMenu
         
         mbar = QFrame(parent)
         mbar.setFrameStyle(QFrame.Box | QFrame.Raised)
@@ -159,7 +159,7 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
         return mbar
     
     def _create_fit_model_menu(self, parent):
-        from PyQt5.QtWidgets import QFrame, QHBoxLayout, QLabel
+        from Qt.QtWidgets import QFrame, QHBoxLayout, QLabel
         
         mf = QFrame(parent)
         mlayout = QHBoxLayout(mf)
@@ -188,7 +188,7 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
         p = CollapsiblePanel(parent, 'Options')
         f = p.content_area
 
-        from PyQt5.QtWidgets import QVBoxLayout
+        from Qt.QtWidgets import QVBoxLayout
         layout = QVBoxLayout(f)
         layout.setContentsMargins(30,0,0,0)
         layout.setSpacing(0)
@@ -240,7 +240,7 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
         
         self.list_fits = []	# List of Fit instances
 
-        from PyQt5.QtWidgets import QFrame, QVBoxLayout, QLabel, QListWidget
+        from Qt.QtWidgets import QFrame, QVBoxLayout, QLabel, QListWidget
 
         f = QFrame(parent)
         layout = QVBoxLayout(f)
@@ -248,7 +248,7 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
         layout.setSpacing(0)
 
         # Use a fixed width font so columns line up.
-        from PyQt5.QtGui import QFontDatabase
+        from Qt.QtGui import QFontDatabase
         font = QFontDatabase.systemFont(QFontDatabase.FixedFont)
         h = ('%8s %8s %8s %8s %8s %15s %15s %10s'
              % ('Corr', 'Atoms', 'Backbone', 'Clash', 'Occupied', 'Molecule', 'Map', 'Region'))
@@ -257,7 +257,7 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
         layout.addWidget(ll)
         class FitList(QListWidget):
             def keyPressEvent(self, event):
-                from PyQt5.QtCore import Qt
+                from Qt.QtCore import Qt
                 if event.key() == Qt.Key_Delete:
                     self.delete_fit()
                 else:
@@ -272,7 +272,7 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
         return f
 
     def _create_action_buttons(self, parent):
-        from PyQt5.QtWidgets import QFrame, QHBoxLayout, QPushButton
+        from Qt.QtWidgets import QFrame, QHBoxLayout, QPushButton
         bf = QFrame(parent)
         blayout = QHBoxLayout(bf)
         blayout.setContentsMargins(0,0,0,0)

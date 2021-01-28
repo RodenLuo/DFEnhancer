@@ -58,7 +58,7 @@ class VolumeSegmentationDialog ( ToolInstance ):
         self.tool_window = tw
         parent = tw.ui_area
 
-        from PyQt5.QtWidgets import QVBoxLayout, QLabel
+        from Qt.QtWidgets import QVBoxLayout, QLabel
         layout = QVBoxLayout(parent)
         layout.setContentsMargins(0,0,0,0)
         layout.setSpacing(0)
@@ -96,7 +96,7 @@ class VolumeSegmentationDialog ( ToolInstance ):
 
         self._model_close_handler = session.triggers.add_handler('remove models', self.model_closed_cb)
 
-        from PyQt5.QtCore import QTimer
+        from Qt.QtCore import QTimer
         QTimer.singleShot(1000, self._help_line)
 
     def delete(self):
@@ -104,7 +104,7 @@ class VolumeSegmentationDialog ( ToolInstance ):
         ToolInstance.delete(self)
         
     def _create_map_menu(self, parent):
-        from PyQt5.QtWidgets import QFrame, QHBoxLayout, QLabel
+        from Qt.QtWidgets import QFrame, QHBoxLayout, QLabel
         
         mf = QFrame(parent)
         mlayout = QHBoxLayout(mf)
@@ -123,7 +123,7 @@ class VolumeSegmentationDialog ( ToolInstance ):
         return mf
 
     def _create_segmentation_menu(self, parent):
-        from PyQt5.QtWidgets import QFrame, QHBoxLayout, QLabel
+        from Qt.QtWidgets import QFrame, QHBoxLayout, QLabel
         
         sf = QFrame(parent)
         slayout = QHBoxLayout(sf)
@@ -147,11 +147,11 @@ class VolumeSegmentationDialog ( ToolInstance ):
     def _create_menubar(self, parent):
 
 # Can't use QMenuBar since this takes over main window menu on Mac.
-#        from PyQt5.QtWidgets import QMenuBar
+#        from Qt.QtWidgets import QMenuBar
 #        mbar = QMenuBar(parent)
 #        mbar.setNativeMenuBar(False)	# On Mac keep menu in window, not top of screen.
 
-        from PyQt5.QtWidgets import QFrame, QHBoxLayout, QPushButton, QMenu
+        from Qt.QtWidgets import QFrame, QHBoxLayout, QPushButton, QMenu
         
         mbar = QFrame(parent)
         mbar.setFrameStyle(QFrame.Box | QFrame.Raised)
@@ -296,7 +296,7 @@ class VolumeSegmentationDialog ( ToolInstance ):
         p = CollapsiblePanel(parent, 'Segmenting Options')
         f = p.content_area
 
-        from PyQt5.QtWidgets import QVBoxLayout
+        from Qt.QtWidgets import QVBoxLayout
         layout = QVBoxLayout(f)
         layout.setContentsMargins(30,0,0,0)
         layout.setSpacing(0)
@@ -323,7 +323,7 @@ class VolumeSegmentationDialog ( ToolInstance ):
         p = CollapsiblePanel(parent, 'Shortcuts Options')
         f = p.content_area
 
-        from PyQt5.QtWidgets import QVBoxLayout
+        from Qt.QtWidgets import QVBoxLayout
         layout = QVBoxLayout(f)
         layout.setContentsMargins(30,0,0,0)
         layout.setSpacing(0)
@@ -364,7 +364,7 @@ class VolumeSegmentationDialog ( ToolInstance ):
         return p
 
     def _create_action_buttons(self, parent):
-        from PyQt5.QtWidgets import QFrame, QHBoxLayout, QPushButton
+        from Qt.QtWidgets import QFrame, QHBoxLayout, QPushButton
         bf = QFrame(parent)
         blayout = QHBoxLayout(bf)
         blayout.setContentsMargins(0,0,0,0)
@@ -1353,7 +1353,7 @@ class VolumeSegmentationDialog ( ToolInstance ):
                 fname = fprefix + "_%d_regions.mrc" % len(regs)
             dir = os.path.dirname ( dmap.data.path )
             ipath = os.path.join(dir, fname)
-            from PyQt5.QtWidgets import QFileDialog
+            from Qt.QtWidgets import QFileDialog
             path, type = QFileDialog.getSaveFileName(caption = "Save Masked Map",
                                                      directory = ipath,
                                                      filter = 'MRC map (*.mrc)')
@@ -1461,7 +1461,7 @@ class VolumeSegmentationDialog ( ToolInstance ):
         fprefix = os.path.splitext ( dmap.name ) [0]
         fname = fprefix + "_region_%d.mrc"
         ipath = os.path.join(dir, fname)
-        from PyQt5.QtWidgets import QFileDialog
+        from Qt.QtWidgets import QFileDialog
         path, type = QFileDialog.getSaveFileName(caption = "Save Masked Maps",
                                                  directory = ipath,
                                                  filter = 'MRC map (*.mrc)')
