@@ -188,11 +188,6 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
         p = CollapsiblePanel(parent, 'Options')
         f = p.content_area
 
-        from Qt.QtWidgets import QVBoxLayout
-        layout = QVBoxLayout(f)
-        layout.setContentsMargins(30,0,0,0)
-        layout.setSpacing(0)
-
         from chimerax.ui.widgets import EntriesRow, radio_buttons
 
         ler = EntriesRow(f, False, 'Treat all sub-models as one structure')

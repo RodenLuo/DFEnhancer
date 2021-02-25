@@ -296,11 +296,6 @@ class VolumeSegmentationDialog ( ToolInstance ):
         p = CollapsiblePanel(parent, 'Segmenting Options')
         f = p.content_area
 
-        from Qt.QtWidgets import QVBoxLayout
-        layout = QVBoxLayout(f)
-        layout.setContentsMargins(30,0,0,0)
-        layout.setSpacing(0)
-
         nrer = EntriesRow(f, 'Display at most', 60, 'regions, granularity', 1, 'voxels')
         self._max_num_regions, self._surface_granularity = nrer.values
 
@@ -322,11 +317,7 @@ class VolumeSegmentationDialog ( ToolInstance ):
         from chimerax.ui.widgets import CollapsiblePanel, button_row
         p = CollapsiblePanel(parent, 'Shortcuts Options')
         f = p.content_area
-
-        from Qt.QtWidgets import QVBoxLayout
-        layout = QVBoxLayout(f)
-        layout.setContentsMargins(30,0,0,0)
-        layout.setSpacing(0)
+        layout = f.layout()
 
         rows = [('Select regions:', (('All', self.SelectAllRegions),
                                      ("Over Sel. Atoms", self.Overlapping),
