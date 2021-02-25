@@ -348,7 +348,7 @@ class VolumeSegmentationDialog ( ToolInstance ):
                 )),
                 ]
         for title, buttons in rows:
-            r = button_row(f, title, buttons)
+            r = button_row(f, buttons, label=title)
             layout.addWidget(r)
         layout.addStretch(1)
         
