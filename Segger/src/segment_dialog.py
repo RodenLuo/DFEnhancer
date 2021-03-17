@@ -2136,6 +2136,10 @@ class VolumeSegmentationDialog ( ToolInstance ):
         if mm == None : self.status ( "%s is not open" % self.map_name ); return
 
         thrD = mm.minimum_surface_level
+        if thrD is None:
+            self.status ("Must show map in surface style, surface threshold level is needed to segment")
+            return
+                
         debug("\n___________________________")
         self.status ( "Segmenting %s, density threshold %f" % (mm.name, thrD) )
 
