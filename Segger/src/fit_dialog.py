@@ -956,7 +956,8 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
         fmap.M = mat
 
         for mol in fmap.mols :
-            mol.scene_position = xf
+            if not mol.deleted:
+                mol.scene_position = xf
 
     def make_regions_transparent(self, regions):
 
@@ -4920,7 +4921,7 @@ class Fit ( State ):
         for attr in Fit._save_attrs:
             data[attr] = getattr(self, attr)
         data['fit_name'] = self.fit_map.struc_name
-        data['fit_mols'] = self.fit_map.mols
+        data['fit_mols'] = [m for m in self.fit_map.mols if not m.deleted]
         return data
 
     @staticmethod
