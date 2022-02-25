@@ -4876,7 +4876,7 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
   
     def take_snapshot(self, session, flags):
         data = {
-            'fits': self.list_fits,
+            'fits': [fit for fit in self.list_fits if not fit.maps_deleted()],
             'version': 1
         }
         for attr in FitSegmentsDialog._save_attrs:
@@ -4932,6 +4932,8 @@ class Fit ( State ):
         f.fit_map.mols = data['fit_mols']
         return f
 
+    def maps_deleted(self):
+        return self.fit_map.deleted or self.target_map.deleted
 
 def close_models(models):
 

@@ -962,7 +962,7 @@ class Segmentation ( Surface ):
 
     # State save/restore in ChimeraX
     _save_attrs = ['mask', 'seg_map', 'regions', 'id_to_region', 'max_region_id',
-                   'smoothing_level', 'map_level', 'surface_resolution']
+                   'smoothing_level', 'map_level', 'surface_resolution', 'ijk_to_xyz_transform']
   
     def take_snapshot(self, session, flags):
         data = {
@@ -971,6 +971,8 @@ class Segmentation ( Surface ):
         }
         for attr in Segmentation._save_attrs:
             data[attr] = getattr(self, attr)
+        if self.seg_map is not None and self.seg_map.deleted:
+            data['seg_map'] = None
         return data
 
     @staticmethod
