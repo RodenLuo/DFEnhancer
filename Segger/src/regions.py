@@ -1859,13 +1859,10 @@ def make_surfaces(regions, surfaces = None, task = None):
 
     if surfaces is None:
         surfaces = []
-    if task:
-        for i,r in enumerate(regions):
-            if i%20 == 0:
-                task.updateStatus('%d of %d' % (i+1,len(regions)))
-            surfaces.append(r.make_surface())
-    else:
-        make_surfaces(regions, surfaces)
+    for i,r in enumerate(regions):
+        if task and i%20 == 0:
+            task.updateStatus('%d of %d' % (i+1,len(regions)))
+        surfaces.append(r.make_surface())
 
     return surfaces
 
