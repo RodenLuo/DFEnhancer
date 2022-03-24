@@ -914,7 +914,6 @@ class Segmentation ( Surface ):
 
     def visible_regions ( self ) :
 
-        import Surface
         sregs = self.regions
         vis = []
         for r in sregs :
@@ -925,7 +924,6 @@ class Segmentation ( Surface ):
 
     def grouped_regions ( self ) :
 
-        import Surface
         #sregs = self.regions
         regions = [r for r in self.regions if len(r.cregs) > 0]
         return regions
