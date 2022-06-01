@@ -3388,14 +3388,19 @@ class VolumeSegmentationDialog ( ToolInstance ):
     def take_snapshot(self, session, flags):
         data = { 'version': 1 }
         for attr in VolumeSegmentationDialog._save_attrs:
-            data[attr] = getattr(self, attr).value
+            try:
+                data[attr] = getattr(self, attr).value
+            except Exception:
+                msg = 'Did not save Segment Map setting "%s" in session because it has an invalid value.' % attr
+                session.logger.warning(msg)
         return data
 
     @staticmethod
     def restore_snapshot(session, data):
         d = VolumeSegmentationDialog.get_singleton(session)
         for attr in VolumeSegmentationDialog._save_attrs:
-            getattr(d, attr).value = data[attr]
+            if attr in data:
+                getattr(d, attr).value = data[attr]
         return d
     
 
