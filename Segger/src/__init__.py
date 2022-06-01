@@ -55,7 +55,7 @@ class _SeggerAPI(BundleAPI):
                     from chimerax.core.commands import ModelsArg
                     return { 'models': ModelsArg }
                 def save_args_widget(self, session):
-                    from chimerax.save_command import SaveModelOptionWidget
+                    from chimerax.save_command.widgets import SaveModelOptionWidget
                     return SaveModelOptionWidget(session, 'Segmentation', Segmentation)
                 def save_args_string_from_widget(self, widget):
                     return widget.options_string()
