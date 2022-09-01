@@ -978,7 +978,8 @@ class Segmentation ( Surface ):
         s = Segmentation('', session, volume = data['seg_map'])
         Surface.set_state_from_snapshot(s, session, data['model state'])
         for attr in Segmentation._save_attrs:
-            setattr(s, attr, data[attr])
+            if attr in data:
+                setattr(s, attr, data[attr])
         for r in s.id_to_region.values():
             r.segmentation = s
             if getattr(r, '_session_restore_make_surface', False):
