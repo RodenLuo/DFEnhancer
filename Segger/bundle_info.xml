@@ -29,7 +29,7 @@
   <Providers manager="data formats">
     <Provider name="Segmentation" synopsis="Segger segmentation" category="Volume Data"
 		suffixes=".seg" nicknames="segger"
-		reference_url="https://cryoem.slac.stanford.edu/ncmi/resources/software/segger" />
+		reference_url="https://cryoem-ncmi.slac.stanford.edu/resources/software/segger" />
   </Providers>
 
   <Providers manager="open command">
