@@ -1900,11 +1900,14 @@ def color_solid(v, mask, colormap):
     icmap[:,0] = icmap[:,2]
     icmap[:,2] = r
 
-    def cm(colors, slice = None, v=v, mask=mask, cmap=icmap):
-        s = list(v.matrix_slice())
-        s.reverse()
-        m = mask[s]
-        ms = m[slice] if slice else m
+    def cm(colors, plane = None, v=v, mask=mask, cmap=icmap):
+        if plane is not None:
+            pslice = tuple((slice(i0,i1+1,step) if i1 > i0 else i0)
+                           for i0,i1,step in zip(*plane))[::-1]
+            ms = mask[pslice]
+        else:
+            vslice = tuple(v.matrix_slice())[::-1]
+            ms = mask[vslice]
         # Numpy is 20x slower than _volume C++ routine.
         # colors[...] *= cmap[mask]
         _map.indices_to_colors(ms, cmap, colors, modulate = True)
