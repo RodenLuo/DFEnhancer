@@ -2085,10 +2085,11 @@ class FitSegmentsDialog ( ToolInstance, Fit_Devel ):
 
         fmol = self._struct_to_fit
 
-        try :
-            return fmol.fitting_map
-        except :
-            pass
+        if hasattr(fmol, 'fitting_map'):
+            if fmol.fitting_map.deleted:
+                delattr(fmol, 'fitting_map')
+            else:
+                return fmol.fitting_map
         if create:
             fmol.fitting_map = self.GenStrucMap(show = False)
             return fmol.fitting_map
