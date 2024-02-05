@@ -1881,6 +1881,8 @@ def color_surface_pieces(plist, mask, ijk_to_xyz, offset, colormap):
 
     for p in plist:
         v, n, t = p.vertices, p.normals, p.triangles
+        if v is None or n is None or t is None:
+            continue
         xyz = v - offset*n
         from chimerax.map_data import interpolate_volume_data
         rid, outside = interpolate_volume_data(xyz, xyz_to_ijk, mask, 'nearest')
