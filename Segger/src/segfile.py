@@ -299,6 +299,7 @@ def read_segmentation(session, path, open = True, task = None):
         from .regions import Segmentation
         s = Segmentation(fname, session)
 
+        s.map_path = None
         if 'map_path' in a:
             map_path = a.map_path
             if isinstance(map_path, bytes):
@@ -314,8 +315,9 @@ def read_segmentation(session, path, open = True, task = None):
             s.map_name = name
             debug(" - map name: " + name)
 
-        v = map_for_segmentation(session, s.map_path)
-        s.set_volume_data(v)
+        if s.map_path:
+            v = map_for_segmentation(session, s.map_path)
+            s.set_volume_data(v)
 
         if 'ijk_to_xyz_transform' in a:
             from chimerax.geometry import Place
