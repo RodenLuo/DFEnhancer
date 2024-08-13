@@ -173,11 +173,7 @@ class VolumeSegmentationDialog ( ToolInstance ):
             )
 
         fb = QPushButton('File', mbar)
-        button_style = 'QPushButton { border: none; } QPushButton::menu-indicator { image: none; }'
-        from sys import platform
-        if platform == 'darwin':
-            # Specify exact width and height to work around Qt 6.2.3 bug where text is clipped.
-            button_style += ' QPushButton { width: 40px; height: 25px; }'
+        button_style = 'QPushButton { border: none; height: 27px; padding-left: 6px; padding-right: 6px; } QPushButton::menu-indicator { image: none; }'
         fb.setStyleSheet(button_style)
         layout.addWidget(fb)
         fmenu = QMenu(fb)
@@ -224,8 +220,6 @@ class VolumeSegmentationDialog ( ToolInstance ):
             )
 
         rb = QPushButton('Regions', mbar)
-        if platform == 'darwin':
-            button_style += ' QPushButton { width: 65px; height: 25px; }'
         rb.setStyleSheet(button_style)
         layout.addWidget(rb)
         rmenu = QMenu(rb)
