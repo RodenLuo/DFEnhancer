@@ -1,5 +1,5 @@
-<BundleInfo name="ChimeraX-Segger" version="1.0"
-	    package="chimerax.segger"
+<BundleInfo name="ChimeraX-DFEnhancer" version="1.0"
+	    package="chimerax.DFEnhancer"
   	    minSessionVersion="1" maxSessionVersion="1">
 
   <Author>UCSF RBVI</Author>
@@ -26,27 +26,13 @@
     <Dependency name="ChimeraX-UI" version=">=1.0"/>
   </Dependencies>
 
-  <Providers manager="data formats">
-    <Provider name="Segmentation" synopsis="Segger segmentation" category="Volume Data"
-		suffixes=".seg" nicknames="segger"
-		reference_url="https://cryoem-ncmi.slac.stanford.edu/resources/software/segger" />
-  </Providers>
-
-  <Providers manager="open command">
-    <Provider name="Segmentation" want_path="true" />
-  </Providers>
-
-  <Providers manager="save command">
-    <Provider name="Segmentation" />
-  </Providers>
-
   <Classifiers>
     <PythonClassifier>Development Status :: 2 - Pre-Alpha</PythonClassifier>
     <PythonClassifier>License :: Free for non-commercial use</PythonClassifier>
-    <ChimeraXClassifier>Command :: segger :: Volume data :: Operate on Segger segmentations</ChimeraXClassifier>
+    <ChimeraXClassifier>Command :: DFEnhancer :: Volume data :: Operate on Segger segmentations</ChimeraXClassifier>
 
-    <ChimeraXClassifier>Tool :: Segment Map :: Volume Data :: Segment density maps using Segger algorithms</ChimeraXClassifier>
-    <ChimeraXClassifier>Tool :: Fit to Segments :: Volume Data :: Fit atomic models in segmented maps</ChimeraXClassifier>
+    <ChimeraXClassifier>Tool :: DFEnhancer Segment Map :: Volume Data :: Segment density maps using Segger algorithms</ChimeraXClassifier>
+    <ChimeraXClassifier>Tool :: DFEnhancer Fit to Segments :: Volume Data :: Fit atomic models in segmented maps</ChimeraXClassifier>
   </Classifiers>
 
 </BundleInfo>

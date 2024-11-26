@@ -4,10 +4,10 @@ class _SeggerAPI(BundleAPI):
 
     @staticmethod
     def start_tool(session, tool_name):
-        if tool_name == 'Segment Map':
+        if tool_name == 'DFEnhancer Segment Map':
             from .segment_dialog import VolumeSegmentationDialog
             d = VolumeSegmentationDialog.get_singleton(session)
-        elif tool_name == 'Fit to Segments':
+        elif tool_name == 'DFEnhancer Fit to Segments':
             from .fit_dialog import FitSegmentsDialog
             d = FitSegmentsDialog.get_singleton(session)
         return d
@@ -15,7 +15,7 @@ class _SeggerAPI(BundleAPI):
     @staticmethod
     def register_command(command_name, logger):
         # 'register_command' is lazily called when the command is referenced
-        if command_name == 'segger':
+        if command_name == 'DFEnhancer':
             from . import segcmd
             segcmd.register_segger_command(logger)
 
